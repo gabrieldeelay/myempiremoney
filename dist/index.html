@@ -34,22 +34,27 @@
     </section>
 
     <main class="workspace">
-      <aside class="rail" aria-label="Informações da conexão">
-        <div class="rail-state">
-          <span class="provider-logo">H</span>
-          <div><small>PROVEDOR</small><strong>Hezilex</strong></div>
+      <aside class="rail history-panel" id="historyPanel" aria-label="Histórico das ações do robô">
+        <header class="history-header">
+          <div><small>ATIVIDADE AO VIVO</small><strong>Histórico do robô</strong></div>
+          <button id="toggleHistory" type="button" aria-expanded="true" aria-label="Minimizar histórico">‹</button>
+        </header>
+        <div class="history-tools">
+          <span><i></i><b id="historyCount">0 ações</b></span>
+          <button id="clearHistory" type="button">Limpar</button>
         </div>
-        <div class="rail-item active"><span>▣</span><div><b>Traderoom oficial</b><small>Compra e venda manual</small></div></div>
-        <div class="rail-item"><span>◈</span><div><b>Credenciais isoladas</b><small>Digitadas somente no iframe</small></div></div>
-        <div class="rail-item"><span>◇</span><div><b>Extensão conectada</b><small>Atlas envia, navegador executa</small></div></div>
-        <div class="rail-warning"><span>!</span><p>Não use os serviços se isso contrariar as regras aplicáveis à sua residência.</p></div>
+        <ol class="robot-log" id="robotLog" aria-live="polite"></ol>
+        <div class="history-empty" id="historyEmpty">
+          <span>◎</span><strong>Aguardando a extensão</strong><small>As decisões do robô aparecerão aqui.</small>
+        </div>
+        <footer class="history-foot"><i></i><span>Registro local neste navegador</span></footer>
       </aside>
 
       <section class="frame-panel">
         <div class="frame-toolbar">
           <div class="official-badge"><i></i> CONTEÚDO OFICIAL HEZILEX</div>
           <div class="origin"><span>🔒</span><code>https://app.hezilex.com</code></div>
-          <span class="frame-note">Ordens processadas pela própria plataforma</span>
+          <span class="frame-note" id="monitorPulse">Monitor iniciando…</span>
         </div>
         <div class="frame-wrap">
           <div class="frame-loader" id="frameLoader">
@@ -72,18 +77,28 @@
             <button id="verifyExtension" class="dock-button primary" type="button">Verificar extensão</button>
           </div>
           <div class="analysis-summary">
+            <div class="balance-metric"><small>SALDO IDENTIFICADO</small><strong id="agentBalance">—</strong><span id="balanceRule">Mínimo R$ 500</span></div>
             <div><small>ATIVO</small><strong id="agentAsset">—</strong></div>
             <div><small>TIMEFRAME</small><strong id="agentTimeframe">—</strong></div>
             <div><small>EXPIRAÇÃO</small><strong id="agentExpiration">—</strong></div>
+            <div><small>MARCAÇÕES</small><strong id="markingsState">LTA — · LTB —</strong></div>
             <div class="direction"><small>ANÁLISE REAL</small><strong id="analysisDirection">AGUARDAR</strong><span id="analysisReason">Agente não conectado</span></div>
           </div>
           <div class="agent-actions">
             <button id="inspectAgent" class="dock-button" type="button" disabled>Mapear plataforma</button>
             <button id="ensureDefaults" class="dock-button" type="button" disabled>Aplicar 5m / 5m</button>
             <button id="showOverlay" class="dock-button" type="button" disabled>Exibir análise na Hezilex</button>
-            <button id="startAgent" class="dock-button positive" type="button" disabled>▶ Iniciar análise</button>
+            <button id="startAgent" class="dock-button positive" type="button" disabled>▶ Vamos começar?</button>
             <button id="pauseAgent" class="dock-button" type="button" disabled>Ⅱ Pausar</button>
             <button id="emergencyStop" class="dock-button danger" type="button" disabled>■ Parada</button>
+          </div>
+        </section>
+        <section class="start-gate" id="startGate" hidden aria-labelledby="startGateTitle">
+          <div class="start-gate-icon">↗</div>
+          <div><small>SALDO LIBERADO</small><h2 id="startGateTitle">Vamos começar?</h2><p>O Atlas vai monitorar o ativo, manter velas e expiração em 5 minutos e aguardar critérios reais antes de sinalizar.</p></div>
+          <div class="start-gate-actions">
+            <button id="dismissStart" type="button">Agora não</button>
+            <button id="confirmStart" type="button">Sim, monitorar</button>
           </div>
         </section>
       </section>
@@ -108,15 +123,15 @@
     </header>
     <p id="supportText">Você pode usar a Hezilex normalmente sem a extensão. Instale-a somente para habilitar os controles do Atlas.</p>
     <div class="support-actions">
-      <a id="downloadExtension" href="./downloads/atlas-guard-bridge-v0.2.zip" download>↓ Baixar extensão corrigida</a>
+      <a id="downloadExtension" href="./downloads/atlas-guard-bridge.zip" download>↓ Baixar extensão</a>
       <button id="toggleInstallHelp" type="button" aria-expanded="false">Como instalar</button>
     </div>
     <ol id="installHelp" hidden>
       <li>Extraia o arquivo ZIP.</li>
       <li>Abra <code>chrome://extensions</code> ou <code>edge://extensions</code>.</li>
-      <li>Se a versão 0.1 estiver instalada, remova-a para evitar conflito.</li>
-      <li>Ative o modo do desenvolvedor e carregue a pasta da versão 0.2.</li>
-      <li>Volte aqui e recarregue a página. A versão 0.2 conecta automaticamente.</li>
+      <li>Se houver uma versão antiga, remova-a para evitar conflito.</li>
+      <li>Ative o modo do desenvolvedor e carregue a pasta extraída.</li>
+      <li>Volte aqui e recarregue a página. A conexão acontece automaticamente.</li>
     </ol>
   </aside>
   <button class="support-launcher" id="openSupport" type="button" aria-label="Abrir suporte da extensão">?</button>

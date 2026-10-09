@@ -18,9 +18,11 @@ Abra `dist/index.html` por um servidor HTTP local. O projeto não possui depend�
 
 ## Extensão
 
-O painel oferece download direto do pacote e verifica silenciosamente a conexão a cada 4 segundos. A versão 0.2 usa um canal direto com o domínio oficial do Atlas, sem depender do carregamento do iframe da Hezilex. A extensão é opcional: quando ela não está instalada ou conectada, o acesso manual à Hezilex continua disponível normalmente.
+O painel oferece um endereço estável para download e verifica silenciosamente a conexão a cada 4 segundos. A versão 1.0 usa um canal direto com o domínio oficial do Atlas, mantém um histórico local recolhível, monitora saldo e ativo, aplica o padrão de 5 minutos e só cria LTA/LTB quando identifica candles reais suficientes. A extensão é opcional: quando ela não está instalada ou conectada, o acesso manual à Hezilex continua disponível normalmente.
 
 O código está em `extension/`. Para desenvolvimento, abra `chrome://extensions` ou `edge://extensions`, ative o modo de desenvolvedor e carregue essa pasta sem compactação. Depois abra o Atlas Guard, clique no ícone **Atlas Guard Bridge**, autorize o endereço do painel e recarregue.
+
+O site usa o endereço estável `/downloads/atlas-guard-bridge.zip`, evitando links diferentes a cada publicação.
 
 Para não exigir instalação manual, o pacote precisa ser publicado na Chrome Web Store ou no Microsoft Edge Add-ons. Essa etapa depende de uma conta de publicador e da revisão da loja.
 

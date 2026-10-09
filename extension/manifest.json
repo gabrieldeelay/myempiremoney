@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Atlas Guard Bridge",
-  "version": "0.2.0",
-  "description": "Conecta o painel Atlas Guard à interface oficial da Hezilex, com controles de segurança e execução financeira bloqueada por padrão.",
+  "version": "1.0.0",
+  "description": "Monitora a Traderoom da Hezilex, aplica o padrão de 5 minutos e envia o estado real ao painel Atlas Guard.",
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://app.hezilex.com/*",

@@ -56,6 +56,12 @@
     }
   });
 
+  chrome.runtime.onMessage.addListener(message => {
+    if (message?.type !== "dashboard_state_update") return false;
+    post({ type: "state", state: message.state });
+    return false;
+  });
+
   authorizeAndAnnounce();
 })();
 

@@ -68,6 +68,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const key = message.state?.asset || "current";
       assets[key] = { ...message.state, updatedAt: Date.now() };
       await chrome.storage.local.set({ assets });
+      if (sender.tab?.id) {
+        chrome.tabs.sendMessage(sender.tab.id, { type: "dashboard_state_update", state: message.state }, { frameId: 0 }).catch(() => {});
+      }
       return { ok: true };
     }
     if (message?.type === "financial_permission") {

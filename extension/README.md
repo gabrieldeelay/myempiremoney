@@ -10,7 +10,7 @@ Extensão Manifest V3 que conecta o painel Atlas Guard ao iframe oficial da Hezi
 4. Abra o painel Atlas Guard.
 5. Recarregue o painel. A origem oficial do Atlas é reconhecida e autorizada automaticamente.
 
-Na versão 0.2, a detecção acontece diretamente no painel, sem depender do carregamento do iframe da Hezilex.
+Na versão 1.0, a detecção acontece diretamente no painel e a Traderoom é monitorada continuamente. O agente procura o saldo real, bloqueia o início abaixo de R$ 500,00, mantém o padrão de 5 minutos quando os controles são identificados e cria LTA/LTB somente a partir de candles visíveis detectados.
 
 Para instalação sem arquivos locais, a extensão precisa ser publicada na Chrome Web Store ou Microsoft Edge Add-ons e passar pela revisão da loja.
 
