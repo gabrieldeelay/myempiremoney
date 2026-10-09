@@ -74,10 +74,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return { ok: true };
     }
     if (message?.type === "financial_permission") {
-      return { allowed: false, reason: "Execução financeira bloqueada nesta versão até validar seletores, feed e limites de risco." };
+      const fromHezilex = sender.url?.startsWith("https://app.hezilex.com/");
+      const demoOnly = message.demoVerified === true && message.isReal === false;
+      const amount = Number(message.amount);
+      if (!fromHezilex || !demoOnly || !Number.isFinite(amount) || amount <= 0) {
+        return { allowed: false, reason: "Operação bloqueada: apenas a Conta Demo verificada pode executar ordens." };
+      }
+      return { allowed: true, scope: "demo-only" };
     }
     return { ok: false };
   })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
   return true;
 });
-

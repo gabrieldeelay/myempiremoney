@@ -29,7 +29,7 @@
 
     <section class="notice" id="securityNotice">
       <div class="notice-icon">✓</div>
-      <p><strong>Você está acessando a página oficial da Hezilex.</strong> Login, saldo, compras e vendas acontecem dentro do domínio <code>app.hezilex.com</code>. O Atlas Guard não recebe sua senha nem confirma resultados de ordens.</p>
+      <p><strong>Você está acessando a página oficial da Hezilex.</strong> Use “Salvar senha” do Chrome/Edge para preencher o próximo login. A credencial fica protegida pelo navegador e nunca é copiada ou armazenada pelo Atlas.</p>
       <button id="closeNotice" type="button" aria-label="Fechar aviso">×</button>
     </section>
 
@@ -54,7 +54,7 @@
         <div class="frame-toolbar">
           <div class="official-badge"><i></i> CONTEÚDO OFICIAL HEZILEX</div>
           <div class="origin"><span>🔒</span><code>https://app.hezilex.com</code></div>
-          <span class="frame-note" id="monitorPulse">Monitor iniciando…</span>
+          <div class="frame-status"><span class="password-safe">⌾ Senha pelo navegador</span><span class="frame-note" id="monitorPulse">Monitor iniciando…</span></div>
         </div>
         <div class="frame-wrap">
           <div class="frame-loader" id="frameLoader">
@@ -74,7 +74,7 @@
           <div class="agent-summary">
             <span id="agentDot" class="agent-dot offline"></span>
             <div><small>EXTENSÃO DO NAVEGADOR</small><strong id="agentStatus">Não detectada</strong></div>
-            <button id="verifyExtension" class="dock-button primary" type="button">Verificar extensão</button>
+            <span class="agent-mode-badge" id="agentModeBadge">AUTOMÁTICO</span>
           </div>
           <div class="analysis-summary">
             <div class="balance-metric"><small>SALDO IDENTIFICADO</small><strong id="agentBalance">—</strong><span id="balanceRule">Mínimo R$ 500</span></div>
@@ -85,20 +85,18 @@
             <div class="direction"><small>ANÁLISE REAL</small><strong id="analysisDirection">AGUARDAR</strong><span id="analysisReason">Agente não conectado</span></div>
           </div>
           <div class="agent-actions">
-            <button id="inspectAgent" class="dock-button" type="button" disabled>Mapear plataforma</button>
-            <button id="ensureDefaults" class="dock-button" type="button" disabled>Aplicar 5m / 5m</button>
-            <button id="showOverlay" class="dock-button" type="button" disabled>Exibir análise na Hezilex</button>
-            <button id="startAgent" class="dock-button positive" type="button" disabled>▶ Vamos começar?</button>
+            <div class="autonomy-copy"><i></i><span><b>Fluxo automático · Conta Demo</b><small>Saldo → 5m/5m → LTA/LTB → 1% → proteção 2x</small></span></div>
+            <button id="startAgent" class="dock-button positive main-action" type="button" disabled>▶ Começar</button>
             <button id="pauseAgent" class="dock-button" type="button" disabled>Ⅱ Pausar</button>
-            <button id="emergencyStop" class="dock-button danger" type="button" disabled>■ Parada</button>
+            <button id="emergencyStop" class="dock-button danger" type="button" disabled>■ Parar</button>
           </div>
         </section>
         <section class="start-gate" id="startGate" hidden aria-labelledby="startGateTitle">
           <div class="start-gate-icon">↗</div>
-          <div><small>SALDO LIBERADO</small><h2 id="startGateTitle">Vamos começar?</h2><p>O Atlas vai monitorar o ativo, manter velas e expiração em 5 minutos e aguardar critérios reais antes de sinalizar.</p></div>
+          <div><small>SALDO LIBERADO</small><h2 id="startGateTitle">Vamos começar?</h2><p>Depois da confirmação, o Atlas assume todo o fluxo: monitora saldo e ativo, aplica 5m/5m, atualiza LTA/LTB e aguarda uma oportunidade válida.</p></div>
           <div class="start-gate-actions">
             <button id="dismissStart" type="button">Agora não</button>
-            <button id="confirmStart" type="button">Sim, monitorar</button>
+            <button id="confirmStart" type="button">Sim, começar automaticamente</button>
           </div>
         </section>
       </section>
@@ -106,7 +104,7 @@
 
     <footer>
       <span>Atlas Guard funciona apenas como janela de acesso. Não é afiliado à Hezilex.</span>
-      <span>Operações financeiras envolvem risco de perda total.</span>
+      <span>Automação limitada à Conta Demo; a Conta Principal permanece bloqueada.</span>
     </footer>
   </div>
 
@@ -139,4 +137,3 @@
   <script type="module" src="./modules/app.js"></script>
 </body>
 </html>
-

@@ -161,7 +161,6 @@ function isBalanceAllowed() {
 
 function setAgentControls() {
   const connected = extensionReady;
-  for (const id of ["inspectAgent", "ensureDefaults", "showOverlay"]) $(id).disabled = !connected;
   $("startAgent").disabled = !connected || !isBalanceAllowed() || bridgeState.mode === "running";
   $("pauseAgent").disabled = !connected || bridgeState.mode !== "running";
   $("emergencyStop").disabled = !connected || bridgeState.mode === "stopped";
@@ -201,6 +200,7 @@ function renderState(state = {}) {
   const mode = bridgeState.mode || "stopped";
   $("agentDot").className = `agent-dot ${mode === "running" ? "busy" : "online"}`;
   $("agentStatus").textContent = mode === "running" ? "Monitorando oportunidade" : mode === "paused" ? "Pausado" : "Conectado";
+  $("agentModeBadge").textContent = mode === "running" ? "EM EXECUÇÃO" : mode === "paused" ? "PAUSADO" : "AUTOMÁTICO";
   $("agentAsset").textContent = bridgeState.asset || "Localizando…";
   $("agentTimeframe").textContent = bridgeState.timeframe || (bridgeState.defaults.timeframe ? "5m" : "Verificando…");
   $("agentExpiration").textContent = bridgeState.expiration || (bridgeState.defaults.expiration ? "5 min" : "Verificando…");
@@ -209,11 +209,19 @@ function renderState(state = {}) {
   balance.textContent = formatBalance(bridgeState.balance);
   balance.classList.toggle("allowed", isBalanceAllowed());
   balance.classList.toggle("blocked", bridgeState.balance != null && bridgeState.balance !== "" && Number.isFinite(Number(bridgeState.balance)) && !isBalanceAllowed());
-  $("balanceRule").textContent = bridgeState.balance == null ? "Procurando saldo real" : isBalanceAllowed() ? "Saldo acima de R$ 500" : "Robô bloqueado abaixo de R$ 500";
+  const accountName = bridgeState.account?.name || "Conta não confirmada";
+  const baseAmount = bridgeState.risk?.baseAmount;
+  const protectionAmount = bridgeState.risk?.protectionAmount;
+  $("balanceRule").textContent = bridgeState.balance == null
+    ? "Procurando saldo"
+    : isBalanceAllowed()
+      ? `${accountName} · 1% ${formatBalance(baseAmount)} · proteção ${formatBalance(protectionAmount)}`
+      : "Robô bloqueado abaixo de R$ 500";
 
   const lta = Boolean(bridgeState.markings?.lta);
   const ltb = Boolean(bridgeState.markings?.ltb);
-  $("markingsState").textContent = `LTA ${lta ? "✓" : "—"} · LTB ${ltb ? "✓" : "—"}`;
+  const protection = Boolean(bridgeState.markings?.protection || bridgeState.protection?.active || bridgeState.protection?.pending);
+  $("markingsState").textContent = `LTA ${lta ? "✓" : "—"} · LTB ${ltb ? "✓" : "—"} · PROT ${protection ? "✓" : "—"}`;
   const direction = bridgeState.analysis?.direction;
   $("analysisDirection").textContent = direction === "BUY" ? "COMPRA" : direction === "SELL" ? "VENDA" : "AGUARDAR";
   $("analysisReason").textContent = bridgeState.analysis?.reason || "Aguardando dados reais";
@@ -234,6 +242,7 @@ function renderOffline(message = "Não detectada") {
   renderSupport(false);
   $("agentDot").className = "agent-dot offline";
   $("agentStatus").textContent = message;
+  $("agentModeBadge").textContent = "DESCONECTADO";
   setAgentControls();
   startGate.hidden = true;
   updateMonitorPulse();
@@ -274,8 +283,8 @@ async function verifyExtension(showMessage = true) {
   if (verificationInFlight) return;
   verificationInFlight = true;
   const button = $("verifyExtension");
-  const original = button.textContent;
-  if (showMessage) {
+  const original = button?.textContent;
+  if (showMessage && button) {
     button.disabled = true;
     button.textContent = "Verificando…";
   }
@@ -292,7 +301,7 @@ async function verifyExtension(showMessage = true) {
     }
   } finally {
     verificationInFlight = false;
-    if (showMessage) {
+    if (showMessage && button) {
       button.disabled = false;
       button.textContent = original;
     }
@@ -317,10 +326,6 @@ async function command(action, button, successMessage = null) {
   }
 }
 
-$("verifyExtension").addEventListener("click", () => verifyExtension(true));
-$("inspectAgent").addEventListener("click", event => command("inspect", event.currentTarget, { title: "Mapeamento atualizado", detail: "Saldo, ativo e controles foram verificados novamente." }));
-$("ensureDefaults").addEventListener("click", event => command("ensure_defaults", event.currentTarget, { title: "Padrões solicitados", detail: "O Atlas verificou velas e expiração de 5 minutos." }));
-$("showOverlay").addEventListener("click", event => command("overlay", event.currentTarget, { title: "Painel exibido", detail: "A análise do Atlas foi exibida sobre a Traderoom." }));
 $("startAgent").addEventListener("click", () => {
   startPromptDismissed = false;
   syncStartGate();
@@ -332,7 +337,7 @@ $("dismissStart").addEventListener("click", () => {
 });
 $("confirmStart").addEventListener("click", async event => {
   if (!isBalanceAllowed()) return;
-  const result = await command("start", event.currentTarget, { title: "Monitoramento iniciado", detail: "Saldo validado. O Atlas aguardará critérios reais e não criará sinais aleatórios.", level: "signal" });
+  const result = await command("start", event.currentTarget, { title: "Fluxo automático iniciado", detail: "Saldo validado. O Atlas assumiu 5m/5m, ativo, marcações e análise contínua sem criar sinais aleatórios.", level: "signal" });
   if (result) {
     startPromptDismissed = true;
     startGate.hidden = true;
@@ -347,4 +352,3 @@ setInterval(updateMonitorPulse, 1000);
 setTimeout(() => {
   if (window.innerWidth <= 800) mobileWarning.classList.add("show");
 }, 9000);
-

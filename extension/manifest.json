@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Atlas Guard Bridge",
-  "version": "1.0.0",
-  "description": "Monitora a Traderoom da Hezilex, aplica o padrão de 5 minutos e envia o estado real ao painel Atlas Guard.",
+  "version": "1.1.0",
+  "description": "Monitora a Traderoom da Hezilex, analisa velas oficiais de 5 minutos e automatiza exclusivamente a Conta Demo.",
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://app.hezilex.com/*",
@@ -35,4 +35,3 @@
     "default_popup": "popup.html"
   }
 }
-

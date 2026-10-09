@@ -1,21 +1,30 @@
 (() => {
-  if (window.__atlasGuardBridgeLoaded) return;
+  if (window.__atlasGuardBridgeLoaded || window.top === window) return;
   window.__atlasGuardBridgeLoaded = true;
 
-  const VERSION = "1.0.0";
+  const VERSION = "1.1.0";
   const BRIDGE_SOURCE = "atlas-guard-extension";
   const DASHBOARD_SOURCE = "atlas-guard-dashboard";
   const MINIMUM_BALANCE = 500;
-  const MAX_MARKINGS = 8;
+  const CANDLE_MINUTES = 5;
+  const BASE_RISK = 0.01;
+  const PROTECTION_MULTIPLIER = 2;
+  const MAX_GALES = 2;
+  const MIN_CONFIDENCE = 72;
+  const MAX_MARKINGS = 5;
+
   const internal = {
     mode: "stopped",
     task: Promise.resolve(),
     lastUserActivity: 0,
-    markings: [],
-    eventSequence: 0,
     lastAsset: null,
     lastAnalysisAt: 0,
-    monitorTimer: null,
+    lastOrderCandle: null,
+    pendingOrder: null,
+    protectionBase: null,
+    historyBaseline: new Set(),
+    markings: [],
+    eventSequence: 0,
     mutationTimer: null,
     state: {
       bridge: "ready",
@@ -24,17 +33,21 @@
       monitoring: true,
       balance: null,
       balanceConfidence: null,
+      account: { id: null, name: null, isDemo: false, isReal: null, verified: false },
       asset: null,
+      symbol: null,
       assetChangedAt: null,
       timeframe: null,
       expiration: null,
       defaults: { timeframe: false, expiration: false },
       userActive: false,
       chartDetected: false,
-      analysis: { direction: "WAIT", confidence: 0, reason: "Aguardando dados reais da Traderoom" },
-      protection: { active: false, reason: null },
-      markings: { lta: false, ltb: false, total: 0, source: null },
-      gale: { current: 0, maximum: 2 },
+      analysis: { direction: "WAIT", confidence: 0, reason: "Aguardando dados oficiais de 5 minutos" },
+      protection: { active: false, pending: false, reason: null, multiplier: PROTECTION_MULTIPLIER },
+      risk: { percent: 1, baseAmount: null, nextAmount: null, protectionAmount: null },
+      markings: { lta: false, ltb: false, protection: false, total: 0, source: null },
+      gale: { current: 0, maximum: MAX_GALES },
+      lastOperation: null,
       realOrderExecution: false,
       events: [],
       lastInspectionAt: null
@@ -43,252 +56,252 @@
 
   for (const eventName of ["pointerdown", "keydown", "wheel", "touchstart"]) {
     addEventListener(eventName, event => {
-      if (event.isTrusted) internal.lastUserActivity = Date.now();
+      if (event.isTrusted && !event.target?.closest?.('[id^="__atlas_guard"]')) internal.lastUserActivity = Date.now();
     }, { capture: true, passive: true });
   }
 
   function compact(value) { return String(value || "").replace(/\s+/g, " ").trim(); }
   function clamp(value, min = 0, max = 1) { return Math.max(min, Math.min(max, value)); }
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+  function fiveMinuteBoundary(timestamp = Date.now()) { return Math.floor(timestamp / 300000) * 300000; }
+  function formatMoney(value) { return Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function allDocuments() {
+    const result = [document];
+    for (const frame of document.querySelectorAll("iframe")) {
+      try { if (frame.contentDocument) result.push(frame.contentDocument); } catch { /* origem isolada */ }
+    }
+    return result;
+  }
+  function queryAll(selector) { return allDocuments().flatMap(doc => [...doc.querySelectorAll(selector)]); }
   function visible(element) {
-    if (!(element instanceof Element)) return false;
-    const style = getComputedStyle(element);
+    const view = element?.ownerDocument?.defaultView;
+    if (!view) return false;
+    const style = view.getComputedStyle(element);
     const box = element.getBoundingClientRect();
     return style.visibility !== "hidden" && style.display !== "none" && Number(style.opacity || 1) > 0 && box.width > 1 && box.height > 1;
   }
-
-  function logEvent(title, detail, level = "info", key = title) {
-    const last = internal.state.events[0];
-    if (last?.key === key && Date.now() - new Date(last.at).getTime() < 12000) return;
-    internal.eventSequence += 1;
-    internal.state.events.unshift({
-      id: `${Date.now()}-${internal.eventSequence}`,
-      key,
-      title,
-      detail,
-      level,
-      at: new Date().toISOString()
-    });
-    internal.state.events = internal.state.events.slice(0, 40);
-  }
-
-  function parentOrigin() {
-    try { return document.referrer ? new URL(document.referrer).origin : null; } catch { return null; }
-  }
-
-  async function originAllowed(origin) {
-    if (!origin) return false;
-    const response = await chrome.runtime.sendMessage({ type: "is_origin_allowed", origin });
-    return Boolean(response?.allowed);
-  }
-
   function parseBRL(raw) {
     const normalized = String(raw || "").replace(/[^\d.,-]/g, "").replace(/\./g, "").replace(",", ".");
     const value = Number(normalized);
     return Number.isFinite(value) ? value : null;
   }
 
+  function logEvent(title, detail, level = "info", key = title) {
+    const last = internal.state.events[0];
+    if (last?.key === key && Date.now() - new Date(last.at).getTime() < 12000) return;
+    internal.state.events.unshift({ id: `${Date.now()}-${++internal.eventSequence}`, key, title, detail, level, at: new Date().toISOString() });
+    internal.state.events = internal.state.events.slice(0, 50);
+  }
+  function parentOrigin() {
+    try { return document.referrer ? new URL(document.referrer).origin : null; } catch { return null; }
+  }
+  async function originAllowed(origin) {
+    if (!origin) return false;
+    const response = await chrome.runtime.sendMessage({ type: "is_origin_allowed", origin });
+    return Boolean(response?.allowed);
+  }
+
   function detectBalance() {
-    const elements = [...document.querySelectorAll('[data-balance],[class*="balance" i],[class*="saldo" i],span,div,strong,b')]
-      .filter(visible);
-    const seen = new Set();
+    const accountResume = document.querySelector(".account-resume");
+    const direct = compact(accountResume?.textContent).match(/R\$\s*([\d.]+,\d{2})/i);
+    if (direct) return { value: parseBRL(direct[1]), confidence: "high" };
     const candidates = [];
-    for (const element of elements) {
+    for (const element of [...document.querySelectorAll('[data-balance],[class*="balance" i],[class*="saldo" i],span,div,strong,b')].filter(visible)) {
       const text = compact(element.textContent);
       const match = text.match(/R\$\s*([\d.]+,\d{2})/i);
       if (!match || text.length > 130) continue;
-      const box = element.getBoundingClientRect();
-      const signature = `${match[1]}:${Math.round(box.left)}:${Math.round(box.top)}`;
-      if (seen.has(signature)) continue;
-      seen.add(signature);
-      const context = compact(element.closest('[class*="balance" i],[class*="saldo" i]')?.textContent || element.parentElement?.textContent || text).slice(0, 180);
-      const className = String(element.className || "");
-      const color = getComputedStyle(element).color.match(/\d+/g)?.map(Number) || [];
-      let score = 0;
-      if (/balance|saldo/i.test(className)) score += 70;
-      if (/saldo|conta real|dispon[ií]vel/i.test(context)) score += 45;
-      if (box.top < Math.max(130, innerHeight * .18)) score += 25;
-      if (box.right > innerWidth * .48) score += 8;
-      if (color.length >= 3 && color[1] > color[0] + 20) score += 12;
-      if (/valor|lucro|expira[cç][aã]o/i.test(context)) score -= 55;
-      candidates.push({ value: parseBRL(match[1]), score, text });
+      const context = compact(element.parentElement?.textContent || text).slice(0, 180);
+      let score = /balance|saldo/i.test(String(element.className || "")) ? 70 : 0;
+      if (/saldo|conta demo|conta real|dispon[ií]vel/i.test(context)) score += 45;
+      if (element.getBoundingClientRect().top < 150) score += 25;
+      if (/valor|lucro|expira[cç][aã]o/i.test(context)) score -= 60;
+      candidates.push({ value: parseBRL(match[1]), score });
     }
     candidates.sort((a, b) => b.score - a.score);
-    const best = candidates.find(item => item.value != null);
-    if (!best || best.score < 18) return { value: null, confidence: null };
-    return { value: best.value, confidence: best.score >= 55 ? "high" : "medium" };
+    const best = candidates[0];
+    return best?.score >= 18 ? { value: best.value, confidence: best.score >= 55 ? "high" : "medium" } : { value: null, confidence: null };
   }
 
-  function timeframeCandidates() {
-    return [...document.querySelectorAll('button,[role="button"],a,span,div')]
+  function activeInstrument() {
+    const section = document.querySelector('section#window.active[data-symbol],section.w-active[data-symbol]');
+    return {
+      asset: compact(document.querySelector(".item.active .title")?.textContent) || compact(section?.dataset?.symbol) || null,
+      symbol: compact(section?.dataset?.symbol) || null
+    };
+  }
+  function timeframeButtons() {
+    return queryAll('button[aria-label*="minuto" i],button,[role="button"],a')
       .filter(visible)
-      .filter(element => /^(?:1m|2m|3m|5m|10m|15m|30m|1h|4h)$/i.test(compact(element.textContent)))
-      .map(element => {
-        const target = element.closest('button,[role="button"],a') || element;
-        const box = target.getBoundingClientRect();
-        const active = /active|selected|checked|current/i.test(String(target.className || "")) || target.getAttribute("aria-pressed") === "true" || target.getAttribute("aria-selected") === "true";
-        return { target, text: compact(element.textContent), active, box, score: (box.top < innerHeight * .42 ? 12 : 0) + (box.width < 170 ? 5 : 0) + (active ? 40 : 0) };
-      })
-      .sort((a, b) => b.score - a.score);
+      .map(element => ({ element, text: compact(element.textContent), label: compact(element.getAttribute("aria-label")) }))
+      .filter(item => /^(?:1m|2m|3m|5m|10m|15m|30m|1h|4h)$/i.test(item.text) || /\b\d+\s*minuto/i.test(item.label));
   }
-
   function locateExpirationControl() {
-    const labels = [...document.querySelectorAll('div,span,label,strong,b')]
-      .filter(visible)
-      .filter(element => /expira[cç][aã]o/i.test(compact(element.textContent)) && compact(element.textContent).length < 160);
-    for (const label of labels) {
-      let host = label;
-      for (let depth = 0; host && depth < 5; depth += 1, host = host.parentElement) {
-        const text = compact(host.textContent);
-        const match = text.match(/(\d+)\s*(?:min|m)\b/i);
-        const box = host.getBoundingClientRect();
-        if (!match || box.width > 520 || box.height > 320) continue;
-        const buttons = [...host.querySelectorAll('button,[role="button"]')].filter(visible);
-        const minus = buttons.find(button => /^(?:-|−|–)$/.test(compact(button.textContent)) || /diminuir|menos/i.test(button.getAttribute("aria-label") || ""));
-        const plus = buttons.find(button => /^\+$/.test(compact(button.textContent)) || /aumentar|mais/i.test(button.getAttribute("aria-label") || ""));
-        return { host, minutes: Number(match[1]), minus, plus };
-      }
+    const direct = document.querySelector("#tour_expiration");
+    const hosts = direct ? [direct] : [...document.querySelectorAll("div,section")].filter(element => /expira[cç][aã]o/i.test(compact(element.textContent)));
+    for (const host of hosts) {
+      if (!visible(host)) continue;
+      const match = compact(host.textContent).match(/(\d+)\s*(?:min|m)\b/i);
+      if (!match || host.getBoundingClientRect().width > 540) continue;
+      const buttons = [...host.querySelectorAll('button,[role="button"]')].filter(visible);
+      return {
+        minutes: Number(match[1]),
+        minus: buttons.find(button => /^(?:-|−|–)$/.test(compact(button.textContent)) || /diminuir|menos/i.test(button.getAttribute("aria-label") || "")),
+        plus: buttons.find(button => /^\+$/.test(compact(button.textContent)) || /aumentar|mais/i.test(button.getAttribute("aria-label") || ""))
+      };
     }
     return null;
   }
 
-  function detectAsset(bodyText) {
-    const match = bodyText.match(/\b(?:EUR|GBP|AUD|NZD|USD|CAD|CHF|JPY|BTC|ETH|SOL|XAU)[\s/\-](?:USD|EUR|GBP|JPY|CAD|CHF)\b/i);
-    if (match) return match[0].replace(/\s+/g, "/").replace("-", "/").toUpperCase();
-    const named = bodyText.match(/\b(BITCOIN|ETHEREUM|SOLANA|OURO|GOLD)\b/i)?.[1]?.toUpperCase();
-    return named || null;
+  async function detectAccount() {
+    const resumeText = compact(document.querySelector(".account-resume")?.textContent);
+    const selectedName = /conta\s+demo/i.test(resumeText) ? "Conta Demo" : /conta\s+(?:principal|real)/i.test(resumeText) ? "Conta Principal" : null;
+    let accounts = [];
+    try {
+      const response = await fetch("/binary/accounts/get?selected_account=0", { credentials: "include", cache: "no-store" });
+      const payload = await response.json();
+      accounts = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.accounts) ? payload.accounts : [];
+    } catch { /* desconhecida permanece bloqueada */ }
+    const account = accounts.find(item => /demo/i.test(selectedName || "") === !Boolean(Number(item.is_real)));
+    const isReal = account ? Boolean(Number(account.is_real)) : selectedName ? !/demo/i.test(selectedName) : null;
+    internal.state.account = {
+      id: account?.id ?? account?.account_id ?? null,
+      name: account?.name || account?.account_name || selectedName,
+      isDemo: isReal === false && /demo/i.test(account?.name || account?.account_name || selectedName || ""),
+      isReal,
+      verified: Boolean(account && selectedName)
+    };
+    internal.state.realOrderExecution = false;
+    return internal.state.account;
   }
 
-  function inspect() {
-    const bodyText = compact(document.body?.innerText).slice(0, 24000);
-    const asset = detectAsset(bodyText);
-    const timeframes = timeframeCandidates();
-    const selectedTimeframe = timeframes.find(item => item.active) || timeframes[0];
+  async function inspect() {
+    const instrument = activeInstrument();
     const expiration = locateExpirationControl();
     const balance = detectBalance();
     const previousAsset = internal.state.asset;
     const previousBalance = internal.state.balance;
-
-    internal.state.asset = asset;
-    internal.state.timeframe = selectedTimeframe?.text || null;
+    const buttons = timeframeButtons();
+    const selectedFive = buttons.find(item => /5 minutos/i.test(item.label)) || buttons.find(item => item.text === "5m");
+    internal.state.asset = instrument.asset;
+    internal.state.symbol = instrument.symbol;
+    internal.state.timeframe = selectedFive ? "5m" : (buttons.find(item => item.text)?.text || null);
     internal.state.expiration = expiration?.minutes ? `${expiration.minutes} min` : null;
-    internal.state.defaults = {
-      timeframe: internal.state.timeframe?.toLowerCase() === "5m",
-      expiration: expiration?.minutes === 5
-    };
+    internal.state.defaults = { timeframe: Boolean(selectedFive), expiration: expiration?.minutes === 5 };
     internal.state.balance = balance.value;
     internal.state.balanceConfidence = balance.confidence;
-    internal.state.chartDetected = Boolean(document.querySelector("canvas,svg"));
-    internal.state.userActive = Date.now() - internal.lastUserActivity < 2400;
+    internal.state.chartDetected = queryAll("canvas,svg").some(visible);
+    internal.state.userActive = Date.now() - internal.lastUserActivity < 2200;
     internal.state.lastInspectionAt = new Date().toISOString();
-
-    if (asset && asset !== previousAsset) {
-      internal.lastAsset = previousAsset;
+    await detectAccount();
+    const baseAmount = balance.value == null ? null : Math.max(1, Math.round(balance.value * BASE_RISK * 100) / 100);
+    const cycleBase = internal.protectionBase ?? baseAmount;
+    internal.state.risk = {
+      percent: 1,
+      baseAmount,
+      protectionAmount: cycleBase == null ? null : Math.round(cycleBase * 2 * 100) / 100,
+      nextAmount: cycleBase == null ? null : Math.round(cycleBase * Math.pow(2, internal.state.gale.current) * 100) / 100
+    };
+    if (instrument.asset && instrument.asset !== previousAsset) {
       internal.state.assetChangedAt = internal.state.lastInspectionAt;
       internal.lastAnalysisAt = 0;
+      internal.lastOrderCandle = null;
       renderMarkings([]);
-      logEvent("Ativo alterado", `${asset} detectado. O Atlas iniciou a verificação de 5 minutos.`, "success", `asset-${asset}`);
+      logEvent("Ativo alterado", `${instrument.asset} detectado. Ajustando velas e expiração para 5 minutos.`, "success", `asset-${instrument.asset}`);
     }
     if (balance.value != null && balance.value !== previousBalance) {
-      const allowed = balance.value > MINIMUM_BALANCE;
-      logEvent("Saldo verificado", allowed ? `R$ ${balance.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}: monitoramento pode ser iniciado após sua confirmação.` : `R$ ${balance.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}: robô bloqueado, mínimo superior a R$ 500,00.`, allowed ? "success" : "danger", `balance-${balance.value}`);
+      logEvent("Saldo verificado", balance.value > MINIMUM_BALANCE ? `R$ ${formatMoney(balance.value)}: entrada-base calculada em R$ ${formatMoney(baseAmount)} (1%).` : `R$ ${formatMoney(balance.value)}: robô bloqueado, mínimo superior a R$ 500,00.`, balance.value > MINIMUM_BALANCE ? "success" : "danger", `balance-${balance.value}`);
     }
-    if (!internal.state.chartDetected) internal.state.analysis = { direction: "WAIT", confidence: 0, reason: "Traderoom ainda não detectada" };
+    if (internal.state.account.isReal) logEvent("Conta real bloqueada", "O Atlas detectou a conta principal e desativou qualquer clique de compra ou venda.", "danger", "real-account-block");
     return snapshot();
   }
 
-  function ensureDefaults() {
-    inspect();
+  async function ensureDefaults() {
+    await inspect();
     if (internal.state.userActive) {
       logEvent("Ajuste adiado", "Interação manual detectada; o Atlas aguardará antes de tocar nos controles.", "warning", "defaults-user-active");
-      return { changed: false, blocked: true, reason: "Interação manual recente", state: snapshot() };
+      return { changed: false, blocked: true, state: snapshot() };
     }
-
     let changed = false;
-    const candidates = timeframeCandidates();
-    const five = candidates.find(item => item.text.toLowerCase() === "5m");
-    if (five && internal.state.timeframe?.toLowerCase() !== "5m") {
-      five.target.click();
-      changed = true;
-      internal.state.timeframe = "5m";
-      internal.state.defaults.timeframe = true;
-      logEvent("Velas ajustadas", "Timeframe alterado automaticamente para 5 minutos.", "success", `timeframe-${internal.state.asset || "current"}`);
-    }
-
-    const expiration = locateExpirationControl();
-    if (expiration?.minutes && expiration.minutes !== 5) {
-      const control = expiration.minutes < 5 ? expiration.plus : expiration.minus;
-      if (control && Math.abs(expiration.minutes - 5) <= 30) {
-        control.click();
-        changed = true;
-        logEvent("Expiração em ajuste", `Expiração encontrada em ${expiration.minutes} min; aproximando de 5 min.`, "warning", `expiration-${internal.state.asset || "current"}-${expiration.minutes}`);
+    if (!internal.state.defaults.timeframe) {
+      const trigger = timeframeButtons().find(item => /\b(?:1|2|3|10|15|30)\s*minuto/i.test(item.label) || /^(?:1m|2m|3m|10m|15m|30m)$/i.test(item.text));
+      if (trigger) {
+        trigger.element.click();
+        await sleep(140);
+        const option = queryAll('[role="menuitem"],div,span').filter(visible).find(element => /^5 minutos$/i.test(compact(element.textContent)) && compact(element.textContent).length < 15);
+        if (option) {
+          (option.closest('[role="menuitem"]') || option).click();
+          changed = true;
+          await sleep(260);
+          logEvent("Velas ajustadas", "Timeframe alterado automaticamente para 5 minutos.", "success", `timeframe-${internal.state.asset || "current"}`);
+        }
       }
     }
-    if (expiration?.minutes === 5) internal.state.defaults.expiration = true;
-    if (internal.state.defaults.timeframe && internal.state.defaults.expiration) {
-      logEvent("Configuração confirmada", "Velas de 5m e expiração de 5 min estão ativas.", "success", `defaults-ok-${internal.state.asset || "current"}`);
+    let expiration = locateExpirationControl();
+    for (let attempt = 0; expiration?.minutes && expiration.minutes !== 5 && attempt < 20; attempt += 1) {
+      const control = expiration.minutes < 5 ? expiration.plus : expiration.minus;
+      if (!control) break;
+      control.click();
+      changed = true;
+      await sleep(90);
+      expiration = locateExpirationControl();
     }
-    setTimeout(() => { inspect(); publishState(); }, 500);
-    return {
-      changed,
-      blocked: false,
-      timeframe: { found: Boolean(five), verified: internal.state.defaults.timeframe },
-      expiration: { found: Boolean(expiration), verified: internal.state.defaults.expiration },
-      state: snapshot()
-    };
+    await inspect();
+    if (internal.state.defaults.timeframe && internal.state.defaults.expiration) logEvent("Configuração confirmada", "Velas de 5m e expiração de 5 min estão ativas.", "success", `defaults-ok-${internal.state.asset || "current"}`);
+    return { changed, blocked: false, state: snapshot() };
   }
 
   function chartHost() {
-    const anchors = [...document.querySelectorAll("canvas,svg")].filter(visible).sort((a, b) => {
+    const anchor = queryAll("canvas").filter(visible).sort((a, b) => {
       const aa = a.getBoundingClientRect();
       const bb = b.getBoundingClientRect();
       return bb.width * bb.height - aa.width * aa.height;
-    });
-    const anchor = anchors[0];
+    })[0];
     if (!anchor) return null;
+    const view = anchor.ownerDocument.defaultView;
     let host = anchor.parentElement;
-    while (host && host !== document.body) {
+    while (host && host !== anchor.ownerDocument.body) {
       const box = host.getBoundingClientRect();
-      if (box.width > innerWidth * .34 && box.height > innerHeight * .24) return host;
+      if (box.width > view.innerWidth * .42 && box.height > view.innerHeight * .35) return host;
       host = host.parentElement;
     }
     return anchor.parentElement;
   }
-
   function renderMarkings(lines = [], source = null) {
     const host = chartHost();
-    internal.markings = lines.slice(0, MAX_MARKINGS).filter(line => ["LTA", "LTB", "HORIZONTAL", "PROTECTION"].includes(line.type));
+    internal.markings = lines.slice(0, MAX_MARKINGS).filter(line => ["LTA", "LTB", "PROTECTION"].includes(line.type));
     internal.state.markings = {
       lta: internal.markings.some(line => line.type === "LTA"),
       ltb: internal.markings.some(line => line.type === "LTB"),
+      protection: internal.markings.some(line => line.type === "PROTECTION"),
       total: internal.markings.length,
       source
     };
-    if (!host) return { rendered: 0, reason: "Gráfico não encontrado" };
+    if (!host) return { rendered: 0 };
+    const doc = host.ownerDocument;
     let svg = host.querySelector(":scope > #__atlas_guard_chart_overlay");
     if (!svg) {
-      if (getComputedStyle(host).position === "static") host.style.position = "relative";
-      svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      if (doc.defaultView.getComputedStyle(host).position === "static") host.style.position = "relative";
+      svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.id = "__atlas_guard_chart_overlay";
       svg.setAttribute("viewBox", "0 0 1000 600");
-      svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2147483000;overflow:visible";
+      svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2147483000";
       host.appendChild(svg);
     }
     svg.replaceChildren();
     for (const line of internal.markings) {
-      const element = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      const horizontal = line.type === "HORIZONTAL" || line.type === "PROTECTION";
-      element.setAttribute("x1", String(horizontal ? 0 : clamp(line.x1 ?? 0) * 1000));
-      element.setAttribute("y1", String(clamp(line.y1 ?? .5) * 600));
-      element.setAttribute("x2", String(horizontal ? 1000 : clamp(line.x2 ?? 1) * 1000));
-      element.setAttribute("y2", String(clamp(line.y2 ?? line.y1 ?? .5) * 600));
+      const horizontal = line.type === "PROTECTION";
+      const element = doc.createElementNS("http://www.w3.org/2000/svg", "line");
+      element.setAttribute("x1", String(horizontal ? 0 : clamp(line.x1) * 1000));
+      element.setAttribute("y1", String(clamp(line.y1) * 600));
+      element.setAttribute("x2", String(horizontal ? 1000 : clamp(line.x2) * 1000));
+      element.setAttribute("y2", String(clamp(line.y2 ?? line.y1) * 600));
       element.setAttribute("stroke", line.type === "PROTECTION" ? "#ffb84d" : line.type === "LTB" ? "#ff647c" : "#b8f53f");
-      element.setAttribute("stroke-width", line.type === "PROTECTION" ? "2.5" : "2");
-      element.setAttribute("stroke-dasharray", horizontal ? "8 6" : "0");
+      element.setAttribute("stroke-width", line.type === "PROTECTION" ? "3" : "2.4");
+      if (horizontal) element.setAttribute("stroke-dasharray", "10 7");
       svg.appendChild(element);
-
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", String((horizontal ? .02 : clamp(line.x1 ?? 0)) * 1000));
-      label.setAttribute("y", String(Math.max(18, clamp(line.y1 ?? .5) * 600 - 8)));
+      const label = doc.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", String((horizontal ? .02 : clamp(line.x1)) * 1000));
+      label.setAttribute("y", String(Math.max(20, clamp(line.y1) * 600 - 9)));
       label.setAttribute("fill", line.type === "LTB" ? "#ff647c" : line.type === "PROTECTION" ? "#ffb84d" : "#b8f53f");
       label.setAttribute("font-size", "18");
       label.setAttribute("font-family", "system-ui,sans-serif");
@@ -299,192 +312,204 @@
     return { rendered: internal.markings.length };
   }
 
-  function structuredCandles() {
-    const raw = [];
-    for (const element of document.querySelectorAll('[data-open][data-high][data-low][data-close]')) {
-      const open = Number(element.getAttribute("data-open"));
-      const high = Number(element.getAttribute("data-high"));
-      const low = Number(element.getAttribute("data-low"));
-      const close = Number(element.getAttribute("data-close"));
-      if ([open, high, low, close].every(Number.isFinite)) raw.push({ open, high, low, close });
-    }
-    if (raw.length < 12) {
-      for (const element of document.querySelectorAll('[aria-label*="open" i],[aria-label*="abertura" i]')) {
-        const label = element.getAttribute("aria-label") || "";
-        const open = Number(label.match(/(?:open|abertura)\D+([\d.]+)/i)?.[1]);
-        const high = Number(label.match(/(?:high|m[aá]xima)\D+([\d.]+)/i)?.[1]);
-        const low = Number(label.match(/(?:low|m[ií]nima)\D+([\d.]+)/i)?.[1]);
-        const close = Number(label.match(/(?:close|fechamento)\D+([\d.]+)/i)?.[1]);
-        if ([open, high, low, close].every(Number.isFinite)) raw.push({ open, high, low, close });
-      }
-    }
-    if (raw.length < 12) return [];
-    const values = raw.flatMap(item => [item.high, item.low]);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min || 1;
-    return raw.slice(-80).map((item, index, list) => ({
-      x: index / Math.max(1, list.length - 1),
-      highY: (max - item.high) / range,
-      lowY: (max - item.low) / range,
-      midY: (max - (item.open + item.close) / 2) / range,
-      direction: item.close >= item.open ? "up" : "down"
-    }));
+  async function fetchMarketCandles() {
+    if (!internal.state.symbol) return [];
+    const url = new URL("/publicapi/tradingview/udf-history", location.origin);
+    const to = Math.floor(Date.now() / 1000);
+    for (const [key, value] of Object.entries({ symbol: internal.state.symbol, resolution: "5", from: String(to - 86400), to: String(to), countback: "120", site: location.hostname })) url.searchParams.set(key, value);
+    const response = await fetch(url, { credentials: "include", cache: "no-store" });
+    if (!response.ok) throw new Error(`Feed de velas respondeu ${response.status}`);
+    const payload = await response.json();
+    if (payload?.s !== "ok" || !Array.isArray(payload.t)) return [];
+    return payload.t.map((time, index) => ({
+      time: Number(time) * 1000,
+      open: Number(payload.o[index]), high: Number(payload.h[index]), low: Number(payload.l[index]), close: Number(payload.c[index])
+    })).filter(item => [item.time, item.open, item.high, item.low, item.close].every(Number.isFinite)).slice(-120);
   }
-
-  function visualCandles() {
-    const canvases = [...document.querySelectorAll("canvas")].filter(visible).sort((a, b) => b.width * b.height - a.width * a.height);
-    let best = [];
-    for (const canvas of canvases.slice(0, 3)) {
-      if (canvas.width < 280 || canvas.height < 160 || canvas.width * canvas.height > 3500000) continue;
-      let context;
-      try { context = canvas.getContext("2d", { willReadFrequently: true }); } catch { context = null; }
-      if (!context) continue;
-      let pixels;
-      try { pixels = context.getImageData(0, 0, canvas.width, canvas.height).data; } catch { continue; }
-      const columns = [];
-      for (let x = 0; x < canvas.width; x += 1) {
-        let top = canvas.height;
-        let bottom = -1;
-        let green = 0;
-        let red = 0;
-        for (let y = 0; y < canvas.height; y += 2) {
-          const offset = (y * canvas.width + x) * 4;
-          const r = pixels[offset];
-          const g = pixels[offset + 1];
-          const b = pixels[offset + 2];
-          const a = pixels[offset + 3];
-          if (a < 120) continue;
-          const isGreen = g > 85 && g > r + 28 && g > b * .72;
-          const isRed = r > 100 && r > g + 28 && r > b * .72;
-          if (!isGreen && !isRed) continue;
-          top = Math.min(top, y);
-          bottom = Math.max(bottom, y);
-          if (isGreen) green += 1;
-          if (isRed) red += 1;
-        }
-        columns.push({ x, top, bottom, green, red, active: green + red >= 2 });
-      }
-      const groups = [];
-      let current = null;
-      for (const column of columns) {
-        if (column.active) {
-          if (!current) current = { start: column.x, end: column.x, top: column.top, bottom: column.bottom, green: 0, red: 0, pixels: 0 };
-          current.end = column.x;
-          current.top = Math.min(current.top, column.top);
-          current.bottom = Math.max(current.bottom, column.bottom);
-          current.green += column.green;
-          current.red += column.red;
-          current.pixels += column.green + column.red;
-        } else if (current) {
-          groups.push(current);
-          current = null;
-        }
-      }
-      if (current) groups.push(current);
-      const candles = groups
-        .filter(group => group.end - group.start + 1 >= 2 && group.end - group.start + 1 <= 28 && group.bottom - group.top >= 4 && group.pixels >= 7)
-        .map(group => ({
-          x: ((group.start + group.end) / 2) / canvas.width,
-          highY: group.top / canvas.height,
-          lowY: group.bottom / canvas.height,
-          midY: ((group.top + group.bottom) / 2) / canvas.height,
-          direction: group.green >= group.red ? "up" : "down"
-        }))
-        .slice(-80);
-      if (candles.length > best.length) best = candles;
-    }
-    return best;
+  function ema(values, period) {
+    const factor = 2 / (period + 1);
+    return values.reduce((current, value, index) => index === 0 ? value : value * factor + current * (1 - factor), values[0] || 0);
   }
-
-  function swingPoints(candles, property, mode) {
+  function swings(candles, property, kind) {
     const points = [];
     for (let index = 2; index < candles.length - 2; index += 1) {
       const value = candles[index][property];
       const neighbors = [candles[index - 2][property], candles[index - 1][property], candles[index + 1][property], candles[index + 2][property]];
-      const match = mode === "max" ? neighbors.every(other => value >= other) : neighbors.every(other => value <= other);
-      if (match) points.push({ index, x: candles[index].x, y: value });
+      if (kind === "low" ? neighbors.every(other => value <= other) : neighbors.every(other => value >= other)) points.push({ index, value });
     }
     return points;
   }
-
-  function extendedLine(type, first, second) {
-    const deltaX = Math.max(.001, second.x - first.x);
-    const slope = (second.y - first.y) / deltaX;
-    return { type, x1: first.x, y1: first.y, x2: 1, y2: clamp(second.y + slope * (1 - second.x)) };
+  function trendLine(type, first, second, candles, minimum, priceRange) {
+    const x1 = first.index / (candles.length - 1);
+    const x2Point = second.index / (candles.length - 1);
+    const y1 = 1 - (first.value - minimum) / priceRange;
+    const y2Point = 1 - (second.value - minimum) / priceRange;
+    const slope = (y2Point - y1) / Math.max(.001, x2Point - x1);
+    return { type, x1, y1: clamp(y1), x2: 1, y2: clamp(y2Point + slope * (1 - x2Point)) };
   }
 
-  function analyzeChart() {
-    let source = "structured-candles";
-    let candles = structuredCandles();
-    if (candles.length < 12) {
-      source = "chart-pixels";
-      candles = visualCandles();
-    }
-    if (candles.length < 12) {
-      renderMarkings([], null);
-      internal.state.analysis = { direction: "WAIT", confidence: 0, reason: "Candles reais insuficientes para criar LTA/LTB com segurança" };
-      logEvent("Sem entrada", `${internal.state.asset || "Ativo atual"}: candles suficientes ainda não foram identificados; nenhuma linha ou sinal foi inventado.`, "warning", `no-candles-${internal.state.asset || "current"}`);
+  async function analyzeChart() {
+    let raw;
+    try { raw = await fetchMarketCandles(); } catch (error) {
+      internal.state.analysis = { direction: "WAIT", confidence: 0, reason: `Feed oficial indisponível: ${error.message}` };
       return internal.state.analysis;
     }
-
-    const lows = swingPoints(candles, "lowY", "max");
-    const highs = swingPoints(candles, "highY", "min");
-    const lowPair = lows.slice(-2);
-    const highPair = highs.slice(-2);
+    const candles = raw.filter(item => item.time + 300000 <= Date.now()).slice(-80);
+    if (candles.length < 30) {
+      renderMarkings([], null);
+      internal.state.analysis = { direction: "WAIT", confidence: 0, reason: "Histórico oficial insuficiente", source: "official-5m-feed", candles: candles.length };
+      return internal.state.analysis;
+    }
+    const values = candles.flatMap(item => [item.high, item.low]);
+    const minimum = Math.min(...values);
+    const priceRange = Math.max(...values) - minimum || 1;
+    const lowPair = swings(candles, "low", "low").slice(-2);
+    const highPair = swings(candles, "high", "high").slice(-2);
+    const hasLta = lowPair.length === 2 && lowPair[1].index - lowPair[0].index >= 3 && lowPair[1].value > lowPair[0].value;
+    const hasLtb = highPair.length === 2 && highPair[1].index - highPair[0].index >= 3 && highPair[1].value < highPair[0].value;
     const lines = [];
-    const hasLta = lowPair.length === 2 && lowPair[1].index - lowPair[0].index >= 3 && lowPair[1].y < lowPair[0].y - .006;
-    const hasLtb = highPair.length === 2 && highPair[1].index - highPair[0].index >= 3 && highPair[1].y > highPair[0].y + .006;
-    if (hasLta) lines.push(extendedLine("LTA", lowPair[0], lowPair[1]));
-    if (hasLtb) lines.push(extendedLine("LTB", highPair[0], highPair[1]));
-    renderMarkings(lines, source);
-    if (lines.length) logEvent("Marcações atualizadas", `${lines.map(line => line.type).join(" e ")} criadas a partir de ${candles.length} candles visíveis.`, "success", `lines-${internal.state.asset || "current"}-${hasLta}-${hasLtb}`);
-
-    const recent = candles.slice(-10);
-    const meanX = (recent.length - 1) / 2;
-    const meanY = recent.reduce((sum, item) => sum + item.midY, 0) / recent.length;
-    const denominator = recent.reduce((sum, _item, index) => sum + Math.pow(index - meanX, 2), 0) || 1;
-    const slope = recent.reduce((sum, item, index) => sum + (index - meanX) * (item.midY - meanY), 0) / denominator;
-    const ranges = recent.slice(0, -1).map(item => Math.abs(item.lowY - item.highY));
-    const averageRange = ranges.reduce((sum, value) => sum + value, 0) / Math.max(1, ranges.length);
-    const lastRange = Math.abs(recent.at(-1).lowY - recent.at(-1).highY);
-    const spike = averageRange > 0 && lastRange > averageRange * 2.35;
-    const ups = recent.slice(-5).filter(item => item.direction === "up").length;
-    const downs = recent.slice(-5).filter(item => item.direction === "down").length;
-    internal.state.protection = { active: spike, reason: spike ? "Amplitude da vela atual acima de 2,35× a média recente" : null };
-
+    if (hasLta) lines.push(trendLine("LTA", lowPair[0], lowPair[1], candles, minimum, priceRange));
+    if (hasLtb) lines.push(trendLine("LTB", highPair[0], highPair[1], candles, minimum, priceRange));
+    const recentRanges = candles.slice(-21, -1).map(item => item.high - item.low);
+    const averageRange = recentRanges.reduce((sum, value) => sum + value, 0) / recentRanges.length;
+    const last = candles.at(-1);
+    const spike = averageRange > 0 && last.high - last.low > averageRange * 2.35;
+    if (spike) lines.push({ type: "PROTECTION", y1: clamp(1 - ((last.close >= last.open ? last.high : last.low) - minimum) / priceRange), expiresAt: last.time + 300000 });
+    renderMarkings(lines, "official-5m-feed");
+    const closes = candles.map(item => item.close);
+    const ema9 = ema(closes.slice(-36), 9);
+    const ema21 = ema(closes.slice(-60), 21);
+    const momentum = last.close - candles.at(-4).close;
+    const bullish = candles.slice(-5).filter(item => item.close > item.open).length;
+    const bearish = candles.slice(-5).filter(item => item.close < item.open).length;
+    internal.state.protection.active = spike;
+    internal.state.protection.reason = spike ? "Amplitude acima de 2,35× a média das 20 velas anteriores" : internal.state.protection.pending ? "Proteção 2x aguardando novo sinal válido" : null;
     let direction = "WAIT";
     let confidence = 0;
-    let reason = "Estrutura sem confirmação suficiente";
-    if (spike) {
-      reason = "Proteção ativa: pico de volatilidade detectado";
-      logEvent("Proteção ativada", reason, "danger", `spike-${internal.state.asset || "current"}`);
-    } else if (hasLta && slope < -.002 && ups >= 3) {
-      direction = "BUY";
-      confidence = Math.min(92, Math.round(62 + Math.abs(slope) * 1700 + ups * 3));
-      reason = `LTA válida + inclinação favorável + ${ups}/5 velas compradoras`;
-    } else if (hasLtb && slope > .002 && downs >= 3) {
-      direction = "SELL";
-      confidence = Math.min(92, Math.round(62 + Math.abs(slope) * 1700 + downs * 3));
-      reason = `LTB válida + inclinação favorável + ${downs}/5 velas vendedoras`;
-    } else if (!hasLta && !hasLtb) {
-      reason = "Nenhuma LTA ou LTB válida confirmada nos candles visíveis";
+    let reason = "Critérios mínimos ainda não foram atingidos";
+    if (spike) reason = "Proteção ativa: pico de volatilidade na última vela fechada";
+    else {
+      const buyScore = (ema9 > ema21 ? 2 : 0) + (momentum > 0 ? 1 : 0) + (bullish >= 3 ? 1 : 0) + (hasLta ? 2 : 0);
+      const sellScore = (ema9 < ema21 ? 2 : 0) + (momentum < 0 ? 1 : 0) + (bearish >= 3 ? 1 : 0) + (hasLtb ? 2 : 0);
+      if (buyScore >= 5 && buyScore > sellScore) {
+        direction = "BUY";
+        confidence = 70 + buyScore * 4;
+        reason = `LTA válida + EMA9 acima da EMA21 + momentum positivo + ${bullish}/5 velas compradoras`;
+      } else if (sellScore >= 5 && sellScore > buyScore) {
+        direction = "SELL";
+        confidence = 70 + sellScore * 4;
+        reason = `LTB válida + EMA9 abaixo da EMA21 + momentum negativo + ${bearish}/5 velas vendedoras`;
+      } else if (!hasLta && !hasLtb) reason = "Nenhuma LTA ou LTB válida confirmada nas velas fechadas";
     }
-    const previousDirection = internal.state.analysis.direction;
-    internal.state.analysis = { direction, confidence, reason, source, candles: candles.length };
-    if (direction !== "WAIT" && direction !== previousDirection) {
-      logEvent(`Cenário de ${direction === "BUY" ? "COMPRA" : "VENDA"}`, `${reason}. Confiança técnica ${confidence}%.`, "signal", `signal-${internal.state.asset || "current"}-${direction}-${Date.now()}`);
-    }
-    if (direction === "WAIT") logEvent("Sem entrada", `${internal.state.asset || "Ativo atual"}: ${reason}.`, "info", `wait-${internal.state.asset || "current"}-${reason}`);
+    internal.state.analysis = { direction, confidence: Math.min(94, confidence), reason, source: "official-5m-feed", candles: candles.length, candleTime: last.time };
+    if (spike) logEvent("Proteção contra pico", `${internal.state.asset}: nenhuma entrada durante esta janela.`, "danger", `spike-${internal.state.symbol}-${last.time}`);
+    else if (direction === "WAIT") logEvent("Sem entrada", `${internal.state.asset}: ${reason}.`, "info", `wait-${internal.state.symbol}-${last.time}`);
+    else logEvent(`Cenário de ${direction === "BUY" ? "COMPRA" : "VENDA"}`, `${reason}. Confiança ${internal.state.analysis.confidence}%.`, "signal", `signal-${internal.state.symbol}-${direction}-${last.time}`);
+    if (hasLta || hasLtb) logEvent("Marcações atualizadas", `${lines.filter(line => /LT[AB]/.test(line.type)).map(line => line.type).join(" e ")} com ${candles.length} velas oficiais.`, "success", `lines-${internal.state.symbol}-${last.time}`);
     return internal.state.analysis;
   }
 
-  function cleanupExpiredMarkings() {
-    const now = Date.now();
-    const active = internal.markings.filter(line => !line.expiresAt || line.expiresAt > now);
-    if (active.length !== internal.markings.length) renderMarkings(active, internal.state.markings.source);
+  function setNativeInput(input, value) {
+    Object.getOwnPropertyDescriptor(input.ownerDocument.defaultView.HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new Event("blur", { bubbles: true }));
+  }
+  async function applyRiskAmount(amount) {
+    const input = document.querySelector("#tour_amount input") || [...document.querySelectorAll("input")].find(item => /valor|amount/i.test(`${item.name} ${item.placeholder}`));
+    if (!input || !visible(input)) throw new Error("Campo de valor não localizado");
+    setNativeInput(input, Number(amount).toFixed(2).replace(".", ","));
+    await sleep(120);
+    const current = parseBRL(input.value);
+    if (current == null || Math.abs(current - amount) > .011) throw new Error("A plataforma não confirmou o valor calculado");
+  }
+  async function loadHistory() {
+    const response = await fetch("/binary/history/0", { credentials: "include", cache: "no-store" });
+    if (!response.ok) return [];
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+  }
+  function isDemoHistory(item) { return /demo/i.test(compact(item.account_name || item.account?.name)); }
+  function outcomeOf(item) {
+    const numericStatus = Number(item.status);
+    if (numericStatus === 1) return null;
+    if (numericStatus === 2) return "WIN";
+    if (numericStatus === 3) return "LOSS";
+    if (numericStatus === 4) return "DRAW";
+    const status = compact(item.status).toLowerCase();
+    const amount = Number(item.amount ?? Number(item.amount_cents || 0) / 100);
+    const returned = Number(item.return ?? Number(item.return_cents || 0) / 100);
+    if (/win|won|ganh|success|profit/.test(status) || returned > amount) return "WIN";
+    if (/loss|lost|perd|fail/.test(status) || (/clos|finish|expir/.test(status) && returned <= amount)) return "LOSS";
+    if (/draw|tie|empate|refund/.test(status)) return "DRAW";
+    return null;
+  }
+  async function reconcileLastOperation() {
+    if (!internal.pendingOrder) return;
+    const history = await loadHistory();
+    const candidates = history.filter(item => isDemoHistory(item) && !internal.historyBaseline.has(String(item.id)));
+    const match = candidates.find(item => !internal.pendingOrder.symbol || compact(item.symbol) === compact(internal.pendingOrder.symbol)) || candidates[0];
+    if (!match) return;
+    internal.pendingOrder.id = match.id;
+    const outcome = outcomeOf(match);
+    if (!outcome) return;
+    internal.state.lastOperation = { ...internal.pendingOrder, id: match.id, outcome, status: match.status, finishedAt: new Date().toISOString() };
+    if (outcome === "LOSS" && internal.state.gale.current < MAX_GALES) {
+      internal.state.gale.current += 1;
+      internal.state.protection.pending = true;
+      logEvent("Proteção preparada", `Resultado negativo na Conta Demo. Próxima entrada válida em ${Math.pow(2, internal.state.gale.current)}x, com teto de ${MAX_GALES} proteções.`, "warning", `protection-${match.id}`);
+    } else if (outcome === "LOSS") {
+      internal.mode = "stopped";
+      internal.state.mode = "stopped";
+      internal.state.protection.pending = false;
+      logEvent("Limite de proteção atingido", "Duas proteções foram usadas. O Atlas parou automaticamente.", "danger", `gale-stop-${match.id}`);
+    } else {
+      internal.state.gale.current = 0;
+      internal.state.protection.pending = false;
+      internal.protectionBase = null;
+      logEvent(outcome === "WIN" ? "Resultado positivo" : "Operação devolvida", "Proteção reiniciada para a entrada-base de 1%.", "success", `result-${match.id}`);
+    }
+    internal.pendingOrder = null;
   }
 
+  async function placeDemoOrder() {
+    const analysis = internal.state.analysis;
+    if (internal.mode !== "running" || analysis.direction === "WAIT" || analysis.confidence < MIN_CONFIDENCE) return false;
+    if (internal.pendingOrder || internal.lastOrderCandle === analysis.candleTime || internal.state.userActive || internal.state.protection.active) return false;
+    if (!internal.state.account.verified || !internal.state.account.isDemo || internal.state.account.isReal !== false) {
+      logEvent("Entrada bloqueada", "A Conta Demo não pôde ser confirmada; nenhum botão foi acionado.", "danger", "demo-not-verified");
+      return false;
+    }
+    if (!(Number(internal.state.balance) > MINIMUM_BALANCE) || !internal.state.defaults.timeframe || !internal.state.defaults.expiration) return false;
+    const cycleBase = internal.protectionBase ?? internal.state.risk.baseAmount;
+    const amount = Math.round(cycleBase * Math.pow(2, internal.state.gale.current) * 100) / 100;
+    const permission = await chrome.runtime.sendMessage({ type: "financial_permission", demoVerified: true, isReal: false, amount });
+    if (!permission?.allowed) throw new Error(permission?.reason || "Operação não autorizada");
+    const history = await loadHistory();
+    internal.historyBaseline = new Set(history.filter(isDemoHistory).map(item => String(item.id)));
+    await applyRiskAmount(amount);
+    await detectAccount();
+    if (!internal.state.account.verified || !internal.state.account.isDemo || internal.state.account.isReal !== false) throw new Error("Conta mudou durante a preparação; operação cancelada");
+    const pattern = analysis.direction === "BUY" ? /comprar/i : /vender/i;
+    const button = [...document.querySelectorAll("button")].filter(visible).find(item => pattern.test(compact(item.textContent)));
+    if (!button) throw new Error("Botão de compra/venda não localizado");
+    button.click();
+    if (internal.state.gale.current === 0) internal.protectionBase = amount;
+    internal.lastOrderCandle = analysis.candleTime;
+    internal.pendingOrder = { id: null, symbol: internal.state.symbol, asset: internal.state.asset, direction: analysis.direction, amount, gale: internal.state.gale.current, reason: analysis.reason, placedAt: new Date().toISOString(), account: "Conta Demo" };
+    internal.state.lastOperation = { ...internal.pendingOrder, status: "OPEN" };
+    logEvent(`Entrada de ${analysis.direction === "BUY" ? "COMPRA" : "VENDA"} realizada`, `${internal.state.asset}, Conta Demo, R$ ${formatMoney(amount)}. Motivos: ${analysis.reason}.`, "signal", `order-${internal.state.symbol}-${analysis.candleTime}`);
+    return true;
+  }
+
+  function cleanupExpiredMarkings() {
+    const active = internal.markings.filter(line => !line.expiresAt || line.expiresAt > Date.now());
+    if (active.length !== internal.markings.length) {
+      renderMarkings(active, internal.state.markings.source);
+      internal.state.protection.active = false;
+      logEvent("Linha de proteção removida", "A vela terminou e a marcação temporária foi limpa.", "success", `protection-clean-${Date.now()}`);
+    }
+  }
   function injectAnalysisPanel() {
     let panel = document.getElementById("__atlas_guard_panel");
     if (!panel) {
@@ -495,37 +520,38 @@
     }
     const direction = internal.state.analysis.direction === "BUY" ? "COMPRA" : internal.state.analysis.direction === "SELL" ? "VENDA" : "AGUARDAR";
     const color = direction === "COMPRA" ? "#47dfa0" : direction === "VENDA" ? "#ff647c" : "#f4b955";
-    const balance = internal.state.balance == null ? "Saldo não localizado" : `Saldo R$ ${internal.state.balance.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-    panel.innerHTML = `<div><div style="color:#b8f53f;font-size:9px;font-weight:800;letter-spacing:.14em">ATLAS GUARD · ${balance}</div><strong style="display:block;margin-top:6px;font-size:13px">${internal.state.analysis.reason}</strong></div><div style="text-align:right"><span style="display:block;color:#8195ac;font-size:8px">DIREÇÃO</span><b style="display:block;margin-top:5px;color:${color};font-size:12px">${direction}</b></div>`;
+    const amount = internal.state.risk.nextAmount == null ? "—" : `R$ ${formatMoney(internal.state.risk.nextAmount)}`;
+    panel.innerHTML = `<div><div style="color:#b8f53f;font-size:9px;font-weight:800;letter-spacing:.14em">ATLAS GUARD · CONTA DEMO · PRÓXIMA ${amount}</div><strong style="display:block;margin-top:6px;font-size:13px">${internal.state.analysis.reason}</strong></div><div style="text-align:right"><span style="display:block;color:#8195ac;font-size:8px">DIREÇÃO</span><b style="display:block;margin-top:5px;color:${color};font-size:12px">${direction}</b></div>`;
     return true;
   }
-
   function snapshot() {
     return {
       ...internal.state,
-      defaults: { ...internal.state.defaults },
-      analysis: { ...internal.state.analysis },
-      protection: { ...internal.state.protection },
-      markings: { ...internal.state.markings },
-      gale: { ...internal.state.gale },
+      account: { ...internal.state.account }, defaults: { ...internal.state.defaults }, analysis: { ...internal.state.analysis },
+      protection: { ...internal.state.protection }, risk: { ...internal.state.risk }, markings: { ...internal.state.markings }, gale: { ...internal.state.gale },
+      lastOperation: internal.state.lastOperation ? { ...internal.state.lastOperation } : null,
       events: internal.state.events.map(event => ({ ...event }))
     };
   }
-
   async function publishState() {
-    try { await chrome.runtime.sendMessage({ type: "state_update", state: snapshot() }); } catch { /* painel ainda não disponível */ }
+    try { await chrome.runtime.sendMessage({ type: "state_update", state: snapshot() }); } catch { /* painel indisponível */ }
   }
 
   async function monitorCycle(forceAnalysis = false) {
-    inspect();
+    await inspect();
     const changedAsset = internal.state.asset && internal.state.asset !== internal.lastAsset;
-    if (!internal.state.userActive && internal.state.asset && (!internal.state.defaults.timeframe || !internal.state.defaults.expiration || changedAsset)) ensureDefaults();
-    if (internal.state.chartDetected && (forceAnalysis || changedAsset || Date.now() - internal.lastAnalysisAt > 12000)) {
-      analyzeChart();
+    if (!internal.state.userActive && internal.state.asset && (!internal.state.defaults.timeframe || !internal.state.defaults.expiration || changedAsset)) await ensureDefaults();
+    const candleChanged = fiveMinuteBoundary() > Number(internal.state.analysis.candleTime || 0);
+    if (internal.state.chartDetected && (forceAnalysis || changedAsset || candleChanged || Date.now() - internal.lastAnalysisAt > 12000)) {
+      await analyzeChart();
       internal.lastAnalysisAt = Date.now();
     }
     cleanupExpiredMarkings();
-    if (internal.mode === "running") injectAnalysisPanel();
+    await reconcileLastOperation();
+    if (internal.mode === "running") {
+      injectAnalysisPanel();
+      try { await placeDemoOrder(); } catch (error) { logEvent("Operação cancelada", error.message, "danger", `order-error-${error.message}`); }
+    }
     internal.lastAsset = internal.state.asset;
     await publishState();
     return snapshot();
@@ -539,9 +565,10 @@
     if (command.action === "start") {
       await monitorCycle(true);
       if (!(Number(internal.state.balance) > MINIMUM_BALANCE)) throw new Error("Saldo precisa estar acima de R$ 500,00 para iniciar");
+      if (!internal.state.account.verified || !internal.state.account.isDemo || internal.state.account.isReal !== false) throw new Error("Selecione e confirme a Conta Demo. A conta real permanece bloqueada.");
       internal.mode = "running";
       internal.state.mode = "running";
-      logEvent("Monitoramento iniciado", "Saldo validado. O Atlas está aguardando uma oportunidade real.", "signal", `start-${Date.now()}`);
+      logEvent("Robô iniciado na Conta Demo", `Entrada-base de 1% (R$ ${formatMoney(internal.state.risk.baseAmount)}) e proteção 2x, limitada a ${MAX_GALES}.`, "signal", `start-${Date.now()}`);
       injectAnalysisPanel();
       await publishState();
       return snapshot();
@@ -549,7 +576,7 @@
     if (command.action === "pause") {
       internal.mode = "paused";
       internal.state.mode = "paused";
-      logEvent("Robô pausado", "Análise ativa pausada pelo usuário.", "warning", `pause-${Date.now()}`);
+      logEvent("Robô pausado", "Novas entradas foram pausadas.", "warning", `pause-${Date.now()}`);
       await publishState();
       return snapshot();
     }
@@ -562,13 +589,8 @@
       await publishState();
       return snapshot();
     }
-    if (["buy", "sell", "place_order"].includes(command.action)) {
-      const permission = await chrome.runtime.sendMessage({ type: "financial_permission" });
-      throw new Error(permission?.reason || "Execução financeira bloqueada");
-    }
     throw new Error("Ação desconhecida");
   }
-
   function enqueue(command) {
     const run = internal.task.then(() => dispatchCommand(command));
     internal.task = run.catch(() => {});
@@ -577,12 +599,9 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type !== "atlas_dashboard_command") return false;
-    enqueue(message.command)
-      .then(result => sendResponse({ ok: true, type: "result", result, state: snapshot() }))
-      .catch(error => sendResponse({ ok: false, type: "error", error: error.message, state: snapshot() }));
+    enqueue(message.command).then(result => sendResponse({ ok: true, type: "result", result, state: snapshot() })).catch(error => sendResponse({ ok: false, type: "error", error: error.message, state: snapshot() }));
     return true;
   });
-
   addEventListener("message", async event => {
     if (event.source !== window.parent || event.data?.source !== DASHBOARD_SOURCE || event.data?.type !== "command") return;
     if (!(await originAllowed(event.origin))) return;
@@ -604,13 +623,12 @@
     internal.mutationTimer = setTimeout(() => monitorCycle(false), 700);
   });
   observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "aria-selected", "aria-pressed"] });
-  internal.monitorTimer = setInterval(() => monitorCycle(false), 3000);
+  setInterval(() => monitorCycle(false), 3000);
 
   (async () => {
-    logEvent("Monitor conectado", "O Atlas iniciou o acompanhamento contínuo da tela.", "success", "monitor-connected");
+    logEvent("Monitor conectado", "O Atlas iniciou o acompanhamento contínuo usando o feed oficial de 5 minutos.", "success", "monitor-connected");
     await monitorCycle(true);
     const origin = parentOrigin();
     if (await originAllowed(origin)) window.parent.postMessage({ source: BRIDGE_SOURCE, type: "ready", state: snapshot() }, origin);
   })();
 })();
-

@@ -10,15 +10,14 @@ Extensão Manifest V3 que conecta o painel Atlas Guard ao iframe oficial da Hezi
 4. Abra o painel Atlas Guard.
 5. Recarregue o painel. A origem oficial do Atlas é reconhecida e autorizada automaticamente.
 
-Na versão 1.0, a detecção acontece diretamente no painel e a Traderoom é monitorada continuamente. O agente procura o saldo real, bloqueia o início abaixo de R$ 500,00, mantém o padrão de 5 minutos quando os controles são identificados e cria LTA/LTB somente a partir de candles visíveis detectados.
+Na versão 1.1, a detecção acontece diretamente no painel e a Traderoom é monitorada continuamente. O agente procura o saldo, bloqueia o início abaixo de R$ 500,00, mantém velas e expiração em 5 minutos e cria LTA/LTB a partir do feed OHLC oficial.
 
 Para instalação sem arquivos locais, a extensão precisa ser publicada na Chrome Web Store ou Microsoft Edge Add-ons e passar pela revisão da loja.
 
-## Limites de segurança da versão 0.1
+## Limites de segurança da versão 1.1
 
-- Ordens reais de compra e venda estão bloqueadas.
+- Ordens automáticas são permitidas somente quando a **Conta Demo** foi confirmada duas vezes; a Conta Principal fica bloqueada.
 - A extensão não lê valores de campos de login ou senha.
 - O Atlas só pode enviar comandos depois que o usuário autorizar explicitamente a origem do painel.
-- Marcações são limitadas a oito e linhas com `expiresAt` são removidas automaticamente.
-- A configuração de expiração só será alterada após o seletor real ser validado.
-
+- Marcações são limitadas a cinco e linhas de proteção expiram automaticamente.
+- Entrada-base em 1% do saldo, proteção em 2x e no máximo dois níveis.
