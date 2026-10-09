@@ -8,9 +8,13 @@ const connection = $("connectionState");
 const connectionText = $("connectionText");
 const notice = $("securityNotice");
 const mobileWarning = $("mobileWarning");
+const supportCard = $("supportCard");
+const supportLauncher = $("openSupport");
 const pending = new Map();
 let extensionReady = false;
 let sequence = 0;
+let verificationInFlight = false;
+let silentMisses = 0;
 
 frame.addEventListener("load", () => {
   loader.classList.add("hidden");
@@ -30,6 +34,33 @@ $("reloadFrame").addEventListener("click", () => {
 
 $("closeNotice").addEventListener("click", () => notice.classList.add("hidden"));
 
+function setSupportOpen(open) {
+  supportCard.classList.toggle("closed", !open);
+  supportLauncher.classList.toggle("show", !open);
+  localStorage.setItem("atlas-support-closed", open ? "0" : "1");
+}
+
+function renderSupport(connected) {
+  $("supportState").classList.toggle("connected", connected);
+  supportLauncher.classList.toggle("connected", connected);
+  supportLauncher.textContent = connected ? "✓" : "?";
+  $("supportTitle").textContent = connected ? "Extensão conectada" : "Extensão opcional não detectada";
+  $("supportText").textContent = connected
+    ? "Conexão ativa. O Atlas verifica o estado continuamente sem disputar seus cliques na Hezilex."
+    : "A Hezilex continua disponível em modo manual. Baixe a extensão apenas se quiser usar os controles do Atlas.";
+}
+
+$("closeSupport").addEventListener("click", () => setSupportOpen(false));
+supportLauncher.addEventListener("click", () => setSupportOpen(true));
+$("toggleInstallHelp").addEventListener("click", event => {
+  const help = $("installHelp");
+  help.hidden = !help.hidden;
+  event.currentTarget.setAttribute("aria-expanded", String(!help.hidden));
+  event.currentTarget.textContent = help.hidden ? "Como instalar" : "Ocultar instruções";
+});
+setSupportOpen(localStorage.getItem("atlas-support-closed") !== "1");
+renderSupport(false);
+
 function setAgentControls(enabled) {
   for (const id of ["inspectAgent", "ensureDefaults", "showOverlay", "startAgent", "pauseAgent", "emergencyStop"]) {
     $(id).disabled = !enabled;
@@ -38,6 +69,8 @@ function setAgentControls(enabled) {
 
 function renderState(state = {}) {
   extensionReady = true;
+  silentMisses = 0;
+  renderSupport(true);
   const mode = state.mode || state.robot || "ready";
   $("agentDot").className = `agent-dot ${mode === "running" ? "busy" : "online"}`;
   $("agentStatus").textContent = mode === "running" ? "Analisando" : mode === "paused" ? "Pausada" : "Conectada";
@@ -51,6 +84,7 @@ function renderState(state = {}) {
 
 function renderOffline(message = "Não detectada · autorize no ícone da extensão") {
   extensionReady = false;
+  renderSupport(false);
   $("agentDot").className = "agent-dot offline";
   $("agentStatus").textContent = message;
   setAgentControls(false);
@@ -85,19 +119,27 @@ window.addEventListener("message", event => {
 });
 
 async function verifyExtension(showMessage = true) {
+  if (verificationInFlight) return;
+  verificationInFlight = true;
   const button = $("verifyExtension");
   const original = button.textContent;
-  button.disabled = true;
-  button.textContent = "Verificando…";
+  if (showMessage) {
+    button.disabled = true;
+    button.textContent = "Verificando…";
+  }
   try {
-    const result = await sendCommand("inspect");
+    const result = await sendCommand("inspect", {}, showMessage ? 4500 : 1800);
     renderState(result);
   } catch (error) {
-    renderOffline(showMessage ? error.message : undefined);
+    silentMisses += 1;
+    if (showMessage || silentMisses >= 2) renderOffline(showMessage ? error.message : "Opcional · modo manual disponível");
     if (showMessage) $("analysisReason").textContent = "Clique no ícone Atlas Guard Bridge, autorize este site e recarregue.";
   } finally {
-    button.disabled = false;
-    button.textContent = original;
+    verificationInFlight = false;
+    if (showMessage) {
+      button.disabled = false;
+      button.textContent = original;
+    }
   }
 }
 
@@ -123,6 +165,8 @@ $("showOverlay").addEventListener("click", event => command("overlay", event.cur
 $("startAgent").addEventListener("click", event => command("start", event.currentTarget));
 $("pauseAgent").addEventListener("click", event => command("pause", event.currentTarget));
 $("emergencyStop").addEventListener("click", event => command("stop", event.currentTarget));
+
+setInterval(() => verifyExtension(false), 4000);
 
 setTimeout(() => {
   if (window.innerWidth <= 800) mobileWarning.classList.add("show");

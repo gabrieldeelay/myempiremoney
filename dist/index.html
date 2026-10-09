@@ -100,6 +100,26 @@
     <a href="https://app.hezilex.com/login" target="_blank" rel="noopener noreferrer">Abrir plataforma oficial ↗</a>
   </div>
 
+  <aside class="support-card" id="supportCard" aria-live="polite" aria-label="Suporte da extensão">
+    <header>
+      <span class="support-state" id="supportState" aria-hidden="true"></span>
+      <div><small>SUPORTE ATLAS GUARD</small><strong id="supportTitle">Extensão opcional</strong></div>
+      <button id="closeSupport" type="button" aria-label="Fechar suporte">×</button>
+    </header>
+    <p id="supportText">Você pode usar a Hezilex normalmente sem a extensão. Instale-a somente para habilitar os controles do Atlas.</p>
+    <div class="support-actions">
+      <a id="downloadExtension" href="./downloads/atlas-guard-bridge-v0.1.zip" download>↓ Baixar extensão</a>
+      <button id="toggleInstallHelp" type="button" aria-expanded="false">Como instalar</button>
+    </div>
+    <ol id="installHelp" hidden>
+      <li>Extraia o arquivo ZIP.</li>
+      <li>Abra <code>chrome://extensions</code> ou <code>edge://extensions</code>.</li>
+      <li>Ative o modo do desenvolvedor e carregue a pasta extraída.</li>
+      <li>Volte aqui, abra o ícone Atlas Guard e autorize este painel.</li>
+    </ol>
+  </aside>
+  <button class="support-launcher" id="openSupport" type="button" aria-label="Abrir suporte da extensão">?</button>
+
   <script type="module" src="./modules/app.js"></script>
 </body>
 </html>
