@@ -8,8 +8,9 @@ Extensão Manifest V3 que conecta o painel Atlas Guard ao iframe oficial da Hezi
 2. Ative **Modo do desenvolvedor**.
 3. Selecione **Carregar sem compactação** e escolha esta pasta `extension/`.
 4. Abra o painel Atlas Guard.
-5. Clique no ícone da extensão e selecione **Autorizar este painel**.
-6. Recarregue o painel.
+5. Recarregue o painel. A origem oficial do Atlas é reconhecida e autorizada automaticamente.
+
+Na versão 0.2, a detecção acontece diretamente no painel, sem depender do carregamento do iframe da Hezilex.
 
 Para instalação sem arquivos locais, a extensão precisa ser publicada na Chrome Web Store ou Microsoft Edge Add-ons e passar pela revisão da loja.
 

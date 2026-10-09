@@ -1,14 +1,28 @@
 {
   "manifest_version": 3,
   "name": "Atlas Guard Bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Conecta o painel Atlas Guard à interface oficial da Hezilex, com controles de segurança e execução financeira bloqueada por padrão.",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://app.hezilex.com/*"],
+  "host_permissions": [
+    "https://app.hezilex.com/*",
+    "https://atlas-guard-trading.vercel.app/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "https://atlas-guard-trading.vercel.app/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["dashboard-bridge.js"],
+      "run_at": "document_idle"
+    },
     {
       "matches": ["https://app.hezilex.com/*"],
       "js": ["content-script.js"],

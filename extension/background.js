@@ -20,6 +20,10 @@ function originCanBeAuthorized(origin) {
   }
 }
 
+function senderOrigin(sender) {
+  try { return new URL(sender.url || sender.tab?.url || "").origin; } catch { return null; }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (message?.type === "authorize_origin") {
@@ -41,6 +45,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message?.type === "get_settings") {
       return chrome.storage.local.get(Object.keys(DEFAULTS));
+    }
+    if (message?.type === "dashboard_command") {
+      const origin = senderOrigin(sender);
+      const { allowedOrigins = [] } = await chrome.storage.local.get("allowedOrigins");
+      if (!origin || !allowedOrigins.includes(origin)) throw new Error("Painel Atlas não autorizado");
+      if (!sender.tab?.id) throw new Error("Aba do Atlas não encontrada");
+      try {
+        const response = await chrome.tabs.sendMessage(sender.tab.id, {
+          type: "atlas_dashboard_command",
+          command: message.command
+        });
+        if (!response) throw new Error("A Hezilex ainda não respondeu");
+        return response;
+      } catch (error) {
+        throw new Error("A extensão foi detectada, mas a Hezilex ainda não está carregada dentro do painel.");
+      }
     }
     if (message?.type === "state_update" && sender.url?.startsWith("https://app.hezilex.com/")) {
       const stored = await chrome.storage.local.get(["assets"]);

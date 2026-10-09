@@ -1,6 +1,7 @@
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
 const EXTENSION_SOURCE = "atlas-guard-extension";
+const DIRECT_EXTENSION_SOURCE = "atlas-guard-dashboard-extension";
 const $ = id => document.getElementById(id);
 const frame = $("hezilexFrame");
 const loader = $("frameLoader");
@@ -92,19 +93,22 @@ function renderOffline(message = "Não detectada · autorize no ícone da extens
 
 function sendCommand(action, payload = {}, timeoutMs = 4500) {
   return new Promise((resolve, reject) => {
-    if (!frame.contentWindow) return reject(new Error("Hezilex ainda não carregou"));
     const requestId = `atlas-${Date.now()}-${++sequence}`;
     const timer = setTimeout(() => {
       pending.delete(requestId);
       reject(new Error("Extensão não respondeu. Autorize este painel e recarregue a página."));
     }, timeoutMs);
     pending.set(requestId, { resolve, reject, timer });
-    frame.contentWindow.postMessage({ source: DASHBOARD_SOURCE, type: "command", requestId, action, ...payload }, HEZILEX_ORIGIN);
+    const command = { source: DASHBOARD_SOURCE, type: "command", requestId, action, ...payload };
+    window.postMessage(command, location.origin);
+    if (frame.contentWindow) frame.contentWindow.postMessage(command, HEZILEX_ORIGIN);
   });
 }
 
 window.addEventListener("message", event => {
-  if (event.origin !== HEZILEX_ORIGIN || event.source !== frame.contentWindow || event.data?.source !== EXTENSION_SOURCE) return;
+  const fromIframe = event.origin === HEZILEX_ORIGIN && event.source === frame.contentWindow && event.data?.source === EXTENSION_SOURCE;
+  const fromDirectBridge = event.origin === location.origin && event.source === window && event.data?.source === DIRECT_EXTENSION_SOURCE;
+  if (!fromIframe && !fromDirectBridge) return;
   if (event.data.type === "ready") {
     renderState(event.data.state);
     return;

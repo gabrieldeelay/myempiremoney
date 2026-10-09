@@ -172,6 +172,14 @@
     return run;
   }
 
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "atlas_dashboard_command") return false;
+    enqueue(message.command)
+      .then(result => sendResponse({ ok: true, type: "result", result, state: internal.state }))
+      .catch(error => sendResponse({ ok: false, type: "error", error: error.message, state: internal.state }));
+    return true;
+  });
+
   addEventListener("message", async event => {
     if (event.source !== window.parent || event.data?.source !== DASHBOARD_SOURCE || event.data?.type !== "command") return;
     if (!(await originAllowed(event.origin))) return;

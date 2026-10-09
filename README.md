@@ -18,7 +18,7 @@ Abra `dist/index.html` por um servidor HTTP local. O projeto não possui depend�
 
 ## Extensão
 
-O painel oferece download direto do pacote e verifica silenciosamente a conexão a cada 4 segundos. A extensão é opcional: quando ela não está instalada ou conectada, o acesso manual à Hezilex continua disponível normalmente.
+O painel oferece download direto do pacote e verifica silenciosamente a conexão a cada 4 segundos. A versão 0.2 usa um canal direto com o domínio oficial do Atlas, sem depender do carregamento do iframe da Hezilex. A extensão é opcional: quando ela não está instalada ou conectada, o acesso manual à Hezilex continua disponível normalmente.
 
 O código está em `extension/`. Para desenvolvimento, abra `chrome://extensions` ou `edge://extensions`, ative o modo de desenvolvedor e carregue essa pasta sem compactação. Depois abra o Atlas Guard, clique no ícone **Atlas Guard Bridge**, autorize o endereço do painel e recarregue.
 
