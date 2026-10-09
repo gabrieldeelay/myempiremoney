@@ -312,11 +312,11 @@
     return { rendered: internal.markings.length };
   }
 
-  async function fetchMarketCandles() {
-    if (!internal.state.symbol) return [];
+  async function fetchMarketCandles(symbol = internal.state.symbol) {
+    if (!symbol) return [];
     const url = new URL("/publicapi/tradingview/udf-history", location.origin);
     const to = Math.floor(Date.now() / 1000);
-    for (const [key, value] of Object.entries({ symbol: internal.state.symbol, resolution: "5", from: String(to - 86400), to: String(to), countback: "120", site: location.hostname })) url.searchParams.set(key, value);
+    for (const [key, value] of Object.entries({ symbol, resolution: "5", from: String(to - 86400), to: String(to), countback: "120", site: location.hostname })) url.searchParams.set(key, value);
     const response = await fetch(url, { credentials: "include", cache: "no-store" });
     if (!response.ok) throw new Error(`Feed de velas respondeu ${response.status}`);
     const payload = await response.json();
@@ -451,12 +451,33 @@
     const match = candidates.find(item => !internal.pendingOrder.symbol || compact(item.symbol) === compact(internal.pendingOrder.symbol)) || candidates[0];
     if (!match) return;
     internal.pendingOrder.id = match.id;
-    const outcome = outcomeOf(match);
+    internal.pendingOrder.expirationAt = Number(match.expiration_timestamp || 0) * 1000 || internal.pendingOrder.expirationAt;
+    internal.pendingOrder.strike = Number(match.symbol_price) || internal.pendingOrder.strike;
+    let outcome = outcomeOf(match);
+    let inferredFromCandle = false;
+    if (!outcome && internal.pendingOrder.expirationAt && Date.now() > internal.pendingOrder.expirationAt + 30000 && Number.isFinite(internal.pendingOrder.strike)) {
+      const candles = await fetchMarketCandles(internal.pendingOrder.symbol);
+      const finalCandle = candles.filter(item => item.time < internal.pendingOrder.expirationAt).at(-1);
+      if (finalCandle) {
+        const difference = finalCandle.close - internal.pendingOrder.strike;
+        if (Math.abs(difference) < Number.EPSILON) outcome = "DRAW";
+        else outcome = internal.pendingOrder.direction === "BUY" ? (difference > 0 ? "WIN" : "LOSS") : (difference < 0 ? "WIN" : "LOSS");
+        inferredFromCandle = true;
+      }
+    }
     if (!outcome) return;
-    internal.state.lastOperation = { ...internal.pendingOrder, id: match.id, outcome, status: match.status, finishedAt: new Date().toISOString() };
+    internal.state.lastOperation = { ...internal.pendingOrder, id: match.id, outcome, status: inferredFromCandle ? `INFERRED_${outcome}` : match.status, finishedAt: new Date().toISOString() };
+    if (inferredFromCandle) logEvent("Resultado confirmado pela vela", `O histórico da Hezilex ainda estava aberto; o fechamento oficial de 5m confirmou ${outcome === "WIN" ? "resultado positivo" : outcome === "LOSS" ? "resultado negativo" : "empate"}.`, outcome === "LOSS" ? "warning" : "success", `inferred-${match.id}`);
     if (outcome === "LOSS" && internal.state.gale.current < MAX_GALES) {
       internal.state.gale.current += 1;
       internal.state.protection.pending = true;
+      if (internal.state.symbol === internal.pendingOrder.symbol) {
+        const candles = await fetchMarketCandles(internal.pendingOrder.symbol);
+        const values = candles.slice(-80).flatMap(item => [item.high, item.low]);
+        const minimum = Math.min(...values);
+        const priceRange = Math.max(...values) - minimum || 1;
+        renderMarkings([...internal.markings.filter(line => line.type !== "PROTECTION"), { type: "PROTECTION", y1: clamp(1 - (internal.pendingOrder.strike - minimum) / priceRange) }], "loss-protection");
+      }
       logEvent("Proteção preparada", `Resultado negativo na Conta Demo. Próxima entrada válida em ${Math.pow(2, internal.state.gale.current)}x, com teto de ${MAX_GALES} proteções.`, "warning", `protection-${match.id}`);
     } else if (outcome === "LOSS") {
       internal.mode = "stopped";
@@ -467,6 +488,7 @@
       internal.state.gale.current = 0;
       internal.state.protection.pending = false;
       internal.protectionBase = null;
+      renderMarkings(internal.markings.filter(line => line.type !== "PROTECTION"), internal.state.markings.source);
       logEvent(outcome === "WIN" ? "Resultado positivo" : "Operação devolvida", "Proteção reiniciada para a entrada-base de 1%.", "success", `result-${match.id}`);
     }
     internal.pendingOrder = null;
