@@ -1,6 +1,8 @@
 preview-*.png
 site-package.tar.gz
+site-package-*.tar.gz
 .DS_Store
+work/
 
 .vercel
 .env*
