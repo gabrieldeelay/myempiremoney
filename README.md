@@ -26,5 +26,7 @@ Para não exigir instalação manual, o pacote precisa ser publicado na Chrome W
 
 O projeto inclui `vercel.json` e publica diretamente o conteúdo estático de `dist/`, sem etapa de instalação ou compilação.
 
+Produção: https://atlas-guard-trading.vercel.app
+
 > A hospedagem na Vercel não concede ao site acesso direto ao DOM interno de `app.hezilex.com`. Esse acesso é fornecido exclusivamente pelo script autorizado da extensão, limitado ao domínio da Hezilex.
 
