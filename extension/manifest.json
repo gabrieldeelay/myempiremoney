@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Atlas Guard Bridge",
+  "version": "0.1.0",
+  "description": "Conecta o painel Atlas Guard à interface oficial da Hezilex, com controles de segurança e execução financeira bloqueada por padrão.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://app.hezilex.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://app.hezilex.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "Atlas Guard Bridge",
+    "default_popup": "popup.html"
+  }
+}
+

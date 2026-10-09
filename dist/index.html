@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Área privada para acessar a interface oficial da Hezilex sem compartilhar credenciais com o Atlas Guard." />
+  <meta name="theme-color" content="#07111f" />
+  <title>Atlas Guard — Hezilex Workspace</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand" aria-label="Atlas Guard">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span><b>ATLAS</b><small>GUARD</small></span>
+      </div>
+
+      <div class="connection" id="connectionState">
+        <i></i>
+        <span><b>Conexão externa</b><small id="connectionText">Carregando Hezilex oficial…</small></span>
+      </div>
+
+      <div class="top-actions">
+        <button id="reloadFrame" class="icon-button" type="button" title="Recarregar Hezilex" aria-label="Recarregar Hezilex">↻</button>
+        <a class="external-button" href="https://app.hezilex.com/login" target="_blank" rel="noopener noreferrer">Abrir na Hezilex <span>↗</span></a>
+      </div>
+    </header>
+
+    <section class="notice" id="securityNotice">
+      <div class="notice-icon">✓</div>
+      <p><strong>Você está acessando a página oficial da Hezilex.</strong> Login, saldo, compras e vendas acontecem dentro do domínio <code>app.hezilex.com</code>. O Atlas Guard não recebe sua senha nem confirma resultados de ordens.</p>
+      <button id="closeNotice" type="button" aria-label="Fechar aviso">×</button>
+    </section>
+
+    <main class="workspace">
+      <aside class="rail" aria-label="Informações da conexão">
+        <div class="rail-state">
+          <span class="provider-logo">H</span>
+          <div><small>PROVEDOR</small><strong>Hezilex</strong></div>
+        </div>
+        <div class="rail-item active"><span>▣</span><div><b>Traderoom oficial</b><small>Compra e venda manual</small></div></div>
+        <div class="rail-item"><span>◈</span><div><b>Credenciais isoladas</b><small>Digitadas somente no iframe</small></div></div>
+        <div class="rail-item"><span>◇</span><div><b>Extensão conectada</b><small>Atlas envia, navegador executa</small></div></div>
+        <div class="rail-warning"><span>!</span><p>Não use os serviços se isso contrariar as regras aplicáveis à sua residência.</p></div>
+      </aside>
+
+      <section class="frame-panel">
+        <div class="frame-toolbar">
+          <div class="official-badge"><i></i> CONTEÚDO OFICIAL HEZILEX</div>
+          <div class="origin"><span>🔒</span><code>https://app.hezilex.com</code></div>
+          <span class="frame-note">Ordens processadas pela própria plataforma</span>
+        </div>
+        <div class="frame-wrap">
+          <div class="frame-loader" id="frameLoader">
+            <span class="spinner"></span>
+            <strong>Abrindo ambiente oficial</strong>
+            <small>O login será carregado diretamente da Hezilex.</small>
+          </div>
+          <iframe
+            id="hezilexFrame"
+            title="Plataforma oficial Hezilex"
+            src="https://app.hezilex.com/login"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allow="clipboard-read; clipboard-write; fullscreen; payment"
+          ></iframe>
+        </div>
+        <section class="agent-dock" aria-label="Controle da extensão Atlas Guard">
+          <div class="agent-summary">
+            <span id="agentDot" class="agent-dot offline"></span>
+            <div><small>EXTENSÃO DO NAVEGADOR</small><strong id="agentStatus">Não detectada</strong></div>
+            <button id="verifyExtension" class="dock-button primary" type="button">Verificar extensão</button>
+          </div>
+          <div class="analysis-summary">
+            <div><small>ATIVO</small><strong id="agentAsset">—</strong></div>
+            <div><small>TIMEFRAME</small><strong id="agentTimeframe">—</strong></div>
+            <div><small>EXPIRAÇÃO</small><strong id="agentExpiration">—</strong></div>
+            <div class="direction"><small>ANÁLISE REAL</small><strong id="analysisDirection">AGUARDAR</strong><span id="analysisReason">Agente não conectado</span></div>
+          </div>
+          <div class="agent-actions">
+            <button id="inspectAgent" class="dock-button" type="button" disabled>Mapear plataforma</button>
+            <button id="ensureDefaults" class="dock-button" type="button" disabled>Aplicar 5m / 5m</button>
+            <button id="showOverlay" class="dock-button" type="button" disabled>Exibir análise na Hezilex</button>
+            <button id="startAgent" class="dock-button positive" type="button" disabled>▶ Iniciar análise</button>
+            <button id="pauseAgent" class="dock-button" type="button" disabled>Ⅱ Pausar</button>
+            <button id="emergencyStop" class="dock-button danger" type="button" disabled>■ Parada</button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      <span>Atlas Guard funciona apenas como janela de acesso. Não é afiliado à Hezilex.</span>
+      <span>Operações financeiras envolvem risco de perda total.</span>
+    </footer>
+  </div>
+
+  <div class="mobile-warning" id="mobileWarning">
+    <p><strong>Se o login não funcionar dentro desta janela,</strong> seu navegador pode estar bloqueando cookies de terceiros.</p>
+    <a href="https://app.hezilex.com/login" target="_blank" rel="noopener noreferrer">Abrir plataforma oficial ↗</a>
+  </div>
+
+  <script type="module" src="./modules/app.js"></script>
+</body>
+</html>
+
