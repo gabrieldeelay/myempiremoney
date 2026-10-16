@@ -75,9 +75,9 @@ function updateUI() {
   setText(selectors.extension, extensionDetected ? `Ativa${extensionVersion ? ` • v${extensionVersion}` : ""}` : "Aguardando instalação");
   setStep("extension", extensionDetected ? "done" : "waiting");
 
-  all("[data-install-trigger]").forEach(button => {
-    button.textContent = extensionDetected ? "Extensão ativa" : "Instalar extensão";
-    button.classList.toggle("connected", extensionDetected);
+  all("[data-extension-summary]").forEach(element => {
+    element.textContent = extensionDetected ? `Conectada${extensionVersion ? ` · v${extensionVersion}` : ""}` : "Não conectada";
+    element.classList.toggle("connected", extensionDetected);
   });
 
   const actions = all(selectors.action);
@@ -202,7 +202,7 @@ function finishAfterStoreReturn() {
 all(selectors.action).forEach(button => button.addEventListener("click", openInstaller));
 
 const modal = document.getElementById("installModal");
-all("[data-install-trigger]").forEach(button => button.addEventListener("click", () => {
+all("[data-settings-trigger]").forEach(button => button.addEventListener("click", () => {
   if (!modal) {
     location.href = "/install";
     return;

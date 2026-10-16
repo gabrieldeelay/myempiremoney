@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Atlas — análise técnica e macros de configuração para a interface oficial da Hezilex." />
-  <meta name="theme-color" content="#0c0b0a" />
+  <meta name="theme-color" content="#061326" />
   <title>Atlas — Assistente de operações</title>
-  <link rel="stylesheet" href="./styles.css?v=2.4.0-r4" />
+  <link rel="stylesheet" href="./styles.css?v=2.4.0-r5" />
 </head>
 <body>
   <div class="app-shell">
@@ -22,8 +22,7 @@
 
       <div class="top-actions">
         <button class="icon-button" id="reloadFrame" type="button" aria-label="Recarregar Hezilex" title="Recarregar Hezilex">↻</button>
-        <button class="install-extension" type="button" data-install-trigger>Instalar extensão</button>
-        <a class="open-external" href="https://app.hezilex.com/login" target="_blank" rel="noopener noreferrer">Abrir em nova aba ↗</a>
+        <button class="settings-button" type="button" data-settings-trigger aria-controls="installModal">⚙ <span>Configurações</span></button>
       </div>
     </header>
 
@@ -31,7 +30,6 @@
       <section class="terminal" aria-label="Plataforma oficial Hezilex">
         <div class="terminal-bar">
           <span><i></i> Hezilex oficial</span>
-          <code>app.hezilex.com</code>
           <small id="monitorPulse">Aguardando conexão</small>
         </div>
 
@@ -90,7 +88,7 @@
     <aside class="robot-overlay" id="robotOverlay" aria-label="Comentários do Atlas Bot">
       <button class="robot-toggle" id="robotToggle" type="button" aria-expanded="true" aria-label="Minimizar Atlas Bot">−</button>
       <div class="robot-bubble">
-        <p id="robotLine">Calma aí, tô esperando a tela terminar de falar comigo.</p>
+        <p id="robotLine" aria-live="polite">Calma aí, tô esperando a tela terminar de falar comigo.</p>
         <div class="robot-questions" id="robotQuestions" hidden>
           <button type="button" data-question="what">O que eu deveria ter feito?</button>
           <button type="button" data-question="why">Por que essa direção?</button>
@@ -110,13 +108,31 @@
     </aside>
   </div>
 
+  <div class="cursor-glow" id="cursorGlow" aria-hidden="true"></div>
+
   <div class="install-modal" id="installModal" hidden>
     <div class="install-backdrop" data-install-close></div>
     <section class="install-dialog" role="dialog" aria-modal="true" aria-labelledby="installTitle">
       <button class="install-close" type="button" data-install-close aria-label="Fechar">×</button>
-      <span class="install-kicker"><i></i> Instalação assistida</span>
-      <h2 id="installTitle">Instale sem perder o painel.</h2>
-      <p class="install-lead">O Atlas cuida da verificação e mantém esta tela aberta. Quando a Microsoft liberar a extensão, você só confirma a instalação em uma janela pequena do Edge.</p>
+      <span class="install-kicker"><i></i> Preferências</span>
+      <h2 id="installTitle">Configurações</h2>
+      <p class="install-lead">Ajuste a experiência do Atlas e gerencie a conexão com a Hezilex sem poluir o painel principal.</p>
+
+      <div class="settings-group">
+        <div>
+          <b>Som do robô</b>
+          <small>Um sinal curto e suave quando um comentário importante aparecer.</small>
+        </div>
+        <label class="switch" aria-label="Ativar som do robô">
+          <input id="robotSoundToggle" type="checkbox" checked />
+          <span></span>
+        </label>
+      </div>
+
+      <div class="settings-section-title">
+        <span>Conexão com a Hezilex</span>
+        <em data-extension-summary>Verificando…</em>
+      </div>
 
       <div class="install-progress" aria-label="Progresso da instalação">
         <div class="install-step" data-install-step="browser"><span>1</span><div><b>Navegador</b><small data-browser-label>Verificando…</small></div></div>
@@ -130,7 +146,7 @@
     </section>
   </div>
 
-  <script type="module" src="./modules/app.js?v=2.4.0-r4"></script>
-  <script type="module" src="./modules/install-flow.js?v=2.4.0"></script>
+  <script type="module" src="./modules/app.js?v=2.4.0-r5"></script>
+  <script type="module" src="./modules/install-flow.js?v=2.4.0-r5"></script>
 </body>
 </html>

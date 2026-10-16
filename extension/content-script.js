@@ -67,6 +67,25 @@
   }, { capture: true, passive: true });
 
   function compact(value) { return String(value || "").replace(/\s+/g, " ").trim(); }
+  const cryptoAssets = new Map([
+    ["BTC", "BITCOIN"], ["XBT", "BITCOIN"], ["BITCOIN", "BITCOIN"],
+    ["ETH", "ETHEREUM"], ["ETHEREUM", "ETHEREUM"], ["SOL", "SOLANA"], ["SOLANA", "SOLANA"],
+    ["LTC", "LITECOIN"], ["LITECOIN", "LITECOIN"], ["ADA", "CARDANO"], ["CARDANO", "CARDANO"],
+    ["XRP", "XRP"], ["AVAX", "AVAX"], ["DOGE", "DOGE"], ["SUI", "SUI"],
+    ["XLM", "STELLAR"], ["STELLAR", "STELLAR"], ["BNB", "BNB"], ["TRX", "TRON"],
+    ["TRON", "TRON"], ["DOT", "POLKADOT"], ["LINK", "CHAINLINK"], ["BCH", "BITCOIN CASH"]
+  ]);
+  const fiatCodes = new Set(["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "NZD", "CHF"]);
+  function normalizeAssetName(value) {
+    const label = compact(value).replace(/\b(?:CRYPTO|FOREX|OTC)\b/gi, " ").replace(/\s+/g, " ").trim().toUpperCase();
+    if (!label) return null;
+    const symbol = label.replace(/[^A-Z]/g, "");
+    if (symbol.length === 6 && fiatCodes.has(symbol.slice(0, 3)) && fiatCodes.has(symbol.slice(3))) return `${symbol.slice(0, 3)}/${symbol.slice(3)}`;
+    for (const [code, name] of cryptoAssets) {
+      if (symbol === code || (symbol.startsWith(code) && /^(?:USDT|USDC|USD|BRL)$/.test(symbol.slice(code.length)))) return name;
+    }
+    return label.replace(/\s*\/\s*/g, "/");
+  }
   function clamp(value, min = 0, max = 1) { return Math.max(min, Math.min(max, value)); }
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
   async function waitFor(check, timeout = 1000, interval = 45) {
@@ -201,8 +220,9 @@
 
   function activeInstrument() {
     const section = document.querySelector('section#window.active[data-symbol],section.w-active[data-symbol]');
+    const rawAsset = compact(document.querySelector(".item.active .title")?.textContent) || compact(section?.dataset?.symbol) || null;
     return {
-      asset: compact(document.querySelector(".item.active .title")?.textContent) || compact(section?.dataset?.symbol) || null,
+      asset: normalizeAssetName(rawAsset),
       symbol: compact(section?.dataset?.symbol) || null
     };
   }
@@ -859,7 +879,7 @@
       if (firstObservation && (!eventTimestamp || Date.now() - eventTimestamp > 15 * 60 * 1000)) return;
       const directionText = compact(latest.direction || latest.type || latest.operation || latest.option_type).toLowerCase();
       const direction = /buy|call|up|compra|alta/.test(directionText) ? "BUY" : /sell|put|down|venda|baixa/.test(directionText) ? "SELL" : null;
-      const asset = compact(latest.asset || latest.symbol || latest.instrument || internal.state.asset);
+      const asset = normalizeAssetName(latest.asset || latest.symbol || latest.instrument || internal.state.asset);
       const recentClick = internal.lastManualClick;
       const sameClick = outcome === "OPEN" && recentClick && Date.now() - recentClick.at < 12000
         && recentClick.direction === direction;
