@@ -8,7 +8,9 @@ const styles = await readFile(new URL("../dist/styles.css", import.meta.url), "u
 assert.doesNotMatch(app, /Math\.random\(\)\s*>=\s*\.7/, "o robô não pode ignorar operações aleatoriamente");
 assert.match(app, /robot\.commentOnOperation\(state\.manualOperation\)/, "operações devem chegar ao robô");
 assert.match(app, /holdMs:\s*8000/, "cada mensagem automática deve permanecer por ao menos oito segundos");
-assert.match(app, /this\.queue\.push\(\{ line, context \}\)/, "mensagens consecutivas devem entrar em fila");
+assert.match(app, /this\.queue = \[\{ line, context \}\]/, "a fila deve manter apenas o comentário mais recente");
+assert.match(app, /if \(interrupt\) this\.queue = \[\]/, "ações prioritárias devem descartar comentários antigos");
+assert.match(app, /atlas-robot-variants-v2/, "a seleção deve lembrar moldes já usados, não apenas o texto interpolado");
 assert.match(app, /if \(context === "loggedout"\) return !marketReady\(\)/, "falas de logout devem ser invalidadas assim que a conta for identificada");
 assert.match(app, /this\.queue = this\.queue\.filter\(item => this\.contextStillValid\(item\.context\)\)/, "a fila deve descartar mensagens incompatíveis com o estado atual");
 assert.match(app, /robot\.speak\("connect", \{\}, true, true\)/, "o aviso de conta conectada deve substituir imediatamente uma fala antiga");
@@ -20,6 +22,7 @@ assert.match(bridge, /lastHistoryCheckAt < 1500/, "a confirmação pelo históri
 assert.match(bridge, /new view\.MouseEvent\("mousedown"/, "o seletor M5 deve reproduzir a ativação completa do controle");
 assert.match(bridge, /waitFor\(timeframeIsFive, 1500/, "o macro M5 deve aguardar a confirmação visual");
 assert.match(app, /new ResizeObserver\(\(\) => requestAnimationFrame\(keepRobotInViewport\)\)/, "o robô deve ser reposicionado quando o balão mudar de tamanho");
+assert.match(app, /characterBefore\.left - characterAfter\.left/, "minimizar deve preservar a posição visual do personagem");
 assert.match(styles, /max-height:\s*calc\(100dvh - 24px\)/, "o balão deve permanecer dentro da altura visível");
 
 console.log("interaction regressions: ok");
