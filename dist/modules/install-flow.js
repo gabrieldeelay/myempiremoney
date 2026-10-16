@@ -171,9 +171,6 @@ function finishAfterStoreReturn() {
 }
 
 all(selectors.action).forEach(button => button.addEventListener("click", openInstaller));
-all("[data-direct-download]").forEach(link => link.addEventListener("click", () => {
-  setMessage("Download iniciado. O arquivo atlas-edge-v2.3.0.zip está sendo salvo no seu dispositivo.", "success");
-}));
 
 const modal = document.getElementById("installModal");
 all("[data-install-trigger]").forEach(button => button.addEventListener("click", () => {
@@ -205,4 +202,3 @@ checkStore();
 pingExtension();
 setInterval(pingExtension, 1400);
 setInterval(checkStore, 30000);
-

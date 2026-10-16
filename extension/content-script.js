@@ -2,7 +2,7 @@
   if (window.__atlasGuardBridgeLoaded || window.top === window) return;
   window.__atlasGuardBridgeLoaded = true;
 
-  const VERSION = "2.2.0";
+  const VERSION = "2.3.1";
   const BRIDGE_SOURCE = "atlas-guard-extension";
   const DASHBOARD_SOURCE = "atlas-guard-dashboard";
   const CANDLE_MINUTES = 5;
@@ -17,8 +17,10 @@
     lastAnalysisAt: 0,
     lastHistoryCheckAt: 0,
     lastAccountCheckAt: 0,
+    lastUiEventAt: 0,
     lastObservedOperationKey: null,
     markings: [],
+    nativeDrawing: { task: Promise.resolve(), signatures: new Map() },
     eventSequence: 0,
     mutationTimer: null,
     monitorPromise: null,
@@ -44,6 +46,7 @@
       risk: { percent: 1, baseAmount: null },
       markings: { lta: false, ltb: false, protection: false, total: 0, source: null },
       manualOperation: null,
+      uiEvent: null,
       executionEnabled: false,
       events: [],
       lastInspectionAt: null
@@ -52,7 +55,10 @@
 
   for (const eventName of ["pointerdown", "keydown", "wheel", "touchstart"]) {
     addEventListener(eventName, event => {
-      if (event.isTrusted && !event.target?.closest?.('[id^="__atlas_guard"]')) internal.lastUserActivity = Date.now();
+      if (event.isTrusted && !event.target?.closest?.('[id^="__atlas_guard"]')) {
+        internal.lastUserActivity = Date.now();
+        if (eventName === "pointerdown") detectAdvertisementClose(event);
+      }
     }, { capture: true, passive: true });
   }
 
@@ -99,6 +105,31 @@
     if (last?.key === key && Date.now() - new Date(last.at).getTime() < 12000) return;
     internal.state.events.unshift({ id: `${Date.now()}-${++internal.eventSequence}`, key, title, detail, level, at: new Date().toISOString() });
     internal.state.events = internal.state.events.slice(0, 50);
+  }
+  function detectAdvertisementClose(event) {
+    const element = event.target instanceof Element
+      ? event.target.closest('button,a,[role="button"],[aria-label],[title]')
+      : null;
+    if (!element || Date.now() - internal.lastUiEventAt < 1500) return;
+    const label = compact(`${element.textContent || ""} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`).toLowerCase();
+    const closeIntent = /(^|\s)(fechar|close|dispensar|dismiss|pular|skip)(\s|$)|n[aã]o mostrar|[×✕]/i.test(label);
+    if (!closeIntent) return;
+    let container = element;
+    let context = "";
+    for (let depth = 0; container && depth < 6; depth += 1, container = container.parentElement) {
+      context += ` ${compact(container.textContent).slice(0, 360)} ${container.id || ""} ${String(container.className || "")}`;
+    }
+    const adContext = /b[oô]nus|deposit|promo|pr[eê]mio|cupom|campaign|offer|oferta|advert|an[uú]ncio|banner|popup|modal/i.test(context);
+    if (!adContext && !/n[aã]o mostrar/i.test(label)) return;
+    internal.lastUiEventAt = Date.now();
+    internal.state.uiEvent = {
+      key: `ad-closed-${internal.lastUiEventAt}-${++internal.eventSequence}`,
+      type: "AD_CLOSED",
+      label: "Anúncio fechado",
+      observedAt: new Date().toISOString()
+    };
+    logEvent("Anúncio fechado", "O Atlas percebeu que você limpou a tela.", "success", internal.state.uiEvent.key);
+    setTimeout(publishState, 0);
   }
   function parentOrigin() {
     try { return document.referrer ? new URL(document.referrer).origin : null; } catch { return null; }
@@ -414,6 +445,99 @@
       svg.style.height = `${box.height}px`;
     }
   }
+  function nativeToolButton(doc, type) {
+    const selectors = type === "PROTECTION"
+      ? ['[data-name*="horizontal-line" i]', '[aria-label*="horizontal line" i]', '[aria-label*="linha horizontal" i]', '[title*="horizontal line" i]', '[title*="linha horizontal" i]']
+      : ['[data-name*="trend-line" i]', '[data-name*="trendline" i]', '[aria-label*="trend line" i]', '[aria-label*="linha de tend" i]', '[title*="trend line" i]', '[title*="linha de tend" i]'];
+    return selectors.flatMap(selector => [...doc.querySelectorAll(selector)]).find(visible) || null;
+  }
+  function nativeMenuChoice(doc, type) {
+    const matcher = type === "PROTECTION" ? /linha horizontal|horizontal line/i : /linha de tend[eê]ncia|trend line/i;
+    return [...doc.querySelectorAll('[role="menuitem"], [role="option"], button, [class*="item" i]')]
+      .filter(visible)
+      .find(element => matcher.test(compact(`${element.textContent} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`))) || null;
+  }
+  function dispatchChartPoint(doc, x, y) {
+    const target = doc.elementFromPoint(x, y);
+    if (!target) return false;
+    const view = doc.defaultView;
+    const common = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0 };
+    target.dispatchEvent(new view.MouseEvent("mousemove", { ...common, buttons: 0 }));
+    if (view.PointerEvent) target.dispatchEvent(new view.PointerEvent("pointerdown", { ...common, buttons: 1, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+    target.dispatchEvent(new view.MouseEvent("mousedown", { ...common, buttons: 1 }));
+    if (view.PointerEvent) target.dispatchEvent(new view.PointerEvent("pointerup", { ...common, buttons: 0, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+    target.dispatchEvent(new view.MouseEvent("mouseup", { ...common, buttons: 0 }));
+    target.dispatchEvent(new view.MouseEvent("click", { ...common, buttons: 0 }));
+    return true;
+  }
+  async function drawNativeLine(line) {
+    let viewport = chartViewport();
+    if (!viewport) return false;
+    const { doc } = viewport;
+    let tool = nativeToolButton(doc, line.type);
+    if (!tool && line.type !== "PROTECTION") {
+      const generic = [...doc.querySelectorAll('button,[role="button"]')].filter(visible).find(element => {
+        const label = compact(`${element.textContent} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`);
+        return /desenho|drawing|ferramenta.*linha|line tool/i.test(label);
+      });
+      generic?.click();
+      await sleep(90);
+      tool = nativeMenuChoice(doc, line.type);
+    }
+    if (!tool) return false;
+    tool.click();
+    await sleep(80);
+    const choice = nativeMenuChoice(doc, line.type);
+    if (choice && choice !== tool) {
+      choice.click();
+      await sleep(60);
+    }
+    viewport = chartViewport();
+    if (!viewport || viewport.doc !== doc) return false;
+    const box = viewport.anchor.getBoundingClientRect();
+    const plot = {
+      left: box.left + Math.max(26, box.width * .035),
+      top: box.top + Math.max(25, box.height * .045),
+      width: box.width * .88,
+      height: box.height * .86
+    };
+    const start = { x: plot.left + clamp(line.x1 || 0) * plot.width, y: plot.top + clamp(line.y1) * plot.height };
+    const end = line.type === "PROTECTION"
+      ? { x: plot.left + plot.width * .84, y: start.y }
+      : { x: plot.left + clamp(line.x2 ?? 1) * plot.width, y: plot.top + clamp(line.y2 ?? line.y1) * plot.height };
+    const first = dispatchChartPoint(doc, start.x, start.y);
+    await sleep(75);
+    const second = dispatchChartPoint(doc, end.x, end.y);
+    doc.dispatchEvent(new doc.defaultView.KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    return first && second;
+  }
+  function removeAtlasOverlay() {
+    for (const doc of allDocuments()) doc.getElementById("__atlas_guard_chart_overlay")?.remove();
+  }
+  function scheduleNativeMarkings(lines, source) {
+    if (source !== "official-5m-feed" || !lines.length || internal.state.userActive) return;
+    const assetKey = internal.state.symbol || internal.state.asset || "current";
+    const signature = `${assetKey}:${lines.map(line => line.type).sort().join("+")}`;
+    if (internal.nativeDrawing.signatures.get(assetKey) === signature) {
+      removeAtlasOverlay();
+      internal.state.markings.source = "native-chart-tool";
+      return;
+    }
+    internal.nativeDrawing.task = internal.nativeDrawing.task.then(async () => {
+      if (Date.now() - internal.lastUserActivity < 2200) return;
+      let rendered = 0;
+      for (const line of lines) {
+        if (await drawNativeLine(line)) rendered += 1;
+      }
+      if (rendered === lines.length) {
+        internal.nativeDrawing.signatures.set(assetKey, signature);
+        removeAtlasOverlay();
+        internal.state.markings.source = "native-chart-tool";
+        logEvent("Linhas fixadas no gráfico", `${lines.map(line => line.type).join(" e ")} criadas com a ferramenta nativa da Hezilex.`, "success", `native-lines-${signature}`);
+        await publishState();
+      }
+    }).catch(error => logEvent("Marcação nativa aguardando", error.message, "warning", `native-lines-wait-${assetKey}`));
+  }
   function renderMarkings(lines = [], source = null) {
     internal.markings = lines.slice(0, MAX_MARKINGS).filter(line => ["LTA", "LTB", "PROTECTION"].includes(line.type));
     internal.state.markings = {
@@ -464,6 +588,7 @@
       label.textContent = line.type;
       svg.appendChild(label);
     }
+    scheduleNativeMarkings(internal.markings, source);
     return { rendered: internal.markings.length };
   }
 
@@ -682,6 +807,9 @@
         direction,
         outcome,
         amount: Number(latest.amount ?? Number(latest.amount_cents || 0) / 100) || null,
+        analysisDirection: internal.state.analysis.direction,
+        analysisConfidence: internal.state.analysis.confidence,
+        analysisReason: internal.state.analysis.reason,
         observedAt: new Date().toISOString()
       };
     } catch { /* o humor continua sem o histórico */ }

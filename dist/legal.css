@@ -57,9 +57,6 @@ li + li { margin-top: 7px; }
 .install-action { width: 100%; min-height: 54px; margin-top: 12px; border: 0; border-radius: 12px; background: var(--orange); color: #1e0d03; cursor: pointer; font-weight: 900; }
 .install-action:disabled { cursor: wait; background: #2b241f; color: #827970; }
 .install-action.ready { box-shadow: 0 14px 32px rgba(255,101,13,.2); }
-.direct-download { width: 100%; min-height: 50px; display: flex; align-items: center; justify-content: center; margin-top: 10px; border: 1px solid #6d371b; border-radius: 12px; background: rgba(255,101,13,.06); color: #ffaf7f; text-decoration: none; font-weight: 900; }
-.direct-download:hover { border-color: var(--orange); background: rgba(255,101,13,.12); color: #ffd0b1; }
 .install-note { margin: 11px 0 0; color: #80746b; font-size: 12px; text-align: center; }
 .compact-card { margin-top: 14px; }
 @media (max-width: 600px) { .legal-nav { margin-bottom: 38px; } .card { padding: 20px; } .lead { font-size: 17px; } }
-

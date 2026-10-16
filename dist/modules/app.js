@@ -24,6 +24,7 @@ let state = {
   risk: { baseAmount: null },
   defaults: { timeframe: false, expiration: false },
   manualOperation: null,
+  uiEvent: null,
   lastInspectionAt: null
 };
 
@@ -50,6 +51,14 @@ const robot = {
     risk: ["Um por cento. Finalmente uma ideia com juízo.", "Risco em 1%. Seu saldo agradeceu em silêncio.", "Valor calculado em 1%. A ganância perdeu essa rodada."],
     all: ["5M, 5M e 1%. Organização: conceito raro, porém bonito.", "Tudo alinhado. Agora falta só não improvisar.", "Configuração pronta. O caos foi adiado com sucesso."],
     open: ["Operação aberta. Agora mexer cinco vezes nela não vira estratégia.", "Entrada feita. O gráfico não aceita negociação emocional.", "Operação em andamento. Fiscalizar cada segundo não ajuda, mas eu sei que você vai."],
+    buyAligned: ["Foi de compra junto com a leitura. Finalmente uma decisão com testemunha.", "Compra alinhada com o sinal. Milagre: você e o gráfico concordaram.", "Você comprou onde eu via compra. Dessa vez eu guardo o deboche."],
+    sellAligned: ["Venda alinhada com a leitura. Até que enfim o dedo ouviu o gráfico.", "Foi de venda no lado que eu marquei. Coerência desbloqueada.", "Venda com o sinal. Bonito quando o plano participa da operação."],
+    buyAgainstSell: ["Eu marquei VENDA e você foi de COMPRA. Coragem ou alergia a contexto?", "Compra contra minha leitura de venda. O gráfico falou e você respondeu ‘duvido’.", "Você comprou no cenário vendedor. Espero que essa rebeldia tenha argumento."],
+    sellAgainstBuy: ["Eu marquei COMPRA e você meteu VENDA. Ousado. Questionável, mas ousado.", "Venda contra o sinal comprador. Você veio negociar ou discutir com a tendência?", "Eu vi compra, você clicou venda. A democracia do prejuízo funcionando."],
+    buyWithoutSignal: ["Compra sem confirmação clara. Você chamou de timing; o gráfico chamou de pressa.", "Foi de compra enquanto eu mandava esperar. A ansiedade ganhou um botão.", "Compra no escuro. Tomara que a coragem tenha levado lanterna."],
+    sellWithoutSignal: ["Venda sem sinal fechado. Você decidiu antes da vela terminar a frase.", "Foi de venda no meu ‘aguardar’. Pressa também é uma estratégia, só não é boa.", "Venda sem confirmação. O dedo chegou antes da análise, clássico."],
+    adclose: ["Fechou o anúncio. Finalmente uma operação com 100% de acerto.", "Anúncio eliminado. Essa entrada eu aprovo sem indicador.", "Boa. Menos propaganda, mais gráfico e só um pouco menos de caos.", "Fechou o anúncio com precisão. Se operar assim, talvez dê jogo."],
+    dragged: ["De novo me arrastando? Eu sou analista, não ícone de desktop.", "Já é a segunda mudança. Escolhe um canto e deixa eu trabalhar, criatura.", "Me põe aqui, me põe ali… o gráfico parado e eu fazendo turismo.", "Você mexeu em mim de novo. Isso não conta como gerenciamento de risco."],
     win: ["Deu bom. Não transforma um acerto em doutorado.", "Vitória confirmada. Pode sorrir, só não aumenta a mão por empolgação.", "Ponto seu. O mercado não pediu discurso de campeão."],
     loss: ["Deu ruim. O mercado cobrou a mensalidade.", "Loss confirmado. Respira: vingança não é indicador.", "Essa não veio. O botão não tem culpa, curiosamente."],
     draw: ["Empate. Nem o mercado quis assumir essa decisão.", "Devolvida. Foi quase alguma coisa.", "Empate técnico: emoção desperdiçada com eficiência."],
@@ -75,11 +84,29 @@ const robot = {
     clearTimeout(this.speechTimer);
     this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
   },
+  commentOnOperation(operation) {
+    if (!operation) return;
+    if (operation.outcome !== "OPEN") {
+      this.speak({ WIN: "win", LOSS: "loss", DRAW: "draw" }[operation.outcome] || "open", { asset: operation.asset }, true);
+      return;
+    }
+    if (Math.random() >= .7) return;
+    const picked = operation.direction;
+    const advised = operation.analysisDirection || state.analysis.direction;
+    let context = "open";
+    if (picked === "BUY" && advised === "BUY") context = "buyAligned";
+    else if (picked === "SELL" && advised === "SELL") context = "sellAligned";
+    else if (picked === "BUY" && advised === "SELL") context = "buyAgainstSell";
+    else if (picked === "SELL" && advised === "BUY") context = "sellAgainstBuy";
+    else if (picked === "BUY") context = "buyWithoutSignal";
+    else if (picked === "SELL") context = "sellWithoutSignal";
+    this.speak(context, { asset: operation.asset, confidence: operation.analysisConfidence }, true);
+  },
   updateQuestions(context) {
     const buttons = [...$("robotQuestions").querySelectorAll("button")];
     const noAccessContext = context === "noaccess" || (!extensionReady && context !== "waiting");
     const loggedOutContext = context === "loggedout" || !marketReady();
-    const signalContext = ["buy", "sell", "open", "win", "loss", "draw"].includes(context);
+    const signalContext = ["buy", "sell", "open", "win", "loss", "draw", "buyAligned", "sellAligned", "buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal"].includes(context);
     const setupContext = ["timeframe", "expiration", "risk", "all"].includes(context);
     const options = noAccessContext
       ? [["cantread", "Por que você não tá lendo?"], ["fixread", "Como faço funcionar?"], ["reallylive", "Você tá analisando agora?"]]
@@ -163,6 +190,7 @@ const robot = {
     $("robotOverlay").classList.toggle("minimized", minimized);
     $("robotToggle").textContent = minimized ? "+" : "−";
     $("robotToggle").setAttribute("aria-expanded", String(!minimized));
+    restoreRobotPosition();
     this.speak("waiting", {}, true);
   },
   toggle() {
@@ -206,6 +234,7 @@ function renderState(next = {}) {
   const previousAsset = state.asset;
   const previousDirection = state.analysis.direction;
   const previousOperationKey = state.manualOperation?.key;
+  const previousUiEventKey = state.uiEvent?.key;
   state = {
     ...state,
     ...next,
@@ -247,9 +276,9 @@ function renderState(next = {}) {
   }
   lastLoginState = true;
   if (justLoggedIn) robot.speak("connect", {}, true);
-  else if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) {
-    robot.speak({ WIN: "win", LOSS: "loss", DRAW: "draw", OPEN: "open" }[state.manualOperation.outcome] || "open", { asset: state.manualOperation.asset }, true);
-  } else if (state.asset && state.asset !== previousAsset) robot.speak("asset", { asset: state.asset }, true);
+  else if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) robot.commentOnOperation(state.manualOperation);
+  else if (state.uiEvent?.key && state.uiEvent.key !== previousUiEventKey && state.uiEvent.type === "AD_CLOSED") robot.speak("adclose", {}, true);
+  else if (state.asset && state.asset !== previousAsset) robot.speak("asset", { asset: state.asset }, true);
   else if (state.analysis.direction !== previousDirection) {
     robot.speak(state.analysis.direction === "BUY" ? "buy" : state.analysis.direction === "SELL" ? "sell" : "wait", { confidence: state.analysis.confidence }, true);
   }
@@ -364,7 +393,69 @@ $("setExpiration").addEventListener("click", event => runMacro("set_expiration",
 $("setRisk").addEventListener("click", event => runMacro("set_risk", event.currentTarget, "Valor ajustado para 1% do saldo."));
 $("applyAll").addEventListener("click", event => runMacro("apply_setup", event.currentTarget, "Configuração aplicada: gráfico 5M, expiração 5M e valor em 1%."));
 $("robotToggle").addEventListener("click", () => robot.toggle());
-$("robotCharacter").addEventListener("click", () => robot.toggleQuestions());
+let suppressRobotClickUntil = 0;
+const robotDrag = { active: false, moved: false, pointerId: null, startX: 0, startY: 0, left: 0, top: 0 };
+
+function clampRobotPosition(left, top) {
+  const overlay = $("robotOverlay");
+  return {
+    left: Math.max(8, Math.min(left, innerWidth - overlay.offsetWidth - 8)),
+    top: Math.max(8, Math.min(top, innerHeight - overlay.offsetHeight - 8))
+  };
+}
+
+function applyRobotPosition(left, top, persist = false) {
+  const overlay = $("robotOverlay");
+  const point = clampRobotPosition(left, top);
+  overlay.classList.add("dragged-position");
+  overlay.style.left = `${point.left}px`;
+  overlay.style.top = `${point.top}px`;
+  overlay.style.right = "auto";
+  overlay.style.bottom = "auto";
+  if (persist) localStorage.setItem("atlas-robot-position", JSON.stringify(point));
+}
+
+function restoreRobotPosition() {
+  try {
+    const point = JSON.parse(localStorage.getItem("atlas-robot-position") || "null");
+    if (Number.isFinite(point?.left) && Number.isFinite(point?.top)) applyRobotPosition(point.left, point.top);
+  } catch { /* posição padrão */ }
+}
+
+$("robotCharacter").addEventListener("pointerdown", event => {
+  if (event.button !== 0) return;
+  const rect = $("robotOverlay").getBoundingClientRect();
+  Object.assign(robotDrag, { active: true, moved: false, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, left: rect.left, top: rect.top });
+  $("robotOverlay").classList.add("dragging");
+  $("robotCharacter").setPointerCapture?.(event.pointerId);
+});
+$("robotCharacter").addEventListener("pointermove", event => {
+  if (!robotDrag.active || event.pointerId !== robotDrag.pointerId) return;
+  const dx = event.clientX - robotDrag.startX;
+  const dy = event.clientY - robotDrag.startY;
+  if (!robotDrag.moved && Math.hypot(dx, dy) < 7) return;
+  robotDrag.moved = true;
+  event.preventDefault();
+  applyRobotPosition(robotDrag.left + dx, robotDrag.top + dy);
+});
+function finishRobotDrag(event) {
+  if (!robotDrag.active || event.pointerId !== robotDrag.pointerId) return;
+  robotDrag.active = false;
+  $("robotOverlay").classList.remove("dragging");
+  if (!robotDrag.moved) return;
+  const rect = $("robotOverlay").getBoundingClientRect();
+  applyRobotPosition(rect.left, rect.top, true);
+  suppressRobotClickUntil = Date.now() + 350;
+  const moves = Number(localStorage.getItem("atlas-robot-moves") || 0) + 1;
+  localStorage.setItem("atlas-robot-moves", String(moves));
+  if (moves >= 2) robot.speak("dragged", {}, true);
+}
+$("robotCharacter").addEventListener("pointerup", finishRobotDrag);
+$("robotCharacter").addEventListener("pointercancel", finishRobotDrag);
+$("robotCharacter").addEventListener("click", () => {
+  if (Date.now() < suppressRobotClickUntil) return;
+  robot.toggleQuestions();
+});
 $("robotCharacter").addEventListener("keydown", event => {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
@@ -391,3 +482,9 @@ setInterval(() => {
   if (!marketReady()) robot.speak("loggedout", {}, true);
   else robot.speak(state.analysis.direction === "BUY" ? "buy" : state.analysis.direction === "SELL" ? "sell" : "live", { confidence: state.analysis.confidence }, true);
 }, 42000);
+addEventListener("resize", () => {
+  const overlay = $("robotOverlay");
+  if (!overlay.classList.contains("dragged-position")) return;
+  const rect = overlay.getBoundingClientRect();
+  applyRobotPosition(rect.left, rect.top, true);
+}, { passive: true });
