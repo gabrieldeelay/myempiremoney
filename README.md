@@ -21,4 +21,7 @@ O componente local em `extension/` funciona silenciosamente como ponte entre doi
 
 O projeto inclui `vercel.json` e publica o conteúdo estático de `dist/`.
 
+O instalador em `/install` consulta `/api/extension-status` para detectar automaticamente quando a versão da Microsoft Edge Add-ons estiver disponível. O painel abre apenas a confirmação oficial em uma janela separada, continua aberto e reconhece a extensão assim que ela responde.
+
 Produção: https://atlas-guard-trading.vercel.app
+
