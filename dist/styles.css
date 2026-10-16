@@ -92,6 +92,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outlin
 .install-action { width: 100%; min-height: 50px; margin-top: 11px; border: 0; border-radius: 11px; background: var(--orange); color: #211006; cursor: pointer; font-weight: 900; }
 .install-action:disabled { cursor: wait; background: #29231f; color: #746d67; }
 .install-action.ready { box-shadow: 0 12px 30px rgba(255,122,26,.18); }
+.direct-download { width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: center; margin-top: 9px; border: 1px solid var(--line-orange); border-radius: 11px; background: rgba(255,122,26,.06); color: var(--orange-soft); text-decoration: none; font-size: 12px; font-weight: 850; }
+.direct-download:hover { border-color: var(--orange); background: rgba(255,122,26,.11); color: #ffc49d; }
 .install-note { margin: 10px 0 0; color: #746d67; font-size: 11px; text-align: center; }
 
 .workspace {

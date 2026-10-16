@@ -23,5 +23,7 @@ O projeto inclui `vercel.json` e publica o conteúdo estático de `dist/`.
 
 O instalador em `/install` consulta `/api/extension-status` para detectar automaticamente quando a versão da Microsoft Edge Add-ons estiver disponível. O painel abre apenas a confirmação oficial em uma janela separada, continua aberto e reconhece a extensão assim que ela responde.
 
+Para testes ou instalação manual, o pacote também pode ser baixado diretamente em `/downloads/atlas-edge-v2.3.0.zip`.
+
 Produção: https://atlas-guard-trading.vercel.app
 
