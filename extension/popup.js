@@ -1,4 +1,5 @@
 const DASHBOARD_URL = "https://atlas-guard-trading.vercel.app/";
+const STATUS_URL = `${DASHBOARD_URL}api/extension-status`;
 const RELEASE_URL = `${DASHBOARD_URL}extension-release.json`;
 const installedVersion = chrome.runtime.getManifest().version;
 const elements = Object.fromEntries(["dot", "statusEyebrow", "statusTitle", "message", "installedVersion", "latestVersion", "updateBadge", "primaryAction", "openAtlas", "headerVersion"].map(id => [id, document.getElementById(id)]));
@@ -33,7 +34,8 @@ function setStatus(kind, eyebrow, title, copy) {
 
 async function getRelease() {
   try {
-    const response = await fetch(`${RELEASE_URL}?t=${Date.now()}`, { cache: "no-store" });
+    let response = await fetch(`${STATUS_URL}?t=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) response = await fetch(`${RELEASE_URL}?t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error("release unavailable");
     return response.json();
   } catch { return null; }

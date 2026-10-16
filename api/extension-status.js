@@ -4,6 +4,7 @@ const CRX_URL = `https://edge.microsoft.com/extensionwebstorebase/v1/crx?respons
 
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
+  response.setHeader("Access-Control-Allow-Origin", "*");
   try {
     const result = await fetch(CRX_URL, { redirect: "manual" });
     const available = result.status >= 200 && result.status < 400;

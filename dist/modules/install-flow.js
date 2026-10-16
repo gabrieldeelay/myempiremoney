@@ -136,7 +136,8 @@ function updateUI() {
 
 async function checkStore() {
   try {
-    const response = await fetch(`/extension-release.json?t=${Date.now()}`, { cache: "no-store" });
+    let response = await fetch(`/api/extension-status?t=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) response = await fetch(`/extension-release.json?t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error("status unavailable");
     release = await response.json();
     storeAvailable = release.available === true;
