@@ -8,6 +8,8 @@ let storeAvailable = false;
 let installPopup = null;
 let requestSequence = 0;
 let popupWatcher = null;
+let installAttempted = false;
+let resumeHandled = false;
 
 const selectors = {
   action: "[data-install-action]",
@@ -141,6 +143,8 @@ function openInstaller() {
     setMessage("O Edge bloqueou a janela de confirmação. Libere pop-ups para este site e tente novamente.", "warning");
     return;
   }
+  installAttempted = true;
+  resumeHandled = false;
   setMessage("Confirme a instalação na janela do Edge. Esta página continuará verificando sozinha.");
   clearInterval(popupWatcher);
   popupWatcher = setInterval(() => {
@@ -154,6 +158,16 @@ function openInstaller() {
       }
     }
   }, 1000);
+}
+
+function finishAfterStoreReturn() {
+  if (!installAttempted || resumeHandled || extensionDetected || document.hidden) return;
+  resumeHandled = true;
+  setMessage("Finalizando a conexão com o Atlas…");
+  pingExtension();
+  setTimeout(() => {
+    if (!extensionDetected) location.reload();
+  }, 1100);
 }
 
 all(selectors.action).forEach(button => button.addEventListener("click", openInstaller));
@@ -180,6 +194,8 @@ document.addEventListener("keydown", event => {
     document.body.classList.remove("install-open");
   }
 });
+window.addEventListener("focus", finishAfterStoreReturn);
+document.addEventListener("visibilitychange", finishAfterStoreReturn);
 
 updateUI();
 checkStore();
