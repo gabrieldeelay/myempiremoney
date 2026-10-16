@@ -10,6 +10,7 @@ let sequence = 0;
 let extensionReady = false;
 let verificationInFlight = false;
 let toastTimer = null;
+let lastLoginState = null;
 let state = {
   version: null,
   asset: null,
@@ -23,13 +24,19 @@ let state = {
   lastInspectionAt: null
 };
 
+function marketReady() {
+  return Boolean(state.asset || state.account?.id || state.account?.verified || (state.balance != null && state.balanceConfidence));
+}
+
 const robot = {
   used: new Set(JSON.parse(localStorage.getItem("atlas-robot-used") || "[]")),
   lastContext: null,
   currentContext: "hello",
   speechTimer: null,
   phrases: {
-    hello: ["Cheguei. Eu analiso; você tenta não clicar com emoção.", "Circuitos ligados. Bom senso também seria ótimo.", "Pronto para o mercado. Ele, infelizmente, também está pronto para você.", "Estou de olho no gráfico. Alguém precisa estar."],
+    waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
+    noaccess: ["Eu tô vendo que a tela abriu, mas este navegador não tá me entregando as velas. Sem dados, sem palpite fantasiado.", "O gráfico tá aí, bonitão, mas o Atlas ainda não recebeu os dados. Enquanto o topo disser ‘Aguardando conexão’, eu não vou inventar análise.", "Você tá mexendo na Hezilex, eu sei. Só que este navegador ainda não deixou eu ler o gráfico por dentro."],
+    loggedout: ["Olha, eu tô vendo um moço fuçando o aplicativo, mas que ainda não fez login. Tá esperando convite?", "Rapaz, você abriu tudo, menos a conta. Sem login eu analiso o quê, a tela laranja?", "Você tá passeando pela Hezilex sem entrar. Bonito turismo financeiro.", "Eu aqui pronto pra analisar e você namorando a tela de login. Sensacional."],
     connect: ["Agora sim: gráfico falando, eu julgando.", "Dados ao vivo. Acabaram as desculpas criativas.", "Mercado localizado. A calma continua desaparecida.", "Tudo conectado. Respira antes de inventar moda."],
     asset: ["{asset} na tela. Novo ativo, velhos impulsos.", "Trocou para {asset}. Curiosidade ou plano? Vou fingir que é plano.", "Analisando {asset}. Ele não sabe que você chegou.", "{asset} selecionado. Deixa a vela terminar o raciocínio."],
     buy: ["Compra no radar. Convicção não é licença para exagerar.", "Sinal comprador. O botão continua sendo problema seu.", "Os compradores acordaram. Não precisa acordar a ganância.", "Compra com {confidence}% de confiança. Ainda não é casamento.", "O gráfico apontou para cima. Seu ego não precisa acompanhar."],
@@ -67,19 +74,49 @@ const robot = {
   },
   updateQuestions(context) {
     const buttons = [...$("robotQuestions").querySelectorAll("button")];
+    const noAccessContext = context === "noaccess" || (!extensionReady && context !== "waiting");
+    const loggedOutContext = context === "loggedout" || !marketReady();
     const signalContext = ["buy", "sell", "open", "win", "loss", "draw"].includes(context);
     const setupContext = ["timeframe", "expiration", "risk", "all"].includes(context);
-    const options = signalContext
-      ? [["what", "O que eu deveria ter feito?"], ["why", "Por que essa direção?"], ["risk", "Qual é o risco agora?"]]
-      : setupContext
-        ? [["setup", "Minha tela está certa?"], ["why5m", "Por que usar 5 minutos?"], ["risk", "Quanto é 1% agora?"]]
-        : [["seen", "O que você está vendo?"], ["missing", "O que falta para uma entrada?"], ["setup", "Está tudo configurado?"]];
+    const options = noAccessContext
+      ? [["cantread", "Por que você não tá lendo?"], ["fixread", "Como faço funcionar?"], ["reallylive", "Você tá analisando agora?"]]
+      : loggedOutContext
+      ? [["loginseen", "O que você tá vendo?"], ["nologin", "Dá pra analisar sem login?"], ["next", "Tá, e agora?"]]
+      : signalContext
+        ? [["what", "O que eu deveria ter feito?"], ["why", "Por que essa direção?"], ["risk", "Qual é o risco agora?"]]
+        : setupContext
+          ? [["setup", "Minha tela está certa?"], ["why5m", "Por que usar 5 minutos?"], ["risk", "Quanto é 1% agora?"]]
+          : [["seen", "O que você tá vendo?"], ["missing", "O que falta pra uma entrada?"], ["setup", "Tá tudo configurado?"]];
     buttons.forEach((button, index) => {
       button.dataset.question = options[index][0];
       button.textContent = options[index][1];
     });
   },
   answer(question) {
+    if (!extensionReady) {
+      const replies = {
+        cantread: "Porque este navegador abriu a Hezilex, mas não liberou os dados do gráfico pro Atlas. Eu não vou fingir que li.",
+        fixread: "Abra o endereço oficial no Chrome, Edge ou Brave onde a conexão local do Atlas já está ativa. Quando conectar, o topo muda sozinho.",
+        reallylive: "Agora, não. O topo ainda diz ‘Aguardando conexão’. Quando eu receber ativo e velas, aí sim começa a análise real."
+      };
+      $("robotLine").textContent = replies[question] || replies.cantread;
+      $("robotOverlay").classList.add("talking");
+      clearTimeout(this.speechTimer);
+      this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+      return;
+    }
+    if (!marketReady()) {
+      const replies = {
+        loginseen: "Um moço fuçando o aplicativo sem fazer login. Por enquanto, essa é toda a análise técnica disponível.",
+        nologin: "Não, né, mano. Sem login eu não tenho ativo, velas nem saldo. Aí seria palpite fantasiado de análise.",
+        next: "Faz login na Hezilex. Quando o gráfico abrir, eu começo a analisar sozinho — sem você apertar mais nada."
+      };
+      $("robotLine").textContent = replies[question] || replies.loginseen;
+      $("robotOverlay").classList.add("talking");
+      clearTimeout(this.speechTimer);
+      this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+      return;
+    }
     const direction = state.analysis.direction;
     const label = direction === "BUY" ? "uma compra" : direction === "SELL" ? "uma venda" : "ficar de fora";
     const reason = String(state.analysis.reason || "os critérios ainda não fecharam").replace(/\.$/, "");
@@ -123,7 +160,7 @@ const robot = {
     $("robotOverlay").classList.toggle("minimized", minimized);
     $("robotToggle").textContent = minimized ? "+" : "−";
     $("robotToggle").setAttribute("aria-expanded", String(!minimized));
-    this.speak("hello", {}, true);
+    this.speak("waiting", {}, true);
   },
   toggle() {
     const minimized = $("robotOverlay").classList.toggle("minimized");
@@ -156,12 +193,10 @@ function setControls(enabled) {
 }
 
 function renderConnection(connected) {
-  const wasConnected = extensionReady;
   extensionReady = connected;
   $("connectionState").classList.toggle("ready", connected);
-  $("connectionText").textContent = connected ? "Análise ao vivo" : "Aguardando mercado";
-  setControls(connected);
-  if (connected && !wasConnected) robot.speak("connect", {}, true);
+  $("connectionText").textContent = connected ? (marketReady() ? "Análise ao vivo" : "Esperando login") : "Aguardando mercado";
+  setControls(connected && marketReady());
 }
 
 function renderState(next = {}) {
@@ -196,7 +231,20 @@ function renderState(next = {}) {
   const fresh = inspectedAt && Date.now() - inspectedAt < 9000;
   pulse.classList.toggle("live", Boolean(fresh));
   pulse.textContent = fresh ? "Analisando agora" : "Conectado · aguardando dados";
-  if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) {
+  const loggedIn = marketReady();
+  const justLoggedIn = loggedIn && lastLoginState !== true;
+  if (!loggedIn) {
+    $("agentAsset").textContent = "Faça login";
+    $("analysisReason").textContent = "Entre na Hezilex para eu começar a análise de verdade.";
+    pulse.classList.remove("live");
+    pulse.textContent = "Esperando você entrar";
+    if (lastLoginState !== false || robot.currentContext !== "loggedout") robot.speak("loggedout", {}, true);
+    lastLoginState = false;
+    return;
+  }
+  lastLoginState = true;
+  if (justLoggedIn) robot.speak("connect", {}, true);
+  else if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) {
     robot.speak({ WIN: "win", LOSS: "loss", DRAW: "draw", OPEN: "open" }[state.manualOperation.outcome] || "open", { asset: state.manualOperation.asset }, true);
   } else if (state.asset && state.asset !== previousAsset) robot.speak("asset", { asset: state.asset }, true);
   else if (state.analysis.direction !== previousDirection) {
@@ -249,6 +297,20 @@ async function runMacro(action, button, successMessage) {
     return result;
   } catch (error) {
     const needsUpdate = /desconhecida|unknown|não reconhecida/i.test(error.message);
+    if (needsUpdate && ["set_timeframe", "set_expiration"].includes(action)) {
+      try {
+        const fallback = await sendCommand("ensure_defaults", {}, 12000);
+        if (fallback?.state) renderState(fallback.state);
+        else if (fallback?.analysis || fallback?.bridge) renderState(fallback);
+        showToast(action === "set_timeframe" ? "Gráfico e expiração ajustados para 5 minutos." : "Expiração e gráfico ajustados para 5 minutos.", "success");
+        robot.speak(action === "set_timeframe" ? "timeframe" : "expiration", {}, true);
+        return fallback;
+      } catch (fallbackError) {
+        showToast(fallbackError.message, "error");
+        robot.speak("error", {}, true);
+        return null;
+      }
+    }
     showToast(needsUpdate ? "Sua configuração local precisa ser atualizada para usar este macro." : error.message, "error");
     robot.speak("error", {}, true);
     return null;
@@ -266,7 +328,10 @@ async function verifyExtension() {
     const result = await sendCommand("inspect", {}, 3500);
     renderState(result);
   } catch {
-    if (!extensionReady) renderConnection(false);
+    if (!extensionReady) {
+      renderConnection(false);
+      robot.speak("noaccess", {}, true);
+    }
   } finally {
     verificationInFlight = false;
   }
@@ -306,5 +371,10 @@ setInterval(() => {
   if (extensionReady && inspectedAt && Date.now() - inspectedAt > 12000) $("monitorPulse").textContent = "Aguardando atualização";
 }, 2000);
 setInterval(() => {
-  if (extensionReady) robot.speak(state.analysis.direction === "BUY" ? "buy" : state.analysis.direction === "SELL" ? "sell" : "live", { confidence: state.analysis.confidence }, true);
+  if (!extensionReady) {
+    robot.speak("noaccess", {}, true);
+    return;
+  }
+  if (!marketReady()) robot.speak("loggedout", {}, true);
+  else robot.speak(state.analysis.direction === "BUY" ? "buy" : state.analysis.direction === "SELL" ? "sell" : "live", { confidence: state.analysis.confidence }, true);
 }, 42000);
