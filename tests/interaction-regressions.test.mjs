@@ -26,6 +26,15 @@ assert.match(app, /robot\.speak\("noaccess"\);/, "a verificação rápida de con
 assert.match(bridge, /detectManualOperationClick\(event\)/, "cliques de compra e venda devem ser observados imediatamente");
 assert.match(bridge, /Compra manual detectada/, "compras precisam gerar um evento explícito");
 assert.match(bridge, /Venda manual detectada/, "vendas precisam gerar um evento explícito");
+assert.match(bridge, /PROTECTION_READY/, "a região de proteção precisa emitir um alerta imediato");
+assert.match(bridge, /protectionStatus === "READY" \? "taken-ready" : "taken-early"/, "uma proteção manual precisa ser julgada mesmo quando antecipada");
+assert.match(bridge, /protection\.direction === "BUY" \? price <= protection\.triggerPrice : price >= protection\.triggerPrice/, "a proteção deve ser uma reentrada no mesmo sentido em preço melhor");
+assert.match(bridge, /source: native\.length \? "native-hezilex" : null/, "marcações só podem ser confirmadas quando a ferramenta nativa funcionar");
+assert.doesNotMatch(bridge, /createElementNS\(/, "o Atlas não pode desenhar LTA ou LTB em uma camada sobre o gráfico");
+assert.doesNotMatch(bridge, /syncMarkingsOverlayGeometry/, "não deve existir overlay reposicionado sobre a Hezilex");
+assert.match(app, /protectionReady/, "o robô precisa anunciar quando a proteção chegar ao ponto");
+assert.match(app, /protectionEarly/, "o robô precisa comentar uma proteção antecipada");
+assert.match(app, /showToast\(`Proteção no ponto/, "o alerta de proteção precisa aparecer na interface");
 assert.match(bridge, /lastHistoryCheckAt < 1500/, "a confirmação pelo histórico precisa ser rápida");
 assert.match(bridge, /new view\.MouseEvent\("mousedown"/, "o seletor M5 deve reproduzir a ativação completa do controle");
 assert.match(bridge, /waitFor\(timeframeIsFive, 1500/, "o macro M5 deve aguardar a confirmação visual");

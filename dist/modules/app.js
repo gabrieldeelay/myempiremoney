@@ -1,4 +1,4 @@
-import { normalizeAssetName } from "./asset-name.js?v=2.4.0-r5";
+import { normalizeAssetName } from "./asset-name.js?v=2.5.0-r6";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -80,6 +80,9 @@ const robot = {
     sellAgainstBuy: ["[[bad:Escolha fraca.]] O cenário favorecia **compra** em {asset}; contrariar o fluxo aumenta o risco.", "[[bad:Pouco convincente.]] A força de {asset} estava compradora, sem apoio técnico para o outro lado.", "[[bad:Contexto desfavorável.]] Em {asset}, tendência e momento apontavam para **compra**.", "[[bad:Risco elevado.]] A leitura de {asset} estava no sentido oposto e pedia cautela."],
     buyWithoutSignal: ["[[bad:Entrada precipitada.]] Faltava confirmação para **compra** em {asset}.", "[[bad:Argumento fraco.]] O cenário de {asset} ainda estava neutro; esperar era mais sólido.", "[[bad:Sem vantagem clara.]] A compra precisava de confirmação que o gráfico ainda não entregou.", "[[bad:Decisão apressada.]] Em {asset}, a leitura ainda recomendava _ficar de fora_."],
     sellWithoutSignal: ["[[bad:Entrada precipitada.]] Faltava confirmação para **venda** em {asset}.", "[[bad:Argumento fraco.]] O cenário de {asset} ainda estava neutro; esperar era mais sólido.", "[[bad:Sem vantagem clara.]] A venda precisava de confirmação que o gráfico ainda não entregou.", "[[bad:Decisão apressada.]] Em {asset}, a leitura ainda recomendava _ficar de fora_."],
+    protectionReady: ["**Proteção no ponto.** {asset} chegou à região planejada: mantenha **{direction}** e, se decidir proteger, a referência é {amount}.", "A região de proteção chegou. Em {asset}, a reentrada continua no lado de **{direction}**; referência de {amount}.", "Agora sim: preço na faixa de proteção em {asset}. Mesma direção, **{direction}**, com referência de {amount}."],
+    protectionTaken: ["[[good:Proteção bem posicionada.]] O preço chegou à região prevista antes da nova **{direction}** em {asset}.", "[[good:Boa leitura da proteção.]] A reentrada em **{direction}** aconteceu na faixa planejada de {asset}.", "A proteção respeitou o nível técnico. Agora deixa o gráfico trabalhar sem inventar uma terceira entrada."],
+    protectionEarly: ["[[bad:Proteção antecipada.]] O preço ainda não tinha alcançado a região planejada de {asset}.", "Você protegeu cedo em {asset}. A ideia era esperar o preço chegar ao nível marcado antes da nova **{direction}**.", "[[bad:Faltou esperar o nível.]] A proteção veio antes do preço confirmar a região em {asset}."],
     adclose: ["Fechou o anúncio. Finalmente uma operação com 100% de acerto.", "Anúncio eliminado. Essa entrada eu aprovo sem indicador.", "Boa. Menos propaganda, mais gráfico e só um pouco menos de caos.", "Fechou o anúncio com precisão. Se operar assim, talvez dê jogo."],
     dragged: ["De novo me arrastando? Eu sou analista, não ícone de desktop.", "Já é a segunda mudança. Escolhe um canto e deixa eu trabalhar, criatura.", "Me põe aqui, me põe ali… o gráfico parado e eu fazendo turismo.", "Você mexeu em mim de novo. Isso não conta como gerenciamento de risco."],
     win: ["[[good:Resultado positivo]] em {asset}. O mérito está na disciplina, não na euforia.", "[[good:Lucro confirmado]] em {asset}. Preserve o método que trouxe o resultado.", "{asset} terminou no [[good:positivo]]. Boa execução vale mais que comemoração antecipada."],
@@ -110,8 +113,8 @@ const robot = {
   playSound(context) {
     if (!this.soundEnabled || !this.soundReady || !this.audioContext) return;
     const audio = this.audioContext;
-    const positive = ["buyAligned", "sellAligned", "win"].includes(context);
-    const negative = ["buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal", "loss", "error"].includes(context);
+    const positive = ["buyAligned", "sellAligned", "win", "protectionReady", "protectionTaken"].includes(context);
+    const negative = ["buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal", "loss", "error", "protectionEarly"].includes(context);
     const oscillator = audio.createOscillator();
     const gain = audio.createGain();
     oscillator.type = "sine";
@@ -141,6 +144,7 @@ const robot = {
       .replaceAll("{asset}", normalizeAssetName(values.asset || state.asset) || "ESSE ATIVO")
       .replaceAll("{confidence}", Math.round(Number(values.confidence ?? state.analysis.confidence) || 0))
       .replaceAll("{amount}", formatMoney(values.amount))
+      .replaceAll("{direction}", values.direction === "SELL" ? "VENDA" : "COMPRA")
       .replaceAll("{reason}", String(values.reason || state.analysis.reason || "sem confirmação suficiente")));
     const variants = candidates.map((line, index) => ({ line, key: `${context}:${index}` }));
     let available = variants.filter(item => !this.used.has(item.key) && item.line !== this.lastLine);
@@ -195,6 +199,11 @@ const robot = {
       this.speak({ WIN: "win", LOSS: "loss", DRAW: "draw" }[operation.outcome] || "open", { asset: operation.asset }, true, true);
       return;
     }
+    if (operation.isProtection) {
+      const context = operation.protectionStatus === "READY" ? "protectionTaken" : "protectionEarly";
+      this.speak(context, { asset: operation.asset, amount: operation.amount, direction: operation.direction }, true, true);
+      return;
+    }
     const picked = operation.direction;
     const advised = operation.analysisDirection || state.analysis.direction;
     let context = "open";
@@ -210,7 +219,7 @@ const robot = {
     const buttons = [...$("robotQuestions").querySelectorAll("button")];
     const noAccessContext = context === "noaccess" || (!extensionReady && context !== "waiting");
     const loggedOutContext = context === "loggedout" || !marketReady();
-    const signalContext = ["buy", "sell", "open", "win", "loss", "draw", "buyAligned", "sellAligned", "buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal"].includes(context);
+    const signalContext = ["buy", "sell", "open", "win", "loss", "draw", "buyAligned", "sellAligned", "buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal", "protectionReady", "protectionTaken", "protectionEarly"].includes(context);
     const setupContext = ["timeframe", "expiration", "risk", "all"].includes(context);
     const options = noAccessContext
       ? [["cantread", "Por que você não tá lendo?"], ["fixread", "Como faço funcionar?"], ["reallylive", "Você tá analisando agora?"]]
@@ -259,8 +268,10 @@ const robot = {
         ? `Eu não escolhi um lado: ${shortReason}. Sem confirmação, melhor não inventar.`
         : `${label === "uma compra" ? "Compra" : "Venda"}, porque ${shortReason.toLowerCase()}. Confiança em ${Math.round(Number(state.analysis.confidence) || 0)}%.`,
       risk: protectionActive
-        ? `Risco alto agora: a proteção detectou pico de volatilidade. Eu ficaria fora até normalizar.`
-        : `Sem pico ativo. O limite sugerido é 1% do saldo, hoje ${baseAmount}; nada de dobrar no impulso.`,
+        ? state.protection?.ready
+          ? `A proteção chegou ao ponto em ${state.protection.asset || state.asset}. A referência é ${formatMoney(state.protection.suggestedAmount)} no mesmo sentido da primeira entrada.`
+          : `A proteção está preparada em ${state.protection.asset || state.asset}, mas ainda não chegou ao nível. Espera o alerta.`
+        : `Sem proteção ativa agora. O limite da entrada inicial é 1% do saldo, hoje ${baseAmount}.`,
       setup: `Gráfico ${state.timeframe || "não identificado"}, expiração ${state.expiration || "não identificada"} e 1% em ${baseAmount}. ${state.defaults?.timeframe && state.defaults?.expiration ? "Está alinhado." : "Ainda falta ajustar."}`,
       why5m: "Cinco minutos filtra parte do ruído e compara a análise com a mesma duração da operação. Menos bagunça, mais contexto.",
       seen: direction === "WAIT"
@@ -319,13 +330,13 @@ function formatMoney(value) {
   return Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function showToast(message, kind = "info") {
+function showToast(message, kind = "info", duration = 4200) {
   const toast = $("toast");
   clearTimeout(toastTimer);
   toast.textContent = message;
   toast.className = `toast ${kind}`;
   toast.hidden = false;
-  toastTimer = setTimeout(() => { toast.hidden = true; }, 4200);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, duration);
 }
 
 function setControls(enabled) {
@@ -342,6 +353,7 @@ function renderConnection(connected) {
 function renderState(next = {}) {
   const previousDirection = state.analysis.direction;
   const previousOperationKey = state.manualOperation?.key;
+  const previousUiEventKey = state.uiEvent?.key;
   const normalizedAsset = "asset" in next ? normalizeAssetName(next.asset) : state.asset;
   const normalizedOperation = next.manualOperation
     ? { ...next.manualOperation, asset: normalizeAssetName(next.manualOperation.asset) || normalizedAsset }
@@ -390,7 +402,12 @@ function renderState(next = {}) {
   }
   lastLoginState = true;
   if (justLoggedIn) robot.speak("connect", {}, true, true);
-  if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) robot.commentOnOperation(state.manualOperation);
+  if (state.uiEvent?.type === "PROTECTION_READY" && state.uiEvent.key !== previousUiEventKey) {
+    const amount = Number(state.uiEvent.suggestedAmount);
+    robot.speak("protectionReady", { asset: state.uiEvent.asset, direction: state.uiEvent.direction, amount }, true, true);
+    showToast(`Proteção no ponto em ${state.uiEvent.asset}: ${state.uiEvent.direction === "SELL" ? "VENDA" : "COMPRA"}${Number.isFinite(amount) ? ` de ${formatMoney(amount)}` : ""}.`, "success", 8000);
+  }
+  else if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) robot.commentOnOperation(state.manualOperation);
   else if (justLoggedIn) return;
   else if (state.analysis.direction !== previousDirection
     && state.analysis.direction !== "WAIT"

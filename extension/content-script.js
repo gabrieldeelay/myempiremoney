@@ -2,7 +2,7 @@
   if (window.__atlasGuardBridgeLoaded || window.top === window) return;
   window.__atlasGuardBridgeLoaded = true;
 
-  const VERSION = "2.4.0";
+  const VERSION = "2.5.0";
   const BRIDGE_SOURCE = "atlas-guard-extension";
   const DASHBOARD_SOURCE = "atlas-guard-dashboard";
   const CANDLE_MINUTES = 5;
@@ -21,6 +21,7 @@
     lastObservedOperationKey: null,
     lastManualClick: null,
     markings: [],
+    trendLines: [],
     nativeDrawing: { task: Promise.resolve(), signatures: new Map() },
     eventSequence: 0,
     mutationTimer: null,
@@ -43,7 +44,7 @@
       userActive: false,
       chartDetected: false,
       analysis: { direction: "WAIT", confidence: 0, reason: "Aguardando dados oficiais de 5 minutos" },
-      protection: { active: false, reason: null },
+      protection: { active: false, ready: false, status: "idle", reason: null, direction: null, entryPrice: null, triggerPrice: null, suggestedAmount: null, expiresAt: null },
       risk: { percent: 1, baseAmount: null },
       markings: { lta: false, ltb: false, protection: false, total: 0, source: null },
       manualOperation: null,
@@ -129,6 +130,73 @@
     internal.state.events.unshift({ id: `${Date.now()}-${++internal.eventSequence}`, key, title, detail, level, at: new Date().toISOString() });
     internal.state.events = internal.state.events.slice(0, 50);
   }
+  function protectionLevelReached(protection = internal.state.protection, price = internal.state.analysis.lastPrice) {
+    if (!protection?.active || !Number.isFinite(price) || !Number.isFinite(protection.triggerPrice)) return false;
+    return protection.direction === "BUY" ? price <= protection.triggerPrice : price >= protection.triggerPrice;
+  }
+  function protectionLine(protection = internal.state.protection) {
+    const minimum = Number(internal.state.analysis.priceMinimum);
+    const range = Number(internal.state.analysis.priceRange);
+    if (!protection?.active || protection.asset !== internal.state.asset || !Number.isFinite(protection.triggerPrice) || !Number.isFinite(minimum) || !(range > 0)) return null;
+    return { type: "PROTECTION", y1: clamp(1 - (protection.triggerPrice - minimum) / range), expiresAt: protection.expiresAt };
+  }
+  function refreshNativeMarkings() {
+    const protection = protectionLine();
+    return renderMarkings(protection ? [...internal.trendLines, protection] : internal.trendLines, "official-5m-feed");
+  }
+  function armProtection({ asset, direction, amount, observedAt }) {
+    const entryPrice = Number(internal.state.analysis.lastPrice);
+    if (!Number.isFinite(entryPrice) || !["BUY", "SELL"].includes(direction)) return;
+    const averageRange = Number(internal.state.analysis.averageRange);
+    const distance = Math.max(Number.isFinite(averageRange) ? averageRange * .45 : 0, Math.abs(entryPrice) * .0006);
+    const triggerPrice = direction === "BUY" ? entryPrice - distance : entryPrice + distance;
+    internal.state.protection = {
+      active: true,
+      ready: false,
+      taken: false,
+      status: "armed",
+      reason: direction === "BUY" ? "Reentrada compradora em preço inferior" : "Reentrada vendedora em preço superior",
+      asset,
+      symbol: internal.state.symbol,
+      direction,
+      entryPrice,
+      triggerPrice,
+      originalAmount: Number(amount) || null,
+      suggestedAmount: Number(amount) > 0 ? Math.round(Number(amount) * 2 * 100) / 100 : null,
+      armedAt: new Date(observedAt).toISOString(),
+      expiresAt: fiveMinuteBoundary(observedAt) + 300000
+    };
+    refreshNativeMarkings();
+    logEvent("Proteção preparada", `${asset}: ${direction === "BUY" ? "nova compra abaixo" : "nova venda acima"} em ${triggerPrice.toFixed(5)}.`, "warning", `protection-armed-${asset}-${observedAt}`);
+  }
+  function updateProtectionOpportunity(price = internal.state.analysis.lastPrice) {
+    const protection = internal.state.protection;
+    if (!protection?.active || protection.taken || protection.ready || !protectionLevelReached(protection, Number(price))) return false;
+    protection.ready = true;
+    protection.status = "ready";
+    protection.readyAt = new Date().toISOString();
+    const amountText = Number.isFinite(protection.suggestedAmount) ? ` com R$ ${formatMoney(protection.suggestedAmount)}` : "";
+    internal.state.uiEvent = {
+      key: `protection-ready-${protection.asset}-${Date.now()}-${++internal.eventSequence}`,
+      type: "PROTECTION_READY",
+      asset: protection.asset,
+      direction: protection.direction,
+      triggerPrice: protection.triggerPrice,
+      suggestedAmount: protection.suggestedAmount,
+      observedAt: protection.readyAt
+    };
+    logEvent("Proteção no ponto", `${protection.asset}: ${protection.direction === "BUY" ? "COMPRA" : "VENDA"}${amountText} na região planejada.`, "signal", internal.state.uiEvent.key);
+    return true;
+  }
+  async function refreshArmedProtection() {
+    const protection = internal.state.protection;
+    if (!protection?.active || protection.ready || !protection.symbol) return false;
+    if (protection.asset === internal.state.asset) return updateProtectionOpportunity();
+    try {
+      const candles = await fetchMarketCandles(protection.symbol);
+      return updateProtectionOpportunity(candles.at(-1)?.close);
+    } catch { return false; }
+  }
   function detectAdvertisementClose(event) {
     const element = event.target instanceof Element
       ? event.target.closest('button,a,[role="button"],[aria-label],[title]')
@@ -167,6 +235,9 @@
     const observedAt = Date.now();
     const asset = internal.state.asset || activeInstrument().asset || "Ativo atual";
     const key = `click-${observedAt}-${direction}-${++internal.eventSequence}`;
+    const protection = internal.state.protection;
+    const isProtection = Boolean(protection?.active && !protection.taken && protection.asset === asset && protection.direction === direction && protection.expiresAt > observedAt);
+    const protectionStatus = isProtection ? (protectionLevelReached(protection) ? "READY" : "EARLY") : null;
     internal.lastManualClick = { direction, asset, at: observedAt };
     internal.state.manualOperation = {
       key,
@@ -177,12 +248,27 @@
       analysisDirection: internal.state.analysis.direction,
       analysisConfidence: internal.state.analysis.confidence,
       analysisReason: internal.state.analysis.reason,
+      isProtection,
+      protectionStatus,
+      protectionTriggerPrice: isProtection ? protection.triggerPrice : null,
       observedAt: new Date(observedAt).toISOString(),
       source: "interface-click"
     };
+    if (isProtection) {
+      protection.active = false;
+      protection.ready = protectionStatus === "READY";
+      protection.taken = true;
+      protection.status = protectionStatus === "READY" ? "taken-ready" : "taken-early";
+      protection.takenAt = new Date(observedAt).toISOString();
+      refreshNativeMarkings();
+    } else {
+      armProtection({ asset, direction, amount: internal.state.manualOperation.amount, observedAt });
+    }
     logEvent(
-      direction === "BUY" ? "Compra manual detectada" : "Venda manual detectada",
-      `${asset}: o Atlas registrou a operação no momento do clique.`,
+      isProtection ? "Proteção manual detectada" : direction === "BUY" ? "Compra manual detectada" : "Venda manual detectada",
+      isProtection
+        ? `${asset}: reentrada ${protectionStatus === "READY" ? "na região planejada" : "antes da região planejada"}.`
+        : `${asset}: o Atlas registrou a operação e preparou a região de proteção.`,
       "signal",
       key
     );
@@ -336,20 +422,39 @@
     return values[0] ?? null;
   }
   function locateAmountControl() {
-    const direct = document.querySelector("#tour_amount");
-    const hosts = direct ? [direct] : [...document.querySelectorAll("div,section")].filter(element => /\bvalor\b/i.test(compact(element.textContent)));
+    const hosts = [];
+    for (const doc of allDocuments()) {
+      const directNodes = [...doc.querySelectorAll('#tour_amount,[data-tour*="amount" i],[data-testid*="amount" i],[id*="amount" i],[class*="amount" i]')];
+      for (const node of directNodes) {
+        let current = node;
+        for (let depth = 0; current && depth < 5; depth += 1, current = current.parentElement) {
+          if (visible(current) && current.getBoundingClientRect().width <= 540) hosts.push(current);
+          if (/\bvalor\b/i.test(compact(current.textContent)) && current.querySelector('button,[role="button"],[tabindex]')) break;
+        }
+      }
+      for (const label of [...doc.querySelectorAll("div,section,span,label")].filter(visible)) {
+        if (!/^valor$/i.test(compact(label.textContent))) continue;
+        let current = label.parentElement;
+        for (let depth = 0; current && depth < 4; depth += 1, current = current.parentElement) {
+          if (current.getBoundingClientRect().width <= 540) hosts.push(current);
+          if (moneyFromHost(current) != null && current.querySelector('button,[role="button"],[tabindex]')) break;
+        }
+      }
+    }
+    hosts.sort((left, right) => left.getBoundingClientRect().width * left.getBoundingClientRect().height - right.getBoundingClientRect().width * right.getBoundingClientRect().height);
     for (const host of hosts) {
       if (!visible(host) || host.getBoundingClientRect().width > 540) continue;
-      const input = host.querySelector('input,[contenteditable="true"],[role="spinbutton"]');
-      const buttons = [...host.querySelectorAll('button,[role="button"]')].filter(visible);
+      const input = [...host.querySelectorAll('input,[contenteditable="true"],[role="spinbutton"]')].find(visible) || null;
+      const buttons = [...host.querySelectorAll('button,[role="button"],[tabindex],[onclick]')].filter(visible);
       const amount = input?.tagName === "INPUT" ? parseBRL(input.value) : moneyFromHost(host);
       if (amount == null) continue;
+      const buttonLabel = button => compact(`${button.textContent || ""} ${button.getAttribute("aria-label") || ""} ${button.getAttribute("title") || ""}`);
       return {
         host,
         input: input || null,
         amount,
-        minus: buttons.find(button => /^(?:-|−|–)$/.test(compact(button.textContent)) || /diminuir|menos/i.test(button.getAttribute("aria-label") || "")),
-        plus: buttons.find(button => /^\+$/.test(compact(button.textContent)) || /aumentar|mais/i.test(button.getAttribute("aria-label") || ""))
+        minus: buttons.find(button => /^(?:-|−|–)$/.test(buttonLabel(button)) || /diminuir|menos|decrease/i.test(buttonLabel(button))),
+        plus: buttons.find(button => /^\+$/.test(buttonLabel(button)) || /aumentar|mais|increase/i.test(buttonLabel(button)))
       };
     }
     return null;
@@ -506,28 +611,16 @@
     if (!anchor) return null;
     return { anchor, doc: anchor.ownerDocument, box: anchor.getBoundingClientRect() };
   }
-  function syncMarkingsOverlayGeometry() {
-    const viewport = chartViewport();
-    for (const doc of allDocuments()) {
-      const svg = doc.getElementById("__atlas_guard_chart_overlay");
-      if (!svg) continue;
-      if (!viewport || doc !== viewport.doc || !internal.markings.length) {
-        svg.style.display = "none";
-        continue;
-      }
-      const box = viewport.anchor.getBoundingClientRect();
-      svg.style.display = "block";
-      svg.style.left = `${box.left}px`;
-      svg.style.top = `${box.top}px`;
-      svg.style.width = `${box.width}px`;
-      svg.style.height = `${box.height}px`;
-    }
-  }
   function nativeToolButton(doc, type) {
     const selectors = type === "PROTECTION"
-      ? ['[data-name*="horizontal-line" i]', '[aria-label*="horizontal line" i]', '[aria-label*="linha horizontal" i]', '[title*="horizontal line" i]', '[title*="linha horizontal" i]']
-      : ['[data-name*="trend-line" i]', '[data-name*="trendline" i]', '[aria-label*="trend line" i]', '[aria-label*="linha de tend" i]', '[title*="trend line" i]', '[title*="linha de tend" i]'];
-    return selectors.flatMap(selector => [...doc.querySelectorAll(selector)]).find(visible) || null;
+      ? ['[data-name*="horizontal-line" i]', '[data-name*="linetoolhorizontal" i]', '[data-tool*="horizontal" i]', '[class*="horizontal-line" i]', '[aria-label*="horizontal line" i]', '[aria-label*="linha horizontal" i]', '[title*="horizontal line" i]', '[title*="linha horizontal" i]']
+      : ['[data-name*="trend-line" i]', '[data-name*="trendline" i]', '[data-name*="linetooltrendline" i]', '[data-tool*="trend" i]', '[class*="trend-line" i]', '[class*="trendline" i]', '[aria-label*="trend line" i]', '[aria-label*="linha de tend" i]', '[title*="trend line" i]', '[title*="linha de tend" i]'];
+    for (const selector of selectors) {
+      const match = [...doc.querySelectorAll(selector)].find(visible);
+      if (!match) continue;
+      return match.closest('button,[role="button"],[tabindex],[onclick]') || match;
+    }
+    return null;
   }
   function nativeMenuChoice(doc, type) {
     const matcher = type === "PROTECTION" ? /linha horizontal|horizontal line/i : /linha de tend[eê]ncia|trend line/i;
@@ -553,10 +646,10 @@
     if (!viewport) return false;
     const { doc } = viewport;
     let tool = nativeToolButton(doc, line.type);
-    if (!tool && line.type !== "PROTECTION") {
+    if (!tool) {
       const generic = [...doc.querySelectorAll('button,[role="button"]')].filter(visible).find(element => {
-        const label = compact(`${element.textContent} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`);
-        return /desenho|drawing|ferramenta.*linha|line tool/i.test(label);
+        const label = compact(`${element.textContent} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""} ${element.getAttribute("data-tooltip") || ""}`);
+        return /desenho|draws?|drawing|ferramenta.*linha|line tool/i.test(label);
       });
       generic?.click();
       await sleep(90);
@@ -592,82 +685,48 @@
   function removeAtlasOverlay() {
     for (const doc of allDocuments()) doc.getElementById("__atlas_guard_chart_overlay")?.remove();
   }
+  function nativeTypesForAsset(assetKey) {
+    return ["LTA", "LTB", "PROTECTION"].filter(type => internal.nativeDrawing.signatures.has(`${assetKey}:${type}`));
+  }
+  function updateNativeMarkingState(lines = internal.markings) {
+    const assetKey = internal.state.symbol || internal.state.asset || "current";
+    const requested = new Set(lines.map(line => line.type));
+    const native = nativeTypesForAsset(assetKey).filter(type => requested.has(type));
+    internal.state.markings = {
+      lta: native.includes("LTA"),
+      ltb: native.includes("LTB"),
+      protection: native.includes("PROTECTION"),
+      total: native.length,
+      source: native.length ? "native-hezilex" : null
+    };
+  }
   function scheduleNativeMarkings(lines, source) {
     if (source !== "official-5m-feed" || !lines.length || internal.state.userActive) return;
     const assetKey = internal.state.symbol || internal.state.asset || "current";
-    const signature = `${assetKey}:${lines.map(line => line.type).sort().join("+")}`;
-    if (internal.nativeDrawing.signatures.get(assetKey) === signature) {
-      removeAtlasOverlay();
-      internal.state.markings.source = "native-chart-tool";
-      return;
-    }
     internal.nativeDrawing.task = internal.nativeDrawing.task.then(async () => {
       if (Date.now() - internal.lastUserActivity < 2200) return;
       let rendered = 0;
       for (const line of lines) {
-        if (await drawNativeLine(line)) rendered += 1;
+        const signature = `${assetKey}:${line.type}`;
+        if (internal.nativeDrawing.signatures.has(signature)) continue;
+        if (await drawNativeLine(line)) {
+          internal.nativeDrawing.signatures.set(signature, true);
+          rendered += 1;
+        }
       }
-      if (rendered === lines.length) {
-        internal.nativeDrawing.signatures.set(assetKey, signature);
-        removeAtlasOverlay();
-        internal.state.markings.source = "native-chart-tool";
-        logEvent("Linhas fixadas no gráfico", `${lines.map(line => line.type).join(" e ")} criadas com a ferramenta nativa da Hezilex.`, "success", `native-lines-${signature}`);
+      updateNativeMarkingState(lines);
+      if (rendered) {
+        logEvent("Linhas fixadas no gráfico", `${lines.map(line => line.type).join(" e ")} criadas com a ferramenta nativa da Hezilex.`, "success", `native-lines-${assetKey}-${lines.map(line => line.type).join("-")}`);
         await publishState();
       }
     }).catch(error => logEvent("Marcação nativa aguardando", error.message, "warning", `native-lines-wait-${assetKey}`));
   }
   function renderMarkings(lines = [], source = null) {
     internal.markings = lines.slice(0, MAX_MARKINGS).filter(line => ["LTA", "LTB", "PROTECTION"].includes(line.type));
-    internal.state.markings = {
-      lta: internal.markings.some(line => line.type === "LTA"),
-      ltb: internal.markings.some(line => line.type === "LTB"),
-      protection: internal.markings.some(line => line.type === "PROTECTION"),
-      total: internal.markings.length,
-      source
-    };
-    const viewport = chartViewport();
-    if (!viewport) return { rendered: 0 };
-    const { doc, box } = viewport;
-    for (const otherDoc of allDocuments()) {
-      if (otherDoc !== doc) otherDoc.getElementById("__atlas_guard_chart_overlay")?.remove();
-    }
-    let svg = doc.getElementById("__atlas_guard_chart_overlay");
-    if (!svg) {
-      svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.id = "__atlas_guard_chart_overlay";
-      svg.setAttribute("viewBox", "0 0 1000 600");
-      svg.style.cssText = "position:fixed;pointer-events:none;z-index:2147483000;overflow:visible";
-      doc.body.appendChild(svg);
-    }
-    svg.style.left = `${box.left}px`;
-    svg.style.top = `${box.top}px`;
-    svg.style.width = `${box.width}px`;
-    svg.style.height = `${box.height}px`;
-    svg.style.display = internal.markings.length ? "block" : "none";
-    svg.replaceChildren();
-    for (const line of internal.markings) {
-      const horizontal = line.type === "PROTECTION";
-      const element = doc.createElementNS("http://www.w3.org/2000/svg", "line");
-      element.setAttribute("x1", String(horizontal ? 0 : clamp(line.x1) * 1000));
-      element.setAttribute("y1", String(clamp(line.y1) * 600));
-      element.setAttribute("x2", String(horizontal ? 1000 : clamp(line.x2) * 1000));
-      element.setAttribute("y2", String(clamp(line.y2 ?? line.y1) * 600));
-      element.setAttribute("stroke", line.type === "PROTECTION" ? "#ffb84d" : line.type === "LTB" ? "#ff647c" : "#b8f53f");
-      element.setAttribute("stroke-width", line.type === "PROTECTION" ? "3" : "2.4");
-      if (horizontal) element.setAttribute("stroke-dasharray", "10 7");
-      svg.appendChild(element);
-      const label = doc.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", String((horizontal ? .02 : clamp(line.x1)) * 1000));
-      label.setAttribute("y", String(Math.max(20, clamp(line.y1) * 600 - 9)));
-      label.setAttribute("fill", line.type === "LTB" ? "#ff647c" : line.type === "PROTECTION" ? "#ffb84d" : "#b8f53f");
-      label.setAttribute("font-size", "18");
-      label.setAttribute("font-family", "system-ui,sans-serif");
-      label.setAttribute("font-weight", "800");
-      label.textContent = line.type;
-      svg.appendChild(label);
-    }
+    removeAtlasOverlay();
+    updateNativeMarkingState(internal.markings);
     scheduleNativeMarkings(internal.markings, source);
-    return { rendered: internal.markings.length };
+    return { rendered: internal.state.markings.total, source: internal.state.markings.source };
   }
 
   async function fetchMarketCandles(symbol = internal.state.symbol) {
@@ -712,6 +771,7 @@
       internal.state.analysis = { direction: "WAIT", confidence: 0, reason: `Feed oficial indisponível: ${error.message}` };
       return internal.state.analysis;
     }
+    const live = raw.at(-1);
     const candles = raw.filter(item => item.time + 300000 <= Date.now()).slice(-80);
     if (candles.length < 30) {
       renderMarkings([], null);
@@ -732,20 +792,17 @@
     const averageRange = recentRanges.reduce((sum, value) => sum + value, 0) / recentRanges.length;
     const last = candles.at(-1);
     const spike = averageRange > 0 && last.high - last.low > averageRange * 2.35;
-    if (spike) lines.push({ type: "PROTECTION", y1: clamp(1 - ((last.close >= last.open ? last.high : last.low) - minimum) / priceRange), expiresAt: last.time + 300000 });
-    renderMarkings(lines, "official-5m-feed");
+    internal.trendLines = lines;
     const closes = candles.map(item => item.close);
     const ema9 = ema(closes.slice(-36), 9);
     const ema21 = ema(closes.slice(-60), 21);
     const momentum = last.close - candles.at(-4).close;
     const bullish = candles.slice(-5).filter(item => item.close > item.open).length;
     const bearish = candles.slice(-5).filter(item => item.close < item.open).length;
-    internal.state.protection.active = spike;
-    internal.state.protection.reason = spike ? "Amplitude acima de 2,35× a média das 20 velas anteriores" : null;
     let direction = "WAIT";
     let confidence = 0;
     let reason = "Critérios mínimos ainda não foram atingidos";
-    if (spike) reason = "Proteção ativa: pico de volatilidade na última vela fechada";
+    if (spike) reason = "Pico de volatilidade: aguarde a amplitude normalizar";
     else {
       const buyScore = (ema9 > ema21 ? 2 : 0) + (momentum > 0 ? 1 : 0) + (bullish >= 3 ? 1 : 0) + (hasLta ? 2 : 0);
       const sellScore = (ema9 < ema21 ? 2 : 0) + (momentum < 0 ? 1 : 0) + (bearish >= 3 ? 1 : 0) + (hasLtb ? 2 : 0);
@@ -759,7 +816,21 @@
         reason = `LTB válida + EMA9 abaixo da EMA21 + momentum negativo + ${bearish}/5 velas vendedoras`;
       } else if (!hasLta && !hasLtb) reason = "Nenhuma LTA ou LTB válida confirmada nas velas fechadas";
     }
-    internal.state.analysis = { direction, confidence: Math.min(94, confidence), reason, source: "official-5m-feed", candles: candles.length, candleTime: last.time };
+    internal.state.analysis = {
+      direction,
+      confidence: Math.min(94, confidence),
+      reason,
+      source: "official-5m-feed",
+      candles: candles.length,
+      candleTime: last.time,
+      lastPrice: Number.isFinite(live?.close) ? live.close : last.close,
+      averageRange,
+      priceMinimum: minimum,
+      priceRange,
+      volatilitySpike: spike
+    };
+    refreshNativeMarkings();
+    updateProtectionOpportunity();
     if (spike) logEvent("Proteção contra pico", `${internal.state.asset}: nenhuma entrada durante esta janela.`, "danger", `spike-${internal.state.symbol}-${last.time}`);
     else if (direction === "WAIT") logEvent("Sem entrada", `${internal.state.asset}: ${reason}.`, "info", `wait-${internal.state.symbol}-${last.time}`);
     else logEvent(`Cenário de ${direction === "BUY" ? "COMPRA" : "VENDA"}`, `${reason}. Confiança ${internal.state.analysis.confidence}%.`, "signal", `signal-${internal.state.symbol}-${direction}-${last.time}`);
@@ -898,10 +969,15 @@
     } catch { /* o humor continua sem o histórico */ }
   }
   function cleanupExpiredMarkings() {
+    const protectionExpired = internal.state.protection?.active
+      && Number(internal.state.protection.expiresAt) <= Date.now();
     const active = internal.markings.filter(line => !line.expiresAt || line.expiresAt > Date.now());
-    if (active.length !== internal.markings.length) {
-      renderMarkings(active, internal.state.markings.source);
+    if (protectionExpired || active.length !== internal.markings.length) {
       internal.state.protection.active = false;
+      internal.state.protection.ready = false;
+      internal.state.protection.status = "expired";
+      internal.nativeDrawing.signatures.delete(`${internal.state.protection.symbol || internal.state.symbol || internal.state.asset}:PROTECTION`);
+      refreshNativeMarkings();
       logEvent("Linha de proteção removida", "A vela terminou e a marcação temporária foi limpa.", "success", `protection-clean-${Date.now()}`);
     }
   }
@@ -922,13 +998,14 @@
     await inspect();
     const changedAsset = internal.state.asset && internal.state.asset !== internal.lastAsset;
     const candleChanged = fiveMinuteBoundary() > Number(internal.state.analysis.candleTime || 0);
-    if (internal.state.chartDetected && (forceAnalysis || changedAsset || candleChanged || Date.now() - internal.lastAnalysisAt > 12000)) {
+    const protectionNeedsLivePrice = internal.state.protection?.active && internal.state.protection.asset === internal.state.asset;
+    if (internal.state.chartDetected && (forceAnalysis || changedAsset || candleChanged || protectionNeedsLivePrice || Date.now() - internal.lastAnalysisAt > 12000)) {
       await analyzeChart();
       internal.lastAnalysisAt = Date.now();
     }
+    await refreshArmedProtection();
     await observeManualOperation();
     cleanupExpiredMarkings();
-    syncMarkingsOverlayGeometry();
     internal.lastAsset = internal.state.asset;
     await publishState();
     return snapshot();
@@ -994,11 +1071,8 @@
   });
   observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "aria-selected", "aria-pressed"] });
   setInterval(() => scheduleMonitor(false), 2000);
-  setInterval(syncMarkingsOverlayGeometry, 250);
-  addEventListener("resize", syncMarkingsOverlayGeometry, { passive: true });
-  addEventListener("scroll", syncMarkingsOverlayGeometry, { capture: true, passive: true });
-
   (async () => {
+    removeAtlasOverlay();
     logEvent("Monitor conectado", "O Atlas iniciou o acompanhamento contínuo usando o feed oficial de 5 minutos.", "success", "monitor-connected");
     await scheduleMonitor(true);
     const origin = parentOrigin();

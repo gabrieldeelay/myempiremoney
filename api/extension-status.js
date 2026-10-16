@@ -12,7 +12,7 @@ module.exports = async function handler(request, response) {
       available,
       status: available ? "available" : "review",
       publicVersion: "2.3.0",
-      candidateVersion: "2.4.0",
+      candidateVersion: "2.5.0",
       storeUrl: available ? STORE_URL : null
     });
   } catch {
@@ -20,7 +20,7 @@ module.exports = async function handler(request, response) {
       available: false,
       status: "review",
       publicVersion: "2.3.0",
-      candidateVersion: "2.4.0",
+      candidateVersion: "2.5.0",
       storeUrl: null
     });
   }
