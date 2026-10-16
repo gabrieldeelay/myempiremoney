@@ -2,7 +2,7 @@
   if (window.__atlasGuardBridgeLoaded || window.top === window) return;
   window.__atlasGuardBridgeLoaded = true;
 
-  const VERSION = "2.1.0";
+  const VERSION = "2.2.0";
   const BRIDGE_SOURCE = "atlas-guard-extension";
   const DASHBOARD_SOURCE = "atlas-guard-dashboard";
   const CANDLE_MINUTES = 5;
@@ -86,7 +86,10 @@
     return style.visibility !== "hidden" && style.display !== "none" && Number(style.opacity || 1) > 0 && box.width > 1 && box.height > 1;
   }
   function parseBRL(raw) {
-    const normalized = String(raw || "").replace(/[^\d.,-]/g, "").replace(/\./g, "").replace(",", ".");
+    const cleaned = String(raw || "").replace(/[^\d.,-]/g, "");
+    const normalized = cleaned.includes(",")
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : /^-?\d+\.\d{1,2}$/.test(cleaned) ? cleaned : cleaned.replace(/\./g, "");
     const value = Number(normalized);
     return Number.isFinite(value) ? value : null;
   }
@@ -141,18 +144,61 @@
       .filter(item => /^(?:1m|2m|3m|5m|10m|15m|30m|1h|4h)$/i.test(item.text) || /\b\d+\s*minuto/i.test(item.label));
   }
   function fiveMinuteOption() {
+    const trigger = timeframeTrigger()?.element;
     const candidates = queryAll('button,[role="menuitem"],[role="option"],[role="button"],a,li,div,span')
       .filter(visible)
-      .filter(element => /^(?:5m|5\s*minutos?)$/i.test(compact(element.textContent)) || /(?:^|\b)5\s*minutos?(?:\b|$)/i.test(compact(element.getAttribute("aria-label"))));
-    const exact = candidates.find(element => /^(?:5m|5\s*minutos?)$/i.test(compact(element.textContent)));
-    const option = exact || candidates[0];
-    return option?.closest('button,[role="menuitem"],[role="option"],[role="button"],a,li') || option || null;
+      .filter(element => element !== trigger)
+      .filter(element => /^(?:5m|5\s*minutos?)$/i.test(compact(element.textContent)) || /(?:^|\b)5\s*minutos?(?:\b|$)/i.test(compact(element.getAttribute("aria-label"))))
+      .sort((left, right) => {
+        const a = left.getBoundingClientRect();
+        const b = right.getBoundingClientRect();
+        return a.width * a.height - b.width * b.height;
+      });
+    return candidates[0] || null;
   }
   function timeframeTrigger() {
     const buttons = timeframeButtons();
     return buttons.find(item => /^(?:1m|2m|3m|5m|10m|15m|30m|1h|4h)$/i.test(item.text))
       || buttons.find(item => /\b\d+\s*minuto/i.test(item.label))
       || null;
+  }
+  function timeframeIsFive() {
+    const trigger = timeframeTrigger();
+    return Boolean(trigger && (/^5m$/i.test(trigger.text) || /5\s*minutos?/i.test(trigger.label)));
+  }
+  function clickableOption(element) {
+    let current = element;
+    let best = element;
+    for (let depth = 0; current && depth < 5; depth += 1, current = current.parentElement) {
+      const view = current.ownerDocument?.defaultView;
+      const css = view?.getComputedStyle(current);
+      const role = compact(current.getAttribute?.("role"));
+      const className = compact(current.className);
+      if (current.matches?.('button,a,li,[role="menuitem"],[role="option"],[role="button"],[onclick],[tabindex]') || role) return current;
+      if ((css?.cursor === "pointer" || /(?:item|option|period|timeframe)/i.test(className)) && /^(?:5m|5\s*minutos?)$/i.test(compact(current.textContent))) best = current;
+      if (compact(current.textContent).length > 30) break;
+    }
+    return best;
+  }
+  function activateElement(element) {
+    element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    element.focus?.({ preventScroll: true });
+    element.click();
+  }
+  async function selectFiveMinute() {
+    if (timeframeIsFive()) return false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const trigger = timeframeTrigger();
+      if (!trigger) throw new Error("Controle do gráfico não localizado");
+      trigger.element.click();
+      const option = await waitFor(fiveMinuteOption, 900, 35);
+      if (!option) continue;
+      const target = attempt === 0 ? clickableOption(option) : attempt === 1 ? option : (option.parentElement || option);
+      activateElement(target);
+      if (await waitFor(timeframeIsFive, attempt === 0 ? 550 : 800, 35)) return true;
+      await sleep(25);
+    }
+    throw new Error("A opção 5 minutos abriu, mas a Hezilex não confirmou a seleção");
   }
   function locateExpirationControl() {
     const direct = document.querySelector("#tour_expiration");
@@ -164,6 +210,35 @@
       const buttons = [...host.querySelectorAll('button,[role="button"]')].filter(visible);
       return {
         minutes: Number(match[1]),
+        minus: buttons.find(button => /^(?:-|−|–)$/.test(compact(button.textContent)) || /diminuir|menos/i.test(button.getAttribute("aria-label") || "")),
+        plus: buttons.find(button => /^\+$/.test(compact(button.textContent)) || /aumentar|mais/i.test(button.getAttribute("aria-label") || ""))
+      };
+    }
+    return null;
+  }
+  function moneyFromHost(host) {
+    const values = [...host.querySelectorAll('input,[contenteditable="true"],[role="spinbutton"],strong,b,span,div')]
+      .filter(visible)
+      .map(element => element.tagName === "INPUT" ? element.value : compact(element.textContent))
+      .filter(text => text && text.length < 40)
+      .map(text => text.match(/(?:R\$|\$)?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[.,]\d{1,2})?)/)?.[1])
+      .map(parseBRL)
+      .filter(Number.isFinite);
+    return values[0] ?? null;
+  }
+  function locateAmountControl() {
+    const direct = document.querySelector("#tour_amount");
+    const hosts = direct ? [direct] : [...document.querySelectorAll("div,section")].filter(element => /\bvalor\b/i.test(compact(element.textContent)));
+    for (const host of hosts) {
+      if (!visible(host) || host.getBoundingClientRect().width > 540) continue;
+      const input = host.querySelector('input,[contenteditable="true"],[role="spinbutton"]');
+      const buttons = [...host.querySelectorAll('button,[role="button"]')].filter(visible);
+      const amount = input?.tagName === "INPUT" ? parseBRL(input.value) : moneyFromHost(host);
+      if (amount == null) continue;
+      return {
+        host,
+        input: input || null,
+        amount,
         minus: buttons.find(button => /^(?:-|−|–)$/.test(compact(button.textContent)) || /diminuir|menos/i.test(button.getAttribute("aria-label") || "")),
         plus: buttons.find(button => /^\+$/.test(compact(button.textContent)) || /aumentar|mais/i.test(button.getAttribute("aria-label") || ""))
       };
@@ -201,12 +276,13 @@
     const previousAsset = internal.state.asset;
     const previousBalance = internal.state.balance;
     const buttons = timeframeButtons();
-    const selectedFive = buttons.find(item => /5 minutos/i.test(item.label)) || buttons.find(item => /^5m$/i.test(item.text));
+    const activeTimeframe = timeframeTrigger();
+    const selectedFive = timeframeIsFive();
     internal.state.asset = instrument.asset;
     internal.state.symbol = instrument.symbol;
-    internal.state.timeframe = selectedFive ? "5m" : (buttons.find(item => item.text)?.text || null);
+    internal.state.timeframe = selectedFive ? "5m" : (activeTimeframe?.text || activeTimeframe?.label || null);
     internal.state.expiration = expiration?.minutes ? `${expiration.minutes} min` : null;
-    internal.state.defaults = { timeframe: Boolean(selectedFive), expiration: expiration?.minutes === 5 };
+    internal.state.defaults = { timeframe: selectedFive, expiration: expiration?.minutes === 5 };
     internal.state.balance = balance.value;
     internal.state.balanceConfidence = balance.confidence;
     internal.state.chartDetected = queryAll("canvas,svg").some(visible);
@@ -239,17 +315,8 @@
     }
     let changed = false;
     if (!internal.state.defaults.timeframe) {
-      const trigger = timeframeTrigger();
-      if (trigger) {
-        trigger.element.click();
-        const option = await waitFor(fiveMinuteOption, 900, 35);
-        if (option) {
-          option.click();
-          changed = true;
-          await waitFor(() => timeframeButtons().some(item => /^5m$/i.test(item.text) || /5 minutos/i.test(item.label)), 1200, 55);
-          logEvent("Velas ajustadas", "Timeframe alterado automaticamente para 5 minutos.", "success", `timeframe-${internal.state.asset || "current"}`);
-        }
-      }
+      changed = await selectFiveMinute() || changed;
+      logEvent("Velas ajustadas", "Timeframe alterado automaticamente para 5 minutos.", "success", `timeframe-${internal.state.asset || "current"}`);
     }
     let expiration = locateExpirationControl();
     for (let attempt = 0; expiration?.minutes && expiration.minutes !== 5 && attempt < 20; attempt += 1) {
@@ -271,13 +338,7 @@
   async function setTimeframeFive() {
     await inspect();
     if (internal.state.defaults.timeframe) return { changed: false, state: snapshot() };
-    const trigger = timeframeTrigger();
-    if (!trigger) throw new Error("Controle do gráfico não localizado");
-    trigger.element.click();
-    const option = await waitFor(fiveMinuteOption, 900, 35);
-    if (!option) throw new Error("Opção de 5 minutos não localizada");
-    option.click();
-    await waitFor(() => timeframeButtons().some(item => /^5m$/i.test(item.text) || /5 minutos/i.test(item.label)), 1300, 50);
+    await selectFiveMinute();
     await inspect();
     if (!internal.state.defaults.timeframe) throw new Error("A Hezilex não confirmou o gráfico em 5 minutos");
     logEvent("Gráfico configurado", "Timeframe ajustado para 5 minutos pelo macro.", "success", `macro-timeframe-${Date.now()}`);
@@ -327,24 +388,33 @@
     return { changed: true, state: snapshot() };
   }
 
-  function chartHost() {
+  function chartViewport() {
     const anchor = queryAll("canvas").filter(visible).sort((a, b) => {
       const aa = a.getBoundingClientRect();
       const bb = b.getBoundingClientRect();
       return bb.width * bb.height - aa.width * aa.height;
     })[0];
     if (!anchor) return null;
-    const view = anchor.ownerDocument.defaultView;
-    let host = anchor.parentElement;
-    while (host && host !== anchor.ownerDocument.body) {
-      const box = host.getBoundingClientRect();
-      if (box.width > view.innerWidth * .42 && box.height > view.innerHeight * .35) return host;
-      host = host.parentElement;
+    return { anchor, doc: anchor.ownerDocument, box: anchor.getBoundingClientRect() };
+  }
+  function syncMarkingsOverlayGeometry() {
+    const viewport = chartViewport();
+    for (const doc of allDocuments()) {
+      const svg = doc.getElementById("__atlas_guard_chart_overlay");
+      if (!svg) continue;
+      if (!viewport || doc !== viewport.doc || !internal.markings.length) {
+        svg.style.display = "none";
+        continue;
+      }
+      const box = viewport.anchor.getBoundingClientRect();
+      svg.style.display = "block";
+      svg.style.left = `${box.left}px`;
+      svg.style.top = `${box.top}px`;
+      svg.style.width = `${box.width}px`;
+      svg.style.height = `${box.height}px`;
     }
-    return anchor.parentElement;
   }
   function renderMarkings(lines = [], source = null) {
-    const host = chartHost();
     internal.markings = lines.slice(0, MAX_MARKINGS).filter(line => ["LTA", "LTB", "PROTECTION"].includes(line.type));
     internal.state.markings = {
       lta: internal.markings.some(line => line.type === "LTA"),
@@ -353,17 +423,25 @@
       total: internal.markings.length,
       source
     };
-    if (!host) return { rendered: 0 };
-    const doc = host.ownerDocument;
-    let svg = host.querySelector(":scope > #__atlas_guard_chart_overlay");
+    const viewport = chartViewport();
+    if (!viewport) return { rendered: 0 };
+    const { doc, box } = viewport;
+    for (const otherDoc of allDocuments()) {
+      if (otherDoc !== doc) otherDoc.getElementById("__atlas_guard_chart_overlay")?.remove();
+    }
+    let svg = doc.getElementById("__atlas_guard_chart_overlay");
     if (!svg) {
-      if (doc.defaultView.getComputedStyle(host).position === "static") host.style.position = "relative";
       svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.id = "__atlas_guard_chart_overlay";
       svg.setAttribute("viewBox", "0 0 1000 600");
-      svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2147483000";
-      host.appendChild(svg);
+      svg.style.cssText = "position:fixed;pointer-events:none;z-index:2147483000;overflow:visible";
+      doc.body.appendChild(svg);
     }
+    svg.style.left = `${box.left}px`;
+    svg.style.top = `${box.top}px`;
+    svg.style.width = `${box.width}px`;
+    svg.style.height = `${box.height}px`;
+    svg.style.display = internal.markings.length ? "block" : "none";
     svg.replaceChildren();
     for (const line of internal.markings) {
       const horizontal = line.type === "PROTECTION";
@@ -486,23 +564,83 @@
     return internal.state.analysis;
   }
 
-  function setNativeInput(input, value) {
+  function setEditableValue(input, value) {
     const view = input.ownerDocument.defaultView;
     input.focus();
-    Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    if (input.tagName === "INPUT") Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    else input.textContent = value;
     input.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: value, inputType: "insertText" }));
     input.dispatchEvent(new view.Event("change", { bubbles: true }));
     input.blur();
   }
   async function applyRiskAmount(amount) {
-    const input = document.querySelector("#tour_amount input") || [...document.querySelectorAll("input")].find(item => /valor|amount/i.test(`${item.name} ${item.placeholder}`));
-    if (!input || !visible(input)) throw new Error("Campo de valor não localizado");
-    setNativeInput(input, Number(amount).toFixed(2).replace(".", ","));
-    const current = await waitFor(() => {
-      const value = parseBRL(input.value);
-      return value != null && Math.abs(value - amount) <= .011 ? value : null;
-    }, 900, 45);
-    if (current == null || Math.abs(current - amount) > .011) throw new Error("A plataforma não confirmou o valor calculado");
+    let control = locateAmountControl();
+    const fallbackInput = [...document.querySelectorAll('input,[contenteditable="true"],[role="spinbutton"]')].find(item => visible(item) && /valor|amount/i.test(`${item.name || ""} ${item.placeholder || ""} ${item.getAttribute("aria-label") || ""}`));
+    const input = control?.input || fallbackInput;
+    if (input) {
+      const formatted = input.tagName === "INPUT" && input.type === "number" ? Number(amount).toFixed(2) : Number(amount).toFixed(2).replace(".", ",");
+      setEditableValue(input, formatted);
+      const current = await waitFor(() => {
+        const value = parseBRL(input.tagName === "INPUT" ? input.value : input.textContent);
+        return value != null && Math.abs(value - amount) <= .51 ? value : null;
+      }, 450, 30);
+      if (current != null) return current;
+    }
+
+    control = locateAmountControl();
+    if (!control || (!control.plus && !control.minus)) throw new Error("Controle de valor não localizado");
+    if (Math.abs(control.amount - amount) <= .51) return control.amount;
+    if (!input) {
+      const display = [...control.host.querySelectorAll("strong,b,span,div")]
+        .filter(visible)
+        .find(element => parseBRL(compact(element.textContent)) === control.amount && compact(element.textContent).length < 20);
+      display?.click();
+      const openedInput = await waitFor(() => locateAmountControl()?.input, 280, 25);
+      if (openedInput) {
+        const formatted = openedInput.tagName === "INPUT" && openedInput.type === "number" ? Number(amount).toFixed(2) : Number(amount).toFixed(2).replace(".", ",");
+        setEditableValue(openedInput, formatted);
+        const direct = await waitFor(() => {
+          const current = locateAmountControl()?.amount;
+          return current != null && Math.abs(current - amount) <= .51 ? current : null;
+        }, 450, 30);
+        if (direct != null) return direct;
+      }
+    }
+    const direction = amount > control.amount ? "plus" : "minus";
+    let button = control[direction];
+    if (!button) throw new Error(`Botão para ${direction === "plus" ? "aumentar" : "diminuir"} o valor não localizado`);
+    const start = control.amount;
+    button.click();
+    control = await waitFor(() => {
+      const next = locateAmountControl();
+      return next && next.amount !== start ? next : null;
+    }, 700, 35);
+    if (!control) {
+      const unchanged = locateAmountControl();
+      if (unchanged && direction === "minus" && unchanged.amount > amount) return unchanged.amount;
+      throw new Error("A Hezilex não respondeu ao ajuste do valor");
+    }
+    const step = Math.abs(control.amount - start);
+    if (!Number.isFinite(step) || step <= 0) throw new Error("Não foi possível identificar o intervalo do valor");
+    const nearest = Math.max(step, Math.round(amount / step) * step);
+    if (Math.round(Math.abs(nearest - control.amount) / step) > 300) throw new Error("O valor calculado está distante demais para o controle atual");
+    for (let frame = 0; frame < 120; frame += 1) {
+      control = locateAmountControl();
+      if (!control || Math.abs(control.amount - nearest) <= step / 2 + .011) break;
+      const liveDirection = nearest > control.amount ? "plus" : "minus";
+      const remaining = Math.max(1, Math.round(Math.abs(nearest - control.amount) / step));
+      const burst = Math.min(12, remaining);
+      button = control[liveDirection];
+      if (!button) break;
+      for (let index = 0; index < burst; index += 1) button.click();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    const confirmed = await waitFor(() => {
+      const value = locateAmountControl()?.amount;
+      return value != null && Math.abs(value - nearest) <= step / 2 + .011 ? value : null;
+    }, 1400, 55);
+    if (confirmed == null) throw new Error("A Hezilex não confirmou o valor mais próximo de 1%");
+    return confirmed;
   }
   function operationOutcome(item) {
     const numericStatus = Number(item.status);
@@ -579,6 +717,7 @@
     }
     await observeManualOperation();
     cleanupExpiredMarkings();
+    syncMarkingsOverlayGeometry();
     internal.lastAsset = internal.state.asset;
     await publishState();
     return snapshot();
@@ -644,6 +783,9 @@
   });
   observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "aria-selected", "aria-pressed"] });
   setInterval(() => scheduleMonitor(false), 2000);
+  setInterval(syncMarkingsOverlayGeometry, 250);
+  addEventListener("resize", syncMarkingsOverlayGeometry, { passive: true });
+  addEventListener("scroll", syncMarkingsOverlayGeometry, { capture: true, passive: true });
 
   (async () => {
     logEvent("Monitor conectado", "O Atlas iniciou o acompanhamento contínuo usando o feed oficial de 5 minutos.", "success", "monitor-connected");

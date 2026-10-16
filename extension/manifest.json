@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Atlas Guard Bridge",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Analisa velas oficiais de 5 minutos e oferece macros seguros de configuração, sem executar operações.",
   "permissions": ["storage", "tabs"],
   "host_permissions": [

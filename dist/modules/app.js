@@ -300,7 +300,8 @@ async function runMacro(action, button, successMessage) {
   button.classList.add("loading");
   button.innerHTML = "<span>·</span><b>Aplicando…</b>";
   try {
-    const result = await sendCommand(action, {}, action === "apply_setup" ? 14000 : 9000);
+    const timeout = action === "apply_setup" ? 22000 : action === "set_risk" ? 16000 : 9000;
+    const result = await sendCommand(action, {}, timeout);
     if (result?.state) renderState(result.state);
     else if (result?.analysis || result?.bridge) renderState(result);
     showToast(successMessage, "success");
