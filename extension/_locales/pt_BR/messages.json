@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "Atlas — Assistente de Mercado",
+    "description": "Nome público da extensão"
+  },
+  "extensionDescription": {
+    "message": "Analisa velas e configura gráfico, expiração e valor de risco na Hezilex, sem executar operações.",
+    "description": "Descrição curta exibida na loja"
+  }
+}
