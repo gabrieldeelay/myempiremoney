@@ -1,14 +1,18 @@
 {
   "manifest_version": 3,
-  "name": "Atlas Guard Bridge",
-  "version": "2.2.0",
-  "description": "Analisa velas oficiais de 5 minutos e oferece macros seguros de configuração, sem executar operações.",
+  "name": "Atlas — Assistente de Mercado",
+  "version": "2.3.0",
+  "description": "Analisa velas e configura gráfico, expiração e valor de risco na Hezilex, sem executar operações.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://app.hezilex.com/*",
-    "https://atlas-guard-trading.vercel.app/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
+    "https://atlas-guard-trading.vercel.app/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -16,9 +20,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://atlas-guard-trading.vercel.app/*",
-        "http://localhost/*",
-        "http://127.0.0.1/*"
+        "https://atlas-guard-trading.vercel.app/*"
       ],
       "js": ["dashboard-bridge.js"],
       "run_at": "document_idle"
@@ -31,7 +33,13 @@
     }
   ],
   "action": {
-    "default_title": "Atlas Guard Bridge",
+    "default_title": "Atlas — Assistente de Mercado",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
     "default_popup": "popup.html"
   }
 }

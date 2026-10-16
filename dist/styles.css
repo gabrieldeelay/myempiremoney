@@ -58,10 +58,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outlin
 .connection.ready i { background: var(--green); box-shadow: 0 0 9px rgba(49, 214, 155, .65); }
 
 .top-actions { justify-self: end; display: flex; align-items: center; gap: 8px; }
-.icon-button, .open-external { min-height: 34px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: #a39b94; cursor: pointer; }
+.icon-button, .open-external, .install-extension { min-height: 34px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: #a39b94; cursor: pointer; }
 .icon-button { width: 34px; }
 .open-external { display: flex; align-items: center; padding: 0 12px; text-decoration: none; font-size: 12px; font-weight: 700; }
+.install-extension { display: flex; align-items: center; padding: 0 12px; text-decoration: none; font-size: 12px; font-weight: 800; color: #1b0d04; border-color: var(--orange); background: var(--orange); }
 .icon-button:hover, .open-external:hover { border-color: var(--line-orange); color: var(--orange-soft); }
+.install-extension:hover { background: #ff7b22; border-color: #ff7b22; }
 
 .workspace {
   min-height: 0;
@@ -223,6 +225,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outlin
   .topbar { grid-template-columns: 1fr auto; padding: 0 12px; }
   .connection { display: none; }
   .open-external { display: none; }
+  .install-extension { padding: 0 9px; }
   .workspace { grid-template-rows: 58vh auto; padding: 7px; gap: 7px; overflow: visible; }
   .terminal-bar code { display: none; }
   .copilot { grid-template-columns: 1fr; }
