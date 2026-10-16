@@ -70,7 +70,18 @@ const robot = {
     error: ["Não foi dessa vez. Até meus circuitos sabem esperar.", "Falhou com elegância. Melhor que acertar por acidente.", "A tela não colaborou. Ela também tem personalidade difícil."],
     live: ["Continuo analisando. Piscar é para humanos.", "O gráfico mexeu. Meu sarcasmo também.", "Ainda monitorando. Ansiedade não conta como indicador.", "Velas andando, eu observando, você respirando. Combinado?", "Sem clique necessário. Milagre tecnológico ou autocontrole?"]
   },
-  speak(context, values = {}, force = false) {
+  contextStillValid(context) {
+    if (context === "loggedout") return !marketReady();
+    if (context === "waiting" || context === "noaccess") return !extensionReady;
+    if (["connect", "asset", "buy", "sell", "wait", "live", "timeframe", "expiration", "risk", "all"].includes(context)) {
+      return marketReady();
+    }
+    return true;
+  },
+  pruneQueue() {
+    this.queue = this.queue.filter(item => this.contextStillValid(item.context));
+  },
+  speak(context, values = {}, force = false, interrupt = false) {
     if (!force && this.lastContext === context) return;
     const source = this.phrases[context] || this.phrases.live;
     const candidates = source.map(line => line
@@ -90,7 +101,7 @@ const robot = {
     if (this.used.size > 180) this.used = new Set([...this.used].slice(-90));
     localStorage.setItem("atlas-robot-used", JSON.stringify([...this.used]));
     this.lastContext = context;
-    this.sayText(line, context);
+    this.sayText(line, context, interrupt);
   },
   sayText(line, context = this.currentContext, interrupt = false) {
     const now = Date.now();
@@ -113,9 +124,11 @@ const robot = {
   },
   scheduleQueue() {
     clearTimeout(this.queueTimer);
+    this.pruneQueue();
     if (!this.queue.length) return;
     const delay = Math.max(0, this.visibleUntil - Date.now());
     this.queueTimer = setTimeout(() => {
+      this.pruneQueue();
       const next = this.queue.shift();
       if (next) this.sayText(next.line, next.context, true);
     }, delay);
@@ -293,18 +306,20 @@ function renderState(next = {}) {
   pulse.textContent = fresh ? "Analisando agora" : "Conectado · aguardando dados";
   const loggedIn = marketReady();
   const justLoggedIn = loggedIn && lastLoginState !== true;
+  robot.pruneQueue();
   if (!loggedIn) {
     $("agentAsset").textContent = "Faça login";
     $("analysisReason").textContent = "Entre na Hezilex para eu começar a análise de verdade.";
     pulse.classList.remove("live");
     pulse.textContent = "Esperando você entrar";
-    if (lastLoginState !== false || robot.currentContext !== "loggedout") robot.speak("loggedout", {}, true);
+    if (lastLoginState !== false || robot.currentContext !== "loggedout") robot.speak("loggedout", {}, true, true);
     lastLoginState = false;
     return;
   }
   lastLoginState = true;
+  if (justLoggedIn) robot.speak("connect", {}, true, true);
   if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) robot.commentOnOperation(state.manualOperation);
-  else if (justLoggedIn) robot.speak("connect", {}, true);
+  else if (justLoggedIn) return;
   else if (state.uiEvent?.key && state.uiEvent.key !== previousUiEventKey && state.uiEvent.type === "AD_CLOSED") robot.speak("adclose", {}, true);
   else if (state.asset && state.asset !== previousAsset) robot.speak("asset", { asset: state.asset }, true);
   else if (state.analysis.direction !== previousDirection) {

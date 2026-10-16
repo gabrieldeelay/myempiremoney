@@ -9,6 +9,9 @@ assert.doesNotMatch(app, /Math\.random\(\)\s*>=\s*\.7/, "o robô não pode ignor
 assert.match(app, /robot\.commentOnOperation\(state\.manualOperation\)/, "operações devem chegar ao robô");
 assert.match(app, /holdMs:\s*8000/, "cada mensagem automática deve permanecer por ao menos oito segundos");
 assert.match(app, /this\.queue\.push\(\{ line, context \}\)/, "mensagens consecutivas devem entrar em fila");
+assert.match(app, /if \(context === "loggedout"\) return !marketReady\(\)/, "falas de logout devem ser invalidadas assim que a conta for identificada");
+assert.match(app, /this\.queue = this\.queue\.filter\(item => this\.contextStillValid\(item\.context\)\)/, "a fila deve descartar mensagens incompatíveis com o estado atual");
+assert.match(app, /robot\.speak\("connect", \{\}, true, true\)/, "o aviso de conta conectada deve substituir imediatamente uma fala antiga");
 assert.match(app, /robot\.speak\("noaccess"\);/, "a verificação rápida de conexão não pode atropelar a fala atual");
 assert.match(bridge, /detectManualOperationClick\(event\)/, "cliques de compra e venda devem ser observados imediatamente");
 assert.match(bridge, /Compra manual detectada/, "compras precisam gerar um evento explícito");
