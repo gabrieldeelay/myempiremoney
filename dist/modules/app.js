@@ -35,8 +35,13 @@ function marketReady() {
 const robot = {
   used: new Set(JSON.parse(localStorage.getItem("atlas-robot-used") || "[]")),
   lastContext: null,
+  lastLine: null,
   currentContext: "hello",
   speechTimer: null,
+  queueTimer: null,
+  visibleUntil: 0,
+  queue: [],
+  holdMs: 8000,
   phrases: {
     waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
     noaccess: ["Eu tô vendo que a tela abriu, mas este navegador não tá me entregando as velas. Sem dados, sem palpite fantasiado.", "O gráfico tá aí, bonitão, mas o Atlas ainda não recebeu os dados. Enquanto o topo disser ‘Aguardando conexão’, eu não vou inventar análise.", "Você tá mexendo na Hezilex, eu sei. Só que este navegador ainda não deixou eu ler o gráfico por dentro."],
@@ -50,18 +55,18 @@ const robot = {
     expiration: ["Expiração em 5M. Pelo menos o relógio sabe o plano.", "Cinco minutos de expiração. Cronômetro civilizado.", "Expiração alinhada. Agora não culpe o relógio."],
     risk: ["Um por cento. Finalmente uma ideia com juízo.", "Risco em 1%. Seu saldo agradeceu em silêncio.", "Valor calculado em 1%. A ganância perdeu essa rodada."],
     all: ["5M, 5M e 1%. Organização: conceito raro, porém bonito.", "Tudo alinhado. Agora falta só não improvisar.", "Configuração pronta. O caos foi adiado com sucesso."],
-    open: ["Operação aberta. Agora mexer cinco vezes nela não vira estratégia.", "Entrada feita. O gráfico não aceita negociação emocional.", "Operação em andamento. Fiscalizar cada segundo não ajuda, mas eu sei que você vai."],
-    buyAligned: ["Foi de compra junto com a leitura. Finalmente uma decisão com testemunha.", "Compra alinhada com o sinal. Milagre: você e o gráfico concordaram.", "Você comprou onde eu via compra. Dessa vez eu guardo o deboche."],
-    sellAligned: ["Venda alinhada com a leitura. Até que enfim o dedo ouviu o gráfico.", "Foi de venda no lado que eu marquei. Coerência desbloqueada.", "Venda com o sinal. Bonito quando o plano participa da operação."],
-    buyAgainstSell: ["Eu marquei VENDA e você foi de COMPRA. Coragem ou alergia a contexto?", "Compra contra minha leitura de venda. O gráfico falou e você respondeu ‘duvido’.", "Você comprou no cenário vendedor. Espero que essa rebeldia tenha argumento."],
-    sellAgainstBuy: ["Eu marquei COMPRA e você meteu VENDA. Ousado. Questionável, mas ousado.", "Venda contra o sinal comprador. Você veio negociar ou discutir com a tendência?", "Eu vi compra, você clicou venda. A democracia do prejuízo funcionando."],
-    buyWithoutSignal: ["Compra sem confirmação clara. Você chamou de timing; o gráfico chamou de pressa.", "Foi de compra enquanto eu mandava esperar. A ansiedade ganhou um botão.", "Compra no escuro. Tomara que a coragem tenha levado lanterna."],
-    sellWithoutSignal: ["Venda sem sinal fechado. Você decidiu antes da vela terminar a frase.", "Foi de venda no meu ‘aguardar’. Pressa também é uma estratégia, só não é boa.", "Venda sem confirmação. O dedo chegou antes da análise, clássico."],
+    open: ["Entrada em {asset} registrada. Agora deixa o plano trabalhar.", "Operação aberta em {asset}. Mão longe do improviso.", "Vi a entrada em {asset}. A vela continua; a ansiedade pode esperar."],
+    buyAligned: ["Compra em {asset} alinhada com a leitura. Boa — agora respeita o risco.", "Você comprou {asset} no lado mais forte. Dessa vez o gráfico foi consultado.", "Compra confirmada em {asset}. Coerente com o cenário; sem aumentar a mão."],
+    sellAligned: ["Venda em {asset} alinhada com a leitura. Boa — agora deixa a operação respirar.", "Você vendeu {asset} no lado mais forte. O plano apareceu antes do clique.", "Venda confirmada em {asset}. Coerente com o cenário; sem inventar moda."],
+    buyAgainstSell: ["Você comprou {asset}, mas minha leitura era VENDA. Coragem tem; contexto ficou faltando.", "Compra em {asset} contra o cenário vendedor. O gráfico falou e seu dedo pediu recurso.", "Vi essa COMPRA em {asset}. Eu estava em VENDA — vigia o risco, não o ego."],
+    sellAgainstBuy: ["Você vendeu {asset}, mas minha leitura era COMPRA. Ousado; coerente, nem tanto.", "Venda em {asset} contra o cenário comprador. Seu dedo resolveu debater com a tendência.", "Vi essa VENDA em {asset}. Eu estava em COMPRA — controle o risco e não force."],
+    buyWithoutSignal: ["Compra em {asset} sem confirmação. Você chamou de timing; a vela chamou de pressa.", "Você comprou {asset} enquanto eu mandava aguardar. A ansiedade achou o botão.", "COMPRA em {asset} sem sinal fechado. Tomara que o risco esteja menor que a confiança."],
+    sellWithoutSignal: ["Venda em {asset} sem confirmação. Você decidiu antes da vela terminar a frase.", "Você vendeu {asset} no meu AGUARDAR. Pressa também é estratégia — só não é boa.", "VENDA em {asset} sem sinal fechado. O dedo chegou antes da análise, clássico."],
     adclose: ["Fechou o anúncio. Finalmente uma operação com 100% de acerto.", "Anúncio eliminado. Essa entrada eu aprovo sem indicador.", "Boa. Menos propaganda, mais gráfico e só um pouco menos de caos.", "Fechou o anúncio com precisão. Se operar assim, talvez dê jogo."],
     dragged: ["De novo me arrastando? Eu sou analista, não ícone de desktop.", "Já é a segunda mudança. Escolhe um canto e deixa eu trabalhar, criatura.", "Me põe aqui, me põe ali… o gráfico parado e eu fazendo turismo.", "Você mexeu em mim de novo. Isso não conta como gerenciamento de risco."],
-    win: ["Deu bom. Não transforma um acerto em doutorado.", "Vitória confirmada. Pode sorrir, só não aumenta a mão por empolgação.", "Ponto seu. O mercado não pediu discurso de campeão."],
-    loss: ["Deu ruim. O mercado cobrou a mensalidade.", "Loss confirmado. Respira: vingança não é indicador.", "Essa não veio. O botão não tem culpa, curiosamente."],
-    draw: ["Empate. Nem o mercado quis assumir essa decisão.", "Devolvida. Foi quase alguma coisa.", "Empate técnico: emoção desperdiçada com eficiência."],
+    win: ["Resultado positivo em {asset}. Boa — não transforma um acerto em euforia.", "Green em {asset}. Guarda a disciplina junto com o lucro.", "{asset} fechou positivo. O mérito é seguir o plano, não adivinhar."],
+    loss: ["Resultado negativo em {asset}. Respira: revanche não é indicador.", "Loss em {asset}. Revê a entrada; não aumenta a mão para discutir com o mercado.", "{asset} fechou no negativo. Aceita o dado e protege a próxima decisão."],
+    draw: ["Empate em {asset}. Nem o mercado quis bancar essa história.", "{asset} devolveu a entrada. Emoção gasta, saldo preservado.", "Resultado neutro em {asset}. Próxima vela, mesmo plano."],
     error: ["Não foi dessa vez. Até meus circuitos sabem esperar.", "Falhou com elegância. Melhor que acertar por acidente.", "A tela não colaborou. Ela também tem personalidade difícil."],
     live: ["Continuo analisando. Piscar é para humanos.", "O gráfico mexeu. Meu sarcasmo também.", "Ainda monitorando. Ansiedade não conta como indicador.", "Velas andando, eu observando, você respirando. Combinado?", "Sem clique necessário. Milagre tecnológico ou autocontrole?"]
   },
@@ -70,19 +75,50 @@ const robot = {
     const source = this.phrases[context] || this.phrases.live;
     const candidates = source.map(line => line
       .replaceAll("{asset}", values.asset || state.asset || "esse ativo")
-      .replaceAll("{confidence}", Math.round(Number(values.confidence ?? state.analysis.confidence) || 0)));
-    const available = candidates.filter(line => !this.used.has(line));
-    this.currentContext = context;
-    this.updateQuestions(context);
-    if (!available.length) return;
+      .replaceAll("{confidence}", Math.round(Number(values.confidence ?? state.analysis.confidence) || 0))
+      .replaceAll("{amount}", formatMoney(values.amount))
+      .replaceAll("{reason}", String(values.reason || state.analysis.reason || "sem confirmação suficiente")));
+    let available = candidates.filter(line => !this.used.has(line) && line !== this.lastLine);
+    if (!available.length) {
+      candidates.forEach(line => this.used.delete(line));
+      available = candidates.filter(line => line !== this.lastLine);
+    }
+    if (!available.length) available = candidates;
     const line = available[Math.floor(Math.random() * available.length)];
     this.used.add(line);
+    this.lastLine = line;
+    if (this.used.size > 180) this.used = new Set([...this.used].slice(-90));
     localStorage.setItem("atlas-robot-used", JSON.stringify([...this.used]));
     this.lastContext = context;
+    this.sayText(line, context);
+  },
+  sayText(line, context = this.currentContext, interrupt = false) {
+    const now = Date.now();
+    if (!interrupt && now < this.visibleUntil) {
+      const lastQueued = this.queue.at(-1);
+      if (!lastQueued || lastQueued.line !== line) this.queue.push({ line, context });
+      this.scheduleQueue();
+      return;
+    }
+    clearTimeout(this.queueTimer);
+    this.currentContext = context;
+    this.updateQuestions(context);
     $("robotLine").textContent = line;
     $("robotOverlay").classList.add("talking");
+    this.visibleUntil = now + this.holdMs;
     clearTimeout(this.speechTimer);
     this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+    this.scheduleQueue();
+    requestAnimationFrame(keepRobotInViewport);
+  },
+  scheduleQueue() {
+    clearTimeout(this.queueTimer);
+    if (!this.queue.length) return;
+    const delay = Math.max(0, this.visibleUntil - Date.now());
+    this.queueTimer = setTimeout(() => {
+      const next = this.queue.shift();
+      if (next) this.sayText(next.line, next.context, true);
+    }, delay);
   },
   commentOnOperation(operation) {
     if (!operation) return;
@@ -90,7 +126,6 @@ const robot = {
       this.speak({ WIN: "win", LOSS: "loss", DRAW: "draw" }[operation.outcome] || "open", { asset: operation.asset }, true);
       return;
     }
-    if (Math.random() >= .7) return;
     const picked = operation.direction;
     const advised = operation.analysisDirection || state.analysis.direction;
     let context = "open";
@@ -100,7 +135,7 @@ const robot = {
     else if (picked === "SELL" && advised === "BUY") context = "sellAgainstBuy";
     else if (picked === "BUY") context = "buyWithoutSignal";
     else if (picked === "SELL") context = "sellWithoutSignal";
-    this.speak(context, { asset: operation.asset, confidence: operation.analysisConfidence }, true);
+    this.speak(context, { asset: operation.asset, amount: operation.amount, confidence: operation.analysisConfidence, reason: operation.analysisReason }, true);
   },
   updateQuestions(context) {
     const buttons = [...$("robotQuestions").querySelectorAll("button")];
@@ -129,10 +164,7 @@ const robot = {
         fixread: "Abra o endereço oficial no Chrome, Edge ou Brave onde a conexão local do Atlas já está ativa. Quando conectar, o topo muda sozinho.",
         reallylive: "Agora, não. O topo ainda diz ‘Aguardando conexão’. Quando eu receber ativo e velas, aí sim começa a análise real."
       };
-      $("robotLine").textContent = replies[question] || replies.cantread;
-      $("robotOverlay").classList.add("talking");
-      clearTimeout(this.speechTimer);
-      this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+      this.sayText(replies[question] || replies.cantread, this.currentContext, true);
       return;
     }
     if (!marketReady()) {
@@ -141,10 +173,7 @@ const robot = {
         nologin: "Não, né, mano. Sem login eu não tenho ativo, velas nem saldo. Aí seria palpite fantasiado de análise.",
         next: "Faz login na Hezilex. Quando o gráfico abrir, eu começo a analisar sozinho — sem você apertar mais nada."
       };
-      $("robotLine").textContent = replies[question] || replies.loginseen;
-      $("robotOverlay").classList.add("talking");
-      clearTimeout(this.speechTimer);
-      this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+      this.sayText(replies[question] || replies.loginseen, this.currentContext, true);
       return;
     }
     const direction = state.analysis.direction;
@@ -170,10 +199,7 @@ const robot = {
         : `${state.asset || "O ativo"} favorece ${label}, com ${Math.round(Number(state.analysis.confidence) || 0)}%: ${shortReason}.`,
       missing: direction === "WAIT" ? `Falta confirmação: ${shortReason}. Quando fechar, eu mudo o sinal sozinho.` : `O sinal já apareceu para ${label}. Agora falta você decidir sem pressa.`
     };
-    $("robotLine").textContent = replies[question] || replies.seen;
-    $("robotOverlay").classList.add("talking");
-    clearTimeout(this.speechTimer);
-    this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+    this.sayText(replies[question] || replies.seen, this.currentContext, true);
   },
   toggleQuestions() {
     if ($("robotOverlay").classList.contains("minimized")) {
@@ -183,6 +209,7 @@ const robot = {
     const panel = $("robotQuestions");
     panel.hidden = !panel.hidden;
     $("robotOverlay").classList.toggle("questions-open", !panel.hidden);
+    requestAnimationFrame(keepRobotInViewport);
   },
   init() {
     const storedPreference = localStorage.getItem("atlas-robot-minimized");
@@ -202,6 +229,7 @@ const robot = {
     $("robotToggle").setAttribute("aria-label", minimized ? "Abrir Atlas Bot" : "Minimizar Atlas Bot");
     localStorage.setItem("atlas-robot-minimized", minimized ? "1" : "0");
     if (!minimized) this.speak("live", {}, true);
+    requestAnimationFrame(keepRobotInViewport);
   }
 };
 
@@ -275,8 +303,8 @@ function renderState(next = {}) {
     return;
   }
   lastLoginState = true;
-  if (justLoggedIn) robot.speak("connect", {}, true);
-  else if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) robot.commentOnOperation(state.manualOperation);
+  if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) robot.commentOnOperation(state.manualOperation);
+  else if (justLoggedIn) robot.speak("connect", {}, true);
   else if (state.uiEvent?.key && state.uiEvent.key !== previousUiEventKey && state.uiEvent.type === "AD_CLOSED") robot.speak("adclose", {}, true);
   else if (state.asset && state.asset !== previousAsset) robot.speak("asset", { asset: state.asset }, true);
   else if (state.analysis.direction !== previousDirection) {
@@ -372,7 +400,7 @@ async function verifyExtension() {
   } catch {
     if (!extensionReady) {
       renderConnection(false);
-      robot.speak("noaccess", {}, true);
+      robot.speak("noaccess");
     }
   } finally {
     verificationInFlight = false;
@@ -413,6 +441,14 @@ function applyRobotPosition(left, top, persist = false) {
   overlay.style.right = "auto";
   overlay.style.bottom = "auto";
   if (persist) localStorage.setItem("atlas-robot-position", JSON.stringify(point));
+}
+
+function keepRobotInViewport() {
+  const overlay = $("robotOverlay");
+  const rect = overlay.getBoundingClientRect();
+  const point = clampRobotPosition(rect.left, rect.top);
+  const escaped = rect.left < 8 || rect.top < 8 || rect.right > innerWidth - 8 || rect.bottom > innerHeight - 8;
+  if (escaped) applyRobotPosition(point.left, point.top, false);
 }
 
 function restoreRobotPosition() {
@@ -483,8 +519,6 @@ setInterval(() => {
   else robot.speak(state.analysis.direction === "BUY" ? "buy" : state.analysis.direction === "SELL" ? "sell" : "live", { confidence: state.analysis.confidence }, true);
 }, 42000);
 addEventListener("resize", () => {
-  const overlay = $("robotOverlay");
-  if (!overlay.classList.contains("dragged-position")) return;
-  const rect = overlay.getBoundingClientRect();
-  applyRobotPosition(rect.left, rect.top, true);
+  keepRobotInViewport();
 }, { passive: true });
+new ResizeObserver(() => requestAnimationFrame(keepRobotInViewport)).observe($("robotOverlay"));

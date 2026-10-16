@@ -19,6 +19,7 @@
     lastAccountCheckAt: 0,
     lastUiEventAt: 0,
     lastObservedOperationKey: null,
+    lastManualClick: null,
     markings: [],
     nativeDrawing: { task: Promise.resolve(), signatures: new Map() },
     eventSequence: 0,
@@ -61,6 +62,9 @@
       }
     }, { capture: true, passive: true });
   }
+  addEventListener("click", event => {
+    if (event.isTrusted) detectManualOperationClick(event);
+  }, { capture: true, passive: true });
 
   function compact(value) { return String(value || "").replace(/\s+/g, " ").trim(); }
   function clamp(value, min = 0, max = 1) { return Math.max(min, Math.min(max, value)); }
@@ -131,6 +135,40 @@
     logEvent("Anúncio fechado", "O Atlas percebeu que você limpou a tela.", "success", internal.state.uiEvent.key);
     setTimeout(publishState, 0);
   }
+  function detectManualOperationClick(event) {
+    const element = event.target instanceof Element
+      ? event.target.closest('button,[role="button"],a,input[type="button"],input[type="submit"]')
+      : null;
+    if (!element || element.matches(":disabled") || element.getAttribute("aria-disabled") === "true") return;
+    const label = compact(`${element.textContent || ""} ${element.value || ""} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`).toLowerCase();
+    const direction = /^(?:comprar|compra|buy|call|alta)(?:\s|$)/i.test(label) ? "BUY"
+      : /^(?:vender|venda|sell|put|baixa)(?:\s|$)/i.test(label) ? "SELL"
+      : null;
+    if (!direction) return;
+    const observedAt = Date.now();
+    const asset = internal.state.asset || activeInstrument().asset || "Ativo atual";
+    const key = `click-${observedAt}-${direction}-${++internal.eventSequence}`;
+    internal.lastManualClick = { direction, asset, at: observedAt };
+    internal.state.manualOperation = {
+      key,
+      asset,
+      direction,
+      outcome: "OPEN",
+      amount: locateAmountControl()?.amount ?? null,
+      analysisDirection: internal.state.analysis.direction,
+      analysisConfidence: internal.state.analysis.confidence,
+      analysisReason: internal.state.analysis.reason,
+      observedAt: new Date(observedAt).toISOString(),
+      source: "interface-click"
+    };
+    logEvent(
+      direction === "BUY" ? "Compra manual detectada" : "Venda manual detectada",
+      `${asset}: o Atlas registrou a operação no momento do clique.`,
+      "signal",
+      key
+    );
+    setTimeout(publishState, 0);
+  }
   function parentOrigin() {
     try { return document.referrer ? new URL(document.referrer).origin : null; } catch { return null; }
   }
@@ -179,11 +217,22 @@
     const candidates = queryAll('button,[role="menuitem"],[role="option"],[role="button"],a,li,div,span')
       .filter(visible)
       .filter(element => element !== trigger)
-      .filter(element => /^(?:5m|5\s*minutos?)$/i.test(compact(element.textContent)) || /(?:^|\b)5\s*minutos?(?:\b|$)/i.test(compact(element.getAttribute("aria-label"))))
+      .filter(element => /^(?:5m|5\s*minutos?)$/i.test(compact(element.textContent)) || /^(?:5m|5\s*minutos?)$/i.test(compact(element.getAttribute("aria-label"))))
       .sort((left, right) => {
-        const a = left.getBoundingClientRect();
-        const b = right.getBoundingClientRect();
-        return a.width * a.height - b.width * b.height;
+        const score = element => {
+          const box = element.getBoundingClientRect();
+          const role = compact(element.getAttribute("role"));
+          const css = element.ownerDocument.defaultView?.getComputedStyle(element);
+          let value = 0;
+          if (/^(?:menuitem|option)$/.test(role)) value += 120;
+          if (element.matches("button,li,a")) value += 80;
+          if (/item|option|period|timeframe/i.test(compact(element.className))) value += 45;
+          if (css?.cursor === "pointer") value += 25;
+          if (box.width >= 60 && box.height >= 24 && box.height <= 80) value += 25;
+          if (box.width * box.height > 70000) value -= 120;
+          return value;
+        };
+        return score(right) - score(left);
       });
     return candidates[0] || null;
   }
@@ -205,7 +254,8 @@
       const css = view?.getComputedStyle(current);
       const role = compact(current.getAttribute?.("role"));
       const className = compact(current.className);
-      if (current.matches?.('button,a,li,[role="menuitem"],[role="option"],[role="button"],[onclick],[tabindex]') || role) return current;
+      const exact = /^(?:5m|5\s*minutos?)$/i.test(compact(current.textContent)) || /^(?:5m|5\s*minutos?)$/i.test(compact(current.getAttribute?.("aria-label")));
+      if (exact && current.matches?.('button,a,li,[role="menuitem"],[role="option"],[role="button"],[onclick],[tabindex]')) return current;
       if ((css?.cursor === "pointer" || /(?:item|option|period|timeframe)/i.test(className)) && /^(?:5m|5\s*minutos?)$/i.test(compact(current.textContent))) best = current;
       if (compact(current.textContent).length > 30) break;
     }
@@ -214,20 +264,28 @@
   function activateElement(element) {
     element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
     element.focus?.({ preventScroll: true });
-    element.click();
+    const view = element.ownerDocument.defaultView;
+    const box = element.getBoundingClientRect();
+    const init = { bubbles: true, cancelable: true, composed: true, view, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2, button: 0, buttons: 1 };
+    if (view.PointerEvent) element.dispatchEvent(new view.PointerEvent("pointerdown", { ...init, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+    element.dispatchEvent(new view.MouseEvent("mousedown", init));
+    if (view.PointerEvent) element.dispatchEvent(new view.PointerEvent("pointerup", { ...init, buttons: 0, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+    element.dispatchEvent(new view.MouseEvent("mouseup", { ...init, buttons: 0 }));
+    element.dispatchEvent(new view.MouseEvent("click", { ...init, buttons: 0 }));
   }
   async function selectFiveMinute() {
     if (timeframeIsFive()) return false;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       const trigger = timeframeTrigger();
       if (!trigger) throw new Error("Controle do gráfico não localizado");
-      trigger.element.click();
-      const option = await waitFor(fiveMinuteOption, 900, 35);
+      activateElement(trigger.element);
+      const option = await waitFor(fiveMinuteOption, 1200, 30);
       if (!option) continue;
-      const target = attempt === 0 ? clickableOption(option) : attempt === 1 ? option : (option.parentElement || option);
+      const target = attempt % 2 === 0 ? clickableOption(option) : option;
       activateElement(target);
-      if (await waitFor(timeframeIsFive, attempt === 0 ? 550 : 800, 35)) return true;
-      await sleep(25);
+      if (await waitFor(timeframeIsFive, 1500, 30)) return true;
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+      await sleep(80);
     }
     throw new Error("A opção 5 minutos abriu, mas a Hezilex não confirmou a seleção");
   }
@@ -781,7 +839,7 @@
     return "OPEN";
   }
   async function observeManualOperation() {
-    if (Date.now() - internal.lastHistoryCheckAt < 10000) return;
+    if (Date.now() - internal.lastHistoryCheckAt < 1500) return;
     internal.lastHistoryCheckAt = Date.now();
     try {
       const response = await fetch("/binary/history/0", { credentials: "include", cache: "no-store" });
@@ -801,9 +859,14 @@
       if (firstObservation && (!eventTimestamp || Date.now() - eventTimestamp > 15 * 60 * 1000)) return;
       const directionText = compact(latest.direction || latest.type || latest.operation || latest.option_type).toLowerCase();
       const direction = /buy|call|up|compra|alta/.test(directionText) ? "BUY" : /sell|put|down|venda|baixa/.test(directionText) ? "SELL" : null;
+      const asset = compact(latest.asset || latest.symbol || latest.instrument || internal.state.asset);
+      const recentClick = internal.lastManualClick;
+      const sameClick = outcome === "OPEN" && recentClick && Date.now() - recentClick.at < 12000
+        && recentClick.direction === direction;
+      if (sameClick) return;
       internal.state.manualOperation = {
         key,
-        asset: compact(latest.asset || latest.symbol || latest.instrument || internal.state.asset),
+        asset,
         direction,
         outcome,
         amount: Number(latest.amount ?? Number(latest.amount_cents || 0) / 100) || null,
