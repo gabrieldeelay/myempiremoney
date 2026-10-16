@@ -22,7 +22,7 @@
 
       <div class="top-actions">
         <button class="icon-button" id="reloadFrame" type="button" aria-label="Recarregar Hezilex" title="Recarregar Hezilex">↻</button>
-        <a class="install-extension" href="/install">Instalar extensão</a>
+        <button class="install-extension" type="button" data-install-trigger>Instalar extensão</button>
         <a class="open-external" href="https://app.hezilex.com/login" target="_blank" rel="noopener noreferrer">Abrir em nova aba ↗</a>
       </div>
     </header>
@@ -110,6 +110,28 @@
     </aside>
   </div>
 
+  <div class="install-modal" id="installModal" hidden>
+    <div class="install-backdrop" data-install-close></div>
+    <section class="install-dialog" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+      <button class="install-close" type="button" data-install-close aria-label="Fechar">×</button>
+      <span class="install-kicker"><i></i> Instalação assistida</span>
+      <h2 id="installTitle">Instale sem perder o painel.</h2>
+      <p class="install-lead">O Atlas cuida da verificação e mantém esta tela aberta. Quando a Microsoft liberar a extensão, você só confirma a instalação em uma janela pequena do Edge.</p>
+
+      <div class="install-progress" aria-label="Progresso da instalação">
+        <div class="install-step" data-install-step="browser"><span>1</span><div><b>Navegador</b><small data-browser-label>Verificando…</small></div></div>
+        <div class="install-step" data-install-step="store"><span>2</span><div><b>Disponibilidade</b><small data-store-label>Consultando Microsoft…</small></div></div>
+        <div class="install-step" data-install-step="extension"><span>3</span><div><b>Ativação</b><small data-extension-label>Aguardando instalação</small></div></div>
+      </div>
+
+      <div class="install-message" data-install-message>Preparando a instalação…</div>
+      <button class="install-action" type="button" data-install-action disabled>Verificando disponibilidade…</button>
+      <p class="install-note">Sem ZIP, sem modo desenvolvedor e sem acesso à sua senha.</p>
+    </section>
+  </div>
+
   <script type="module" src="./modules/app.js"></script>
+  <script type="module" src="./modules/install-flow.js"></script>
 </body>
 </html>
+
