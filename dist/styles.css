@@ -64,6 +64,35 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outlin
 .install-extension { display: flex; align-items: center; padding: 0 12px; text-decoration: none; font-size: 12px; font-weight: 800; color: #1b0d04; border-color: var(--orange); background: var(--orange); }
 .icon-button:hover, .open-external:hover { border-color: var(--line-orange); color: var(--orange-soft); }
 .install-extension:hover { background: #ff7b22; border-color: #ff7b22; }
+.install-extension.connected { border-color: rgba(49, 214, 155, .3); background: rgba(49, 214, 155, .12); color: #aef0d7; }
+
+.install-modal[hidden] { display: none; }
+.install-modal { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 18px; }
+.install-backdrop { position: absolute; inset: 0; background: rgba(4, 3, 2, .74); backdrop-filter: blur(10px); }
+.install-dialog { position: relative; width: min(560px, 100%); padding: 30px; border: 1px solid rgba(255, 122, 26, .24); border-radius: 22px; background: linear-gradient(145deg, #18130f, #0e0c0a 68%); box-shadow: 0 30px 100px rgba(0, 0, 0, .62); }
+.install-close { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; background: #1b1714; color: #aaa19a; cursor: pointer; font-size: 22px; line-height: 1; }
+.install-kicker { display: inline-flex; align-items: center; gap: 8px; color: var(--orange-soft); font-size: 11px; font-weight: 900; letter-spacing: .12em; }
+.install-kicker i { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 12px rgba(255,122,26,.7); }
+.install-dialog h2 { margin: 12px 40px 8px 0; font-size: clamp(26px, 5vw, 38px); letter-spacing: -.04em; }
+.install-lead { margin: 0; color: #a8a098; font-size: 14px; line-height: 1.55; }
+.install-progress { display: grid; gap: 9px; margin: 24px 0 16px; }
+.install-step { display: flex; align-items: center; gap: 12px; padding: 12px 13px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.018); }
+.install-step > span { width: 31px; height: 31px; display: grid; place-items: center; flex: 0 0 31px; border-radius: 9px; background: #24201c; color: #827a73; font-size: 12px; font-weight: 900; }
+.install-step b, .install-step small { display: block; }
+.install-step b { color: #e6dfd8; font-size: 13px; }
+.install-step small { margin-top: 2px; color: #817a74; font-size: 11px; }
+.install-step.done { border-color: rgba(49, 214, 155, .2); background: rgba(49, 214, 155, .035); }
+.install-step.done > span { background: var(--green); color: #072018; }
+.install-step.done small { color: #8acbb4; }
+.install-step.waiting { border-color: rgba(255, 179, 71, .24); }
+.install-step.waiting > span { background: rgba(255,179,71,.13); color: var(--amber); }
+.install-message { min-height: 44px; display: flex; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #100e0c; color: #aaa29b; font-size: 12px; line-height: 1.45; }
+.install-message.success { border-color: rgba(49,214,155,.24); color: #aef0d7; background: #0d1b16; }
+.install-message.warning { border-color: rgba(255,179,71,.24); color: #efc787; background: #1c160d; }
+.install-action { width: 100%; min-height: 50px; margin-top: 11px; border: 0; border-radius: 11px; background: var(--orange); color: #211006; cursor: pointer; font-weight: 900; }
+.install-action:disabled { cursor: wait; background: #29231f; color: #746d67; }
+.install-action.ready { box-shadow: 0 12px 30px rgba(255,122,26,.18); }
+.install-note { margin: 10px 0 0; color: #746d67; font-size: 11px; text-align: center; }
 
 .workspace {
   min-height: 0;
@@ -226,6 +255,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outlin
   .connection { display: none; }
   .open-external { display: none; }
   .install-extension { padding: 0 9px; }
+  .install-dialog { padding: 24px 18px 20px; }
   .workspace { grid-template-rows: 58vh auto; padding: 7px; gap: 7px; overflow: visible; }
   .terminal-bar code { display: none; }
   .copilot { grid-template-columns: 1fr; }
@@ -237,3 +267,4 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outlin
   .robot-character { transform: scale(.86); transform-origin: right bottom; }
   .robot-overlay.minimized { width: 62px; grid-template-columns: 62px; }
 }
+
