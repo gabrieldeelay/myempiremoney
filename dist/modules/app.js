@@ -2,353 +2,309 @@ const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
 const EXTENSION_SOURCE = "atlas-guard-extension";
 const DIRECT_EXTENSION_SOURCE = "atlas-guard-dashboard-extension";
-const MINIMUM_BALANCE = 500;
 const $ = id => document.getElementById(id);
 
 const frame = $("hezilexFrame");
-const loader = $("frameLoader");
-const connection = $("connectionState");
-const connectionText = $("connectionText");
-const notice = $("securityNotice");
-const mobileWarning = $("mobileWarning");
-const supportCard = $("supportCard");
-const supportLauncher = $("openSupport");
-const workspace = document.querySelector(".workspace");
-const startGate = $("startGate");
 const pending = new Map();
-let extensionReady = false;
-let bridgeDetected = false;
 let sequence = 0;
+let extensionReady = false;
 let verificationInFlight = false;
-let silentMisses = 0;
-let startPromptDismissed = false;
-let bridgeState = {
-  mode: "stopped",
+let toastTimer = null;
+let state = {
+  version: null,
+  asset: null,
+  timeframe: null,
+  expiration: null,
   balance: null,
-  analysis: { direction: "WAIT", confidence: 0, reason: "Aguardando extensão" },
-  markings: { lta: false, ltb: false, total: 0 },
+  analysis: { direction: "WAIT", confidence: 0, reason: "Aguardando a Hezilex" },
+  risk: { baseAmount: null },
   defaults: { timeframe: false, expiration: false },
-  events: []
+  manualOperation: null,
+  lastInspectionAt: null
 };
 
-function loadLogs() {
-  try {
-    const stored = JSON.parse(localStorage.getItem("atlas-robot-log") || "[]");
-    return Array.isArray(stored) ? stored.slice(0, 120) : [];
-  } catch { return []; }
-}
-
-let robotLogs = loadLogs();
-
-function saveLogs() {
-  localStorage.setItem("atlas-robot-log", JSON.stringify(robotLogs.slice(0, 120)));
-}
-
-function formatClock(value) {
-  const date = value ? new Date(value) : new Date();
-  return Number.isNaN(date.getTime()) ? "agora" : date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-function renderLogs() {
-  const list = $("robotLog");
-  list.replaceChildren();
-  $("historyEmpty").classList.toggle("hidden", robotLogs.length > 0);
-  $("historyCount").textContent = `${robotLogs.length} ${robotLogs.length === 1 ? "ação" : "ações"}`;
-  for (const entry of robotLogs) {
-    const item = document.createElement("li");
-    item.className = entry.level || "info";
-    const copy = document.createElement("div");
-    copy.className = "log-copy";
-    const header = document.createElement("header");
-    const title = document.createElement("b");
-    const time = document.createElement("time");
-    const detail = document.createElement("p");
-    title.textContent = entry.title;
-    time.textContent = formatClock(entry.at);
-    detail.textContent = entry.detail;
-    header.append(title, time);
-    copy.append(header, detail);
-    item.append(document.createElement("span"), copy);
-    list.append(item);
+const robot = {
+  used: new Set(JSON.parse(localStorage.getItem("atlas-robot-used") || "[]")),
+  lastContext: null,
+  currentContext: "hello",
+  speechTimer: null,
+  phrases: {
+    hello: ["Cheguei. Eu analiso; você tenta não clicar com emoção.", "Circuitos ligados. Bom senso também seria ótimo.", "Pronto para o mercado. Ele, infelizmente, também está pronto para você.", "Estou de olho no gráfico. Alguém precisa estar."],
+    connect: ["Agora sim: gráfico falando, eu julgando.", "Dados ao vivo. Acabaram as desculpas criativas.", "Mercado localizado. A calma continua desaparecida.", "Tudo conectado. Respira antes de inventar moda."],
+    asset: ["{asset} na tela. Novo ativo, velhos impulsos.", "Trocou para {asset}. Curiosidade ou plano? Vou fingir que é plano.", "Analisando {asset}. Ele não sabe que você chegou.", "{asset} selecionado. Deixa a vela terminar o raciocínio."],
+    buy: ["Compra no radar. Convicção não é licença para exagerar.", "Sinal comprador. O botão continua sendo problema seu.", "Os compradores acordaram. Não precisa acordar a ganância.", "Compra com {confidence}% de confiança. Ainda não é casamento.", "O gráfico apontou para cima. Seu ego não precisa acompanhar."],
+    sell: ["Venda no radar. Até a queda merece confirmação.", "Sinal vendedor. Drama no gráfico, calma no dedo.", "Os vendedores chegaram. Elegantes como uma porta batendo.", "Venda com {confidence}% de confiança. Sem heroísmo, por favor.", "O gráfico olhou para baixo. Não empurra."],
+    wait: ["Nada claro ainda. Parabéns por quase não fazer besteira.", "Aguardar também é posição. A mais barata, inclusive.", "Mercado indeciso. Finalmente alguém combinando com ele.", "Sem sinal decente. O tédio está protegendo seu saldo.", "Hoje o melhor clique pode ser nenhum. Revolucionário."],
+    timeframe: ["Gráfico em 5M. Agora a vela tem tempo de terminar a frase.", "Cinco minutos no gráfico. Menos ruído, menos novela.", "5M ajustado. Um pequeno passo para o gráfico, um salto para a paciência."],
+    expiration: ["Expiração em 5M. Pelo menos o relógio sabe o plano.", "Cinco minutos de expiração. Cronômetro civilizado.", "Expiração alinhada. Agora não culpe o relógio."],
+    risk: ["Um por cento. Finalmente uma ideia com juízo.", "Risco em 1%. Seu saldo agradeceu em silêncio.", "Valor calculado em 1%. A ganância perdeu essa rodada."],
+    all: ["5M, 5M e 1%. Organização: conceito raro, porém bonito.", "Tudo alinhado. Agora falta só não improvisar.", "Configuração pronta. O caos foi adiado com sucesso."],
+    open: ["Operação aberta. Agora mexer cinco vezes nela não vira estratégia.", "Entrada feita. O gráfico não aceita negociação emocional.", "Operação em andamento. Fiscalizar cada segundo não ajuda, mas eu sei que você vai."],
+    win: ["Deu bom. Não transforma um acerto em doutorado.", "Vitória confirmada. Pode sorrir, só não aumenta a mão por empolgação.", "Ponto seu. O mercado não pediu discurso de campeão."],
+    loss: ["Deu ruim. O mercado cobrou a mensalidade.", "Loss confirmado. Respira: vingança não é indicador.", "Essa não veio. O botão não tem culpa, curiosamente."],
+    draw: ["Empate. Nem o mercado quis assumir essa decisão.", "Devolvida. Foi quase alguma coisa.", "Empate técnico: emoção desperdiçada com eficiência."],
+    error: ["Não foi dessa vez. Até meus circuitos sabem esperar.", "Falhou com elegância. Melhor que acertar por acidente.", "A tela não colaborou. Ela também tem personalidade difícil."],
+    live: ["Continuo analisando. Piscar é para humanos.", "O gráfico mexeu. Meu sarcasmo também.", "Ainda monitorando. Ansiedade não conta como indicador.", "Velas andando, eu observando, você respirando. Combinado?", "Sem clique necessário. Milagre tecnológico ou autocontrole?"]
+  },
+  speak(context, values = {}, force = false) {
+    if (!force && this.lastContext === context) return;
+    const source = this.phrases[context] || this.phrases.live;
+    const candidates = source.map(line => line
+      .replaceAll("{asset}", values.asset || state.asset || "esse ativo")
+      .replaceAll("{confidence}", Math.round(Number(values.confidence ?? state.analysis.confidence) || 0)));
+    const available = candidates.filter(line => !this.used.has(line));
+    this.currentContext = context;
+    this.updateQuestions(context);
+    if (!available.length) return;
+    const line = available[Math.floor(Math.random() * available.length)];
+    this.used.add(line);
+    localStorage.setItem("atlas-robot-used", JSON.stringify([...this.used]));
+    this.lastContext = context;
+    $("robotLine").textContent = line;
+    $("robotOverlay").classList.add("talking");
+    clearTimeout(this.speechTimer);
+    this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+  },
+  updateQuestions(context) {
+    const buttons = [...$("robotQuestions").querySelectorAll("button")];
+    const signalContext = ["buy", "sell", "open", "win", "loss", "draw"].includes(context);
+    const setupContext = ["timeframe", "expiration", "risk", "all"].includes(context);
+    const options = signalContext
+      ? [["what", "O que eu deveria ter feito?"], ["why", "Por que essa direção?"], ["risk", "Qual é o risco agora?"]]
+      : setupContext
+        ? [["setup", "Minha tela está certa?"], ["why5m", "Por que usar 5 minutos?"], ["risk", "Quanto é 1% agora?"]]
+        : [["seen", "O que você está vendo?"], ["missing", "O que falta para uma entrada?"], ["setup", "Está tudo configurado?"]];
+    buttons.forEach((button, index) => {
+      button.dataset.question = options[index][0];
+      button.textContent = options[index][1];
+    });
+  },
+  answer(question) {
+    const direction = state.analysis.direction;
+    const label = direction === "BUY" ? "uma compra" : direction === "SELL" ? "uma venda" : "ficar de fora";
+    const reason = String(state.analysis.reason || "os critérios ainda não fecharam").replace(/\.$/, "");
+    const shortReason = reason.length > 112 ? `${reason.slice(0, 109)}…` : reason;
+    const baseAmount = formatMoney(state.risk.baseAmount);
+    const protectionActive = Boolean(state.protection?.active);
+    const replies = {
+      what: direction === "WAIT"
+        ? `Olha, nesse caso aí, mano, era melhor esperar. ${shortReason}.`
+        : `Olha, nesse caso aí, mano, o lado mais forte era ${label}, porque ${shortReason.toLowerCase()}.`,
+      why: direction === "WAIT"
+        ? `Eu não escolhi um lado: ${shortReason}. Sem confirmação, melhor não inventar.`
+        : `${label === "uma compra" ? "Compra" : "Venda"}, porque ${shortReason.toLowerCase()}. Confiança em ${Math.round(Number(state.analysis.confidence) || 0)}%.`,
+      risk: protectionActive
+        ? `Risco alto agora: a proteção detectou pico de volatilidade. Eu ficaria fora até normalizar.`
+        : `Sem pico ativo. O limite sugerido é 1% do saldo, hoje ${baseAmount}; nada de dobrar no impulso.`,
+      setup: `Gráfico ${state.timeframe || "não identificado"}, expiração ${state.expiration || "não identificada"} e 1% em ${baseAmount}. ${state.defaults?.timeframe && state.defaults?.expiration ? "Está alinhado." : "Ainda falta ajustar."}`,
+      why5m: "Cinco minutos filtra parte do ruído e compara a análise com a mesma duração da operação. Menos bagunça, mais contexto.",
+      seen: direction === "WAIT"
+        ? `Estou vendo ${state.asset || "o ativo"}, mas ainda sem lado confiável: ${shortReason}.`
+        : `${state.asset || "O ativo"} favorece ${label}, com ${Math.round(Number(state.analysis.confidence) || 0)}%: ${shortReason}.`,
+      missing: direction === "WAIT" ? `Falta confirmação: ${shortReason}. Quando fechar, eu mudo o sinal sozinho.` : `O sinal já apareceu para ${label}. Agora falta você decidir sem pressa.`
+    };
+    $("robotLine").textContent = replies[question] || replies.seen;
+    $("robotOverlay").classList.add("talking");
+    clearTimeout(this.speechTimer);
+    this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+  },
+  toggleQuestions() {
+    if ($("robotOverlay").classList.contains("minimized")) {
+      this.toggle();
+      return;
+    }
+    const panel = $("robotQuestions");
+    panel.hidden = !panel.hidden;
+    $("robotOverlay").classList.toggle("questions-open", !panel.hidden);
+  },
+  init() {
+    const storedPreference = localStorage.getItem("atlas-robot-minimized");
+    const minimized = storedPreference === "1" || (storedPreference == null && matchMedia("(max-width: 720px)").matches);
+    $("robotOverlay").classList.toggle("minimized", minimized);
+    $("robotToggle").textContent = minimized ? "+" : "−";
+    $("robotToggle").setAttribute("aria-expanded", String(!minimized));
+    this.speak("hello", {}, true);
+  },
+  toggle() {
+    const minimized = $("robotOverlay").classList.toggle("minimized");
+    $("robotQuestions").hidden = true;
+    $("robotOverlay").classList.remove("questions-open");
+    $("robotToggle").textContent = minimized ? "+" : "−";
+    $("robotToggle").setAttribute("aria-expanded", String(!minimized));
+    $("robotToggle").setAttribute("aria-label", minimized ? "Abrir Atlas Bot" : "Minimizar Atlas Bot");
+    localStorage.setItem("atlas-robot-minimized", minimized ? "1" : "0");
+    if (!minimized) this.speak("live", {}, true);
   }
-}
+};
 
-function addLog(title, detail, level = "info", key = null, at = Date.now()) {
-  const id = key || `${title}:${detail}`;
-  const recent = robotLogs.find(entry => entry.id === id && Math.abs(new Date(at).getTime() - new Date(entry.at).getTime()) < 12000);
-  if (recent) return;
-  robotLogs.unshift({ id, title: String(title || "Atualização"), detail: String(detail || "Sem detalhes"), level, at });
-  robotLogs = robotLogs.slice(0, 120);
-  saveLogs();
-  renderLogs();
-}
-
-function ingestEvents(events = []) {
-  for (const event of events) addLog(event.title, event.detail, event.level, event.id, event.at);
-}
-
-function setHistoryCollapsed(collapsed) {
-  workspace.classList.toggle("history-collapsed", collapsed);
-  $("toggleHistory").setAttribute("aria-expanded", String(!collapsed));
-  $("toggleHistory").setAttribute("aria-label", collapsed ? "Abrir histórico" : "Minimizar histórico");
-  localStorage.setItem("atlas-history-collapsed", collapsed ? "1" : "0");
-}
-
-const storedHistoryState = localStorage.getItem("atlas-history-collapsed");
-setHistoryCollapsed(storedHistoryState === "1" || (storedHistoryState === null && innerWidth <= 800));
-$("toggleHistory").addEventListener("click", () => setHistoryCollapsed(!workspace.classList.contains("history-collapsed")));
-$("clearHistory").addEventListener("click", () => {
-  robotLogs = [];
-  saveLogs();
-  renderLogs();
-  addLog("Histórico limpo", "O registro local foi reiniciado.", "info", `clear-${Date.now()}`);
-});
-renderLogs();
-
-frame.addEventListener("load", () => {
-  loader.classList.add("hidden");
-  connection.classList.add("ready");
-  connectionText.textContent = "Interface oficial carregada";
-  addLog("Hezilex carregada", "A janela oficial terminou de carregar.", "success", "frame-loaded");
-  setTimeout(() => verifyExtension(false), 900);
-});
-
-$("reloadFrame").addEventListener("click", () => {
-  loader.classList.remove("hidden");
-  connection.classList.remove("ready");
-  connectionText.textContent = "Recarregando Hezilex oficial…";
-  frame.src = "https://app.hezilex.com/login";
-  addLog("Recarga solicitada", "A interface oficial da Hezilex está sendo recarregada.", "warning", `reload-${Date.now()}`);
-});
-
-$("closeNotice").addEventListener("click", () => notice.classList.add("hidden"));
-
-function setSupportOpen(open) {
-  supportCard.classList.toggle("closed", !open);
-  supportLauncher.classList.toggle("show", !open);
-  localStorage.setItem("atlas-support-closed", open ? "0" : "1");
-}
-
-function renderSupport(connected) {
-  $("supportState").classList.toggle("connected", connected);
-  supportLauncher.classList.toggle("connected", connected);
-  supportLauncher.textContent = connected ? "✓" : "?";
-  $("supportTitle").textContent = connected ? "Extensão conectada" : "Extensão opcional não detectada";
-  $("supportText").textContent = connected
-    ? "Conexão ativa. O Atlas monitora a Hezilex sem capturar sua senha."
-    : "A Hezilex continua disponível em modo manual. Instale a extensão para habilitar o monitor do Atlas.";
-}
-
-$("closeSupport").addEventListener("click", () => setSupportOpen(false));
-supportLauncher.addEventListener("click", () => setSupportOpen(true));
-$("toggleInstallHelp").addEventListener("click", event => {
-  const help = $("installHelp");
-  help.hidden = !help.hidden;
-  event.currentTarget.setAttribute("aria-expanded", String(!help.hidden));
-  event.currentTarget.textContent = help.hidden ? "Como instalar" : "Ocultar instruções";
-});
-setSupportOpen(localStorage.getItem("atlas-support-closed") !== "1");
-renderSupport(false);
-
-function formatBalance(value) {
-  if (value == null || value === "" || !Number.isFinite(Number(value))) return "—";
+function formatMoney(value) {
+  if (value == null || !Number.isFinite(Number(value))) return "—";
   return Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function isBalanceAllowed() {
-  return bridgeState.balance != null && bridgeState.balance !== "" && Number.isFinite(Number(bridgeState.balance)) && Number(bridgeState.balance) > MINIMUM_BALANCE;
+function showToast(message, kind = "info") {
+  const toast = $("toast");
+  clearTimeout(toastTimer);
+  toast.textContent = message;
+  toast.className = `toast ${kind}`;
+  toast.hidden = false;
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 4200);
 }
 
-function setAgentControls() {
-  const connected = extensionReady;
-  $("startAgent").disabled = !connected || !isBalanceAllowed() || bridgeState.mode === "running";
-  $("pauseAgent").disabled = !connected || bridgeState.mode !== "running";
-  $("emergencyStop").disabled = !connected || bridgeState.mode === "stopped";
+function setControls(enabled) {
+  for (const id of ["setTimeframe", "setExpiration", "setRisk", "applyAll"]) $(id).disabled = !enabled;
 }
 
-function syncStartGate() {
-  const shouldOpen = extensionReady && isBalanceAllowed() && bridgeState.mode === "stopped" && !startPromptDismissed;
-  startGate.hidden = !shouldOpen;
+function renderConnection(connected) {
+  const wasConnected = extensionReady;
+  extensionReady = connected;
+  $("connectionState").classList.toggle("ready", connected);
+  $("connectionText").textContent = connected ? "Análise ao vivo" : "Aguardando mercado";
+  setControls(connected);
+  if (connected && !wasConnected) robot.speak("connect", {}, true);
 }
 
-function updateMonitorPulse() {
-  const pulse = $("monitorPulse");
-  const inspected = bridgeState.lastInspectionAt ? new Date(bridgeState.lastInspectionAt).getTime() : 0;
-  const fresh = inspected && Date.now() - inspected < 7000;
-  pulse.classList.toggle("live", Boolean(fresh));
-  pulse.textContent = fresh ? `Monitorando agora · ${formatClock(inspected)}` : bridgeDetected ? "Extensão ativa · aguardando Traderoom" : "Monitor aguardando extensão";
-}
-
-function renderState(state = {}) {
-  const previous = bridgeState;
-  bridgeState = {
-    ...bridgeState,
+function renderState(next = {}) {
+  const previousAsset = state.asset;
+  const previousDirection = state.analysis.direction;
+  const previousOperationKey = state.manualOperation?.key;
+  state = {
     ...state,
-    analysis: { ...bridgeState.analysis, ...(state.analysis || {}) },
-    markings: { ...bridgeState.markings, ...(state.markings || {}) },
-    defaults: { ...bridgeState.defaults, ...(state.defaults || {}) }
+    ...next,
+    analysis: { ...state.analysis, ...(next.analysis || {}) },
+    risk: { ...state.risk, ...(next.risk || {}) },
+    defaults: { ...state.defaults, ...(next.defaults || {}) }
   };
-  extensionReady = true;
-  bridgeDetected = true;
-  silentMisses = 0;
-  renderSupport(true);
-  if (robotLogs.length === 0) {
-    $("historyEmpty").querySelector("strong").textContent = "Extensão conectada";
-    $("historyEmpty").querySelector("small").textContent = "Aguardando dados da Traderoom.";
-  }
+  renderConnection(true);
 
-  const mode = bridgeState.mode || "stopped";
-  $("agentDot").className = `agent-dot ${mode === "running" ? "busy" : "online"}`;
-  $("agentStatus").textContent = mode === "running" ? "Monitorando oportunidade" : mode === "paused" ? "Pausado" : "Conectado";
-  $("agentModeBadge").textContent = mode === "running" ? "EM EXECUÇÃO" : mode === "paused" ? "PAUSADO" : "AUTOMÁTICO";
-  $("agentAsset").textContent = bridgeState.asset || "Localizando…";
-  $("agentTimeframe").textContent = bridgeState.timeframe || (bridgeState.defaults.timeframe ? "5m" : "Verificando…");
-  $("agentExpiration").textContent = bridgeState.expiration || (bridgeState.defaults.expiration ? "5 min" : "Verificando…");
+  $("agentAsset").textContent = state.asset || "Localizando";
+  $("agentTimeframe").textContent = state.timeframe || (state.defaults.timeframe ? "5m" : "—");
+  $("agentExpiration").textContent = state.expiration || (state.defaults.expiration ? "5 min" : "—");
+  $("riskAmount").textContent = formatMoney(state.risk.baseAmount);
 
-  const balance = $("agentBalance");
-  balance.textContent = formatBalance(bridgeState.balance);
-  balance.classList.toggle("allowed", isBalanceAllowed());
-  balance.classList.toggle("blocked", bridgeState.balance != null && bridgeState.balance !== "" && Number.isFinite(Number(bridgeState.balance)) && !isBalanceAllowed());
-  const accountName = bridgeState.account?.name || "Conta não confirmada";
-  const baseAmount = bridgeState.risk?.baseAmount;
-  const protectionAmount = bridgeState.risk?.protectionAmount;
-  $("balanceRule").textContent = bridgeState.balance == null
-    ? "Procurando saldo"
-    : isBalanceAllowed()
-      ? `${accountName} · 1% ${formatBalance(baseAmount)} · proteção ${formatBalance(protectionAmount)}`
-      : "Robô bloqueado abaixo de R$ 500";
-
-  const lta = Boolean(bridgeState.markings?.lta);
-  const ltb = Boolean(bridgeState.markings?.ltb);
-  const protection = Boolean(bridgeState.markings?.protection || bridgeState.protection?.active || bridgeState.protection?.pending);
-  $("markingsState").textContent = `LTA ${lta ? "✓" : "—"} · LTB ${ltb ? "✓" : "—"} · PROT ${protection ? "✓" : "—"}`;
-  const direction = bridgeState.analysis?.direction;
+  const direction = state.analysis.direction;
+  const card = $("signalCard");
+  card.classList.toggle("buy", direction === "BUY");
+  card.classList.toggle("sell", direction === "SELL");
   $("analysisDirection").textContent = direction === "BUY" ? "COMPRA" : direction === "SELL" ? "VENDA" : "AGUARDAR";
-  $("analysisReason").textContent = bridgeState.analysis?.reason || "Aguardando dados reais";
-  ingestEvents(state.events || []);
+  $("signalIcon").textContent = direction === "BUY" ? "↗" : direction === "SELL" ? "↘" : "—";
+  $("confidenceBadge").textContent = `${Math.round(Number(state.analysis.confidence) || 0)}%`;
+  $("analysisReason").textContent = state.analysis.reason || "Sem confirmação suficiente.";
 
-  if (state.asset && previous.asset !== state.asset) addLog("Ativo identificado", `${state.asset} entrou em monitoramento.`, "success", `asset-${state.asset}-${state.assetChangedAt || Date.now()}`);
-  if (state.balance != null && previous.balance !== state.balance) {
-    addLog("Saldo atualizado", isBalanceAllowed() ? `${formatBalance(state.balance)} identificado. Automação liberada para confirmação.` : `${formatBalance(state.balance)} identificado. Automação permanece bloqueada.`, isBalanceAllowed() ? "success" : "danger", `balance-${state.balance}`);
+  const pulse = $("monitorPulse");
+  const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;
+  const fresh = inspectedAt && Date.now() - inspectedAt < 9000;
+  pulse.classList.toggle("live", Boolean(fresh));
+  pulse.textContent = fresh ? "Analisando agora" : "Conectado · aguardando dados";
+  if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) {
+    robot.speak({ WIN: "win", LOSS: "loss", DRAW: "draw", OPEN: "open" }[state.manualOperation.outcome] || "open", { asset: state.manualOperation.asset }, true);
+  } else if (state.asset && state.asset !== previousAsset) robot.speak("asset", { asset: state.asset }, true);
+  else if (state.analysis.direction !== previousDirection) {
+    robot.speak(state.analysis.direction === "BUY" ? "buy" : state.analysis.direction === "SELL" ? "sell" : "wait", { confidence: state.analysis.confidence }, true);
   }
-  setAgentControls();
-  syncStartGate();
-  updateMonitorPulse();
 }
 
-function renderOffline(message = "Não detectada") {
-  extensionReady = false;
-  bridgeDetected = false;
-  renderSupport(false);
-  $("agentDot").className = "agent-dot offline";
-  $("agentStatus").textContent = message;
-  $("agentModeBadge").textContent = "DESCONECTADO";
-  setAgentControls();
-  startGate.hidden = true;
-  updateMonitorPulse();
-}
-
-function sendCommand(action, payload = {}, timeoutMs = 4500) {
+function sendCommand(action, payload = {}, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const requestId = `atlas-${Date.now()}-${++sequence}`;
     const timer = setTimeout(() => {
       pending.delete(requestId);
-      reject(new Error("A extensão respondeu, mas a Traderoom da Hezilex ainda não está disponível."));
+      reject(new Error("A Hezilex não respondeu a tempo. Recarregue a página e tente novamente."));
     }, timeoutMs);
     pending.set(requestId, { resolve, reject, timer });
     const message = { source: DASHBOARD_SOURCE, type: "command", requestId, action, ...payload };
     window.postMessage(message, location.origin);
-    if (frame.contentWindow) frame.contentWindow.postMessage(message, HEZILEX_ORIGIN);
+    frame.contentWindow?.postMessage(message, HEZILEX_ORIGIN);
   });
 }
 
 window.addEventListener("message", event => {
   const fromIframe = event.origin === HEZILEX_ORIGIN && event.source === frame.contentWindow && event.data?.source === EXTENSION_SOURCE;
-  const fromDirectBridge = event.origin === location.origin && event.source === window && event.data?.source === DIRECT_EXTENSION_SOURCE;
-  if (!fromIframe && !fromDirectBridge) return;
+  const fromDirect = event.origin === location.origin && event.source === window && event.data?.source === DIRECT_EXTENSION_SOURCE;
+  if (!fromIframe && !fromDirect) return;
+
   if (event.data.type === "ready" || event.data.type === "state") {
     renderState(event.data.state || {});
     return;
   }
-  const item = pending.get(event.data.requestId);
-  if (!item) return;
-  clearTimeout(item.timer);
+  const request = pending.get(event.data.requestId);
+  if (!request) return;
+  clearTimeout(request.timer);
   pending.delete(event.data.requestId);
   if (event.data.state) renderState(event.data.state);
-  if (event.data.type === "error") item.reject(new Error(event.data.error || "Falha na extensão"));
-  else item.resolve(event.data.result);
+  if (event.data.type === "error") request.reject(new Error(event.data.error || "Não foi possível aplicar a configuração."));
+  else request.resolve(event.data.result);
 });
 
-async function verifyExtension(showMessage = true) {
-  if (verificationInFlight) return;
-  verificationInFlight = true;
-  const button = $("verifyExtension");
-  const original = button?.textContent;
-  if (showMessage && button) {
-    button.disabled = true;
-    button.textContent = "Verificando…";
-  }
+async function runMacro(action, button, successMessage) {
+  const original = button.innerHTML;
+  button.classList.add("loading");
+  button.innerHTML = "<span>·</span><b>Aplicando…</b>";
   try {
-    const result = await sendCommand("inspect", {}, showMessage ? 5000 : 2200);
-    renderState(result);
-  } catch (error) {
-    silentMisses += 1;
-    if (!bridgeDetected && (showMessage || silentMisses >= 2)) renderOffline(showMessage ? error.message : "Opcional · modo manual disponível");
-    if (bridgeDetected) {
-      $("agentStatus").textContent = "Conectado · aguardando Hezilex";
-      $("analysisReason").textContent = error.message;
-      renderSupport(true);
-    }
-  } finally {
-    verificationInFlight = false;
-    if (showMessage && button) {
-      button.disabled = false;
-      button.textContent = original;
-    }
-  }
-}
-
-async function command(action, button, successMessage = null) {
-  const original = button?.textContent;
-  if (button) { button.disabled = true; button.textContent = "Processando…"; }
-  try {
-    const result = await sendCommand(action);
-    if (result?.analysis || result?.bridge) renderState(result);
-    if (successMessage) addLog(successMessage.title, successMessage.detail, successMessage.level || "success", `${action}-${Date.now()}`);
+    const result = await sendCommand(action, {}, action === "apply_setup" ? 14000 : 9000);
+    if (result?.state) renderState(result.state);
+    else if (result?.analysis || result?.bridge) renderState(result);
+    showToast(successMessage, "success");
+    robot.speak({ set_timeframe: "timeframe", set_expiration: "expiration", set_risk: "risk", apply_setup: "all" }[action] || "live", {}, true);
     return result;
   } catch (error) {
-    $("analysisReason").textContent = error.message;
-    addLog("Ação não concluída", error.message, "warning", `${action}-error-${Date.now()}`);
+    const needsUpdate = /desconhecida|unknown|não reconhecida/i.test(error.message);
+    showToast(needsUpdate ? "Sua configuração local precisa ser atualizada para usar este macro." : error.message, "error");
+    robot.speak("error", {}, true);
     return null;
   } finally {
-    if (button) button.textContent = original;
-    setAgentControls();
+    button.classList.remove("loading");
+    button.innerHTML = original;
+    setControls(extensionReady);
   }
 }
 
-$("startAgent").addEventListener("click", () => {
-  startPromptDismissed = false;
-  syncStartGate();
+async function verifyExtension() {
+  if (verificationInFlight) return;
+  verificationInFlight = true;
+  try {
+    const result = await sendCommand("inspect", {}, 3500);
+    renderState(result);
+  } catch {
+    if (!extensionReady) renderConnection(false);
+  } finally {
+    verificationInFlight = false;
+  }
+}
+
+frame.addEventListener("load", () => {
+  $("frameLoader").classList.add("hidden");
+  setTimeout(verifyExtension, 700);
 });
-$("dismissStart").addEventListener("click", () => {
-  startPromptDismissed = true;
-  startGate.hidden = true;
-  addLog("Início adiado", "O monitor permanece conectado, mas a análise ativa não foi iniciada.", "warning", `dismiss-${Date.now()}`);
+
+$("reloadFrame").addEventListener("click", () => {
+  $("frameLoader").classList.remove("hidden");
+  frame.src = "https://app.hezilex.com/";
 });
-$("confirmStart").addEventListener("click", async event => {
-  if (!isBalanceAllowed()) return;
-  const result = await command("start", event.currentTarget, { title: "Fluxo automático iniciado", detail: "Saldo validado. O Atlas assumiu 5m/5m, ativo, marcações e análise contínua sem criar sinais aleatórios.", level: "signal" });
-  if (result) {
-    startPromptDismissed = true;
-    startGate.hidden = true;
+$("setTimeframe").addEventListener("click", event => runMacro("set_timeframe", event.currentTarget, "Gráfico ajustado para 5 minutos."));
+$("setExpiration").addEventListener("click", event => runMacro("set_expiration", event.currentTarget, "Expiração ajustada para 5 minutos."));
+$("setRisk").addEventListener("click", event => runMacro("set_risk", event.currentTarget, "Valor ajustado para 1% do saldo."));
+$("applyAll").addEventListener("click", event => runMacro("apply_setup", event.currentTarget, "Configuração aplicada: gráfico 5M, expiração 5M e valor em 1%."));
+$("robotToggle").addEventListener("click", () => robot.toggle());
+$("robotCharacter").addEventListener("click", () => robot.toggleQuestions());
+$("robotCharacter").addEventListener("keydown", event => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    robot.toggleQuestions();
   }
 });
-$("pauseAgent").addEventListener("click", event => command("pause", event.currentTarget, { title: "Robô pausado", detail: "Novas análises automáticas foram pausadas.", level: "warning" }));
-$("emergencyStop").addEventListener("click", event => command("stop", event.currentTarget, { title: "Robô parado", detail: "O ciclo automático foi encerrado.", level: "danger" }));
+$("robotQuestions").addEventListener("click", event => {
+  const button = event.target.closest("button[data-question]");
+  if (button) robot.answer(button.dataset.question);
+});
 
-setInterval(() => verifyExtension(false), 4000);
-setInterval(updateMonitorPulse, 1000);
-
-setTimeout(() => {
-  if (window.innerWidth <= 800) mobileWarning.classList.add("show");
-}, 9000);
+robot.init();
+renderConnection(false);
+setInterval(verifyExtension, 4500);
+setInterval(() => {
+  const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;
+  if (extensionReady && inspectedAt && Date.now() - inspectedAt > 12000) $("monitorPulse").textContent = "Aguardando atualização";
+}, 2000);
+setInterval(() => {
+  if (extensionReady) robot.speak(state.analysis.direction === "BUY" ? "buy" : state.analysis.direction === "SELL" ? "sell" : "live", { confidence: state.analysis.confidence }, true);
+}, 42000);

@@ -27,7 +27,7 @@
           analysis: {
             direction: "WAIT",
             confidence: 0,
-            reason: "Extensão conectada; aguardando a Hezilex carregar"
+            reason: "Aguardando a Hezilex carregar"
           }
         }
       });
@@ -44,7 +44,7 @@
         type: "dashboard_command",
         command: event.data
       });
-      if (!response?.ok) throw new Error(response?.error || "A extensão não conseguiu executar o comando");
+      if (!response?.ok) throw new Error(response?.error || "O Atlas não conseguiu executar o comando");
       post({
         type: response.type || "result",
         requestId: event.data.requestId,

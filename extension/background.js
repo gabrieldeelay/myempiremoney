@@ -1,14 +1,11 @@
 const DEFAULTS = {
   allowedOrigins: [],
-  mode: "stopped",
-  realOrdersEnabled: false,
-  maxGales: 2,
   assets: {}
 };
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(Object.keys(DEFAULTS));
-  await chrome.storage.local.set({ ...DEFAULTS, ...current, realOrdersEnabled: false, maxGales: Math.min(2, Number(current.maxGales ?? 2)) });
+  await chrome.storage.local.set({ ...DEFAULTS, ...current });
 });
 
 function originCanBeAuthorized(origin) {
@@ -59,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (!response) throw new Error("A Hezilex ainda não respondeu");
         return response;
       } catch (error) {
-        throw new Error("A extensão foi detectada, mas a Hezilex ainda não está carregada dentro do painel.");
+        throw new Error("A Hezilex ainda não está carregada dentro do painel.");
       }
     }
     if (message?.type === "state_update" && sender.url?.startsWith("https://app.hezilex.com/")) {
@@ -74,13 +71,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return { ok: true };
     }
     if (message?.type === "financial_permission") {
-      const fromHezilex = sender.url?.startsWith("https://app.hezilex.com/");
-      const demoOnly = message.demoVerified === true && message.isReal === false;
-      const amount = Number(message.amount);
-      if (!fromHezilex || !demoOnly || !Number.isFinite(amount) || amount <= 0) {
-        return { allowed: false, reason: "Operação bloqueada: apenas a Conta Demo verificada pode executar ordens." };
-      }
-      return { allowed: true, scope: "demo-only" };
+      return { allowed: false, reason: "O Atlas apenas analisa e configura a tela; operações financeiras são sempre manuais." };
     }
     return { ok: false };
   })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));

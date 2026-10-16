@@ -2,15 +2,11 @@
   if (window.__atlasGuardBridgeLoaded || window.top === window) return;
   window.__atlasGuardBridgeLoaded = true;
 
-  const VERSION = "1.1.0";
+  const VERSION = "2.0.0";
   const BRIDGE_SOURCE = "atlas-guard-extension";
   const DASHBOARD_SOURCE = "atlas-guard-dashboard";
-  const MINIMUM_BALANCE = 500;
   const CANDLE_MINUTES = 5;
   const BASE_RISK = 0.01;
-  const PROTECTION_MULTIPLIER = 2;
-  const MAX_GALES = 2;
-  const MIN_CONFIDENCE = 72;
   const MAX_MARKINGS = 5;
 
   const internal = {
@@ -19,10 +15,8 @@
     lastUserActivity: 0,
     lastAsset: null,
     lastAnalysisAt: 0,
-    lastOrderCandle: null,
-    pendingOrder: null,
-    protectionBase: null,
-    historyBaseline: new Set(),
+    lastHistoryCheckAt: 0,
+    lastObservedOperationKey: null,
     markings: [],
     eventSequence: 0,
     mutationTimer: null,
@@ -43,12 +37,11 @@
       userActive: false,
       chartDetected: false,
       analysis: { direction: "WAIT", confidence: 0, reason: "Aguardando dados oficiais de 5 minutos" },
-      protection: { active: false, pending: false, reason: null, multiplier: PROTECTION_MULTIPLIER },
-      risk: { percent: 1, baseAmount: null, nextAmount: null, protectionAmount: null },
+      protection: { active: false, reason: null },
+      risk: { percent: 1, baseAmount: null },
       markings: { lta: false, ltb: false, protection: false, total: 0, source: null },
-      gale: { current: 0, maximum: MAX_GALES },
-      lastOperation: null,
-      realOrderExecution: false,
+      manualOperation: null,
+      executionEnabled: false,
       events: [],
       lastInspectionAt: null
     }
@@ -170,7 +163,6 @@
       isReal,
       verified: Boolean(account && selectedName)
     };
-    internal.state.realOrderExecution = false;
     return internal.state.account;
   }
 
@@ -194,22 +186,18 @@
     internal.state.lastInspectionAt = new Date().toISOString();
     await detectAccount();
     const baseAmount = balance.value == null ? null : Math.max(1, Math.round(balance.value * BASE_RISK * 100) / 100);
-    const cycleBase = internal.protectionBase ?? baseAmount;
     internal.state.risk = {
       percent: 1,
-      baseAmount,
-      protectionAmount: cycleBase == null ? null : Math.round(cycleBase * 2 * 100) / 100,
-      nextAmount: cycleBase == null ? null : Math.round(cycleBase * Math.pow(2, internal.state.gale.current) * 100) / 100
+      baseAmount
     };
     if (instrument.asset && instrument.asset !== previousAsset) {
       internal.state.assetChangedAt = internal.state.lastInspectionAt;
       internal.lastAnalysisAt = 0;
-      internal.lastOrderCandle = null;
       renderMarkings([]);
       logEvent("Ativo alterado", `${instrument.asset} detectado. Ajustando velas e expiração para 5 minutos.`, "success", `asset-${instrument.asset}`);
     }
     if (balance.value != null && balance.value !== previousBalance) {
-      logEvent("Saldo verificado", balance.value > MINIMUM_BALANCE ? `R$ ${formatMoney(balance.value)}: entrada-base calculada em R$ ${formatMoney(baseAmount)} (1%).` : `R$ ${formatMoney(balance.value)}: robô bloqueado, mínimo superior a R$ 500,00.`, balance.value > MINIMUM_BALANCE ? "success" : "danger", `balance-${balance.value}`);
+      logEvent("Saldo verificado", `R$ ${formatMoney(balance.value)}: valor de referência calculado em R$ ${formatMoney(baseAmount)} (1%).`, "success", `balance-${balance.value}`);
     }
     if (internal.state.account.isReal) logEvent("Conta real bloqueada", "O Atlas detectou a conta principal e desativou qualquer clique de compra ou venda.", "danger", "real-account-block");
     return snapshot();
@@ -248,6 +236,62 @@
     await inspect();
     if (internal.state.defaults.timeframe && internal.state.defaults.expiration) logEvent("Configuração confirmada", "Velas de 5m e expiração de 5 min estão ativas.", "success", `defaults-ok-${internal.state.asset || "current"}`);
     return { changed, blocked: false, state: snapshot() };
+  }
+
+  async function setTimeframeFive() {
+    await inspect();
+    if (internal.state.defaults.timeframe) return { changed: false, state: snapshot() };
+    const trigger = timeframeButtons().find(item => /\b(?:1|2|3|10|15|30)\s*minuto/i.test(item.label) || /^(?:1m|2m|3m|10m|15m|30m)$/i.test(item.text));
+    if (!trigger) throw new Error("Controle do gráfico não localizado");
+    trigger.element.click();
+    await sleep(160);
+    const option = queryAll('[role="menuitem"],div,span').filter(visible).find(element => /^5 minutos$/i.test(compact(element.textContent)) && compact(element.textContent).length < 15);
+    if (!option) throw new Error("Opção de 5 minutos não localizada");
+    (option.closest('[role="menuitem"]') || option).click();
+    await sleep(300);
+    await inspect();
+    if (!internal.state.defaults.timeframe) throw new Error("A Hezilex não confirmou o gráfico em 5 minutos");
+    logEvent("Gráfico configurado", "Timeframe ajustado para 5 minutos pelo macro.", "success", `macro-timeframe-${Date.now()}`);
+    await publishState();
+    return { changed: true, state: snapshot() };
+  }
+
+  async function setExpirationFive() {
+    await inspect();
+    let expiration = locateExpirationControl();
+    if (!expiration) throw new Error("Controle de expiração não localizado");
+    let changed = false;
+    for (let attempt = 0; expiration.minutes !== 5 && attempt < 20; attempt += 1) {
+      const control = expiration.minutes < 5 ? expiration.plus : expiration.minus;
+      if (!control) throw new Error("Botão de ajuste da expiração não localizado");
+      control.click();
+      changed = true;
+      await sleep(110);
+      expiration = locateExpirationControl();
+      if (!expiration) break;
+    }
+    await inspect();
+    if (!internal.state.defaults.expiration) throw new Error("A Hezilex não confirmou a expiração em 5 minutos");
+    logEvent("Expiração configurada", "Expiração ajustada para 5 minutos pelo macro.", "success", `macro-expiration-${Date.now()}`);
+    await publishState();
+    return { changed, state: snapshot() };
+  }
+
+  async function setRiskOnePercent() {
+    await inspect();
+    const amount = internal.state.risk.baseAmount;
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error("Saldo não localizado para calcular 1%");
+    await applyRiskAmount(amount);
+    logEvent("Valor configurado", `Campo ajustado para R$ ${formatMoney(amount)}, equivalente a 1% do saldo exibido.`, "success", `macro-risk-${Date.now()}`);
+    await publishState();
+    return { changed: true, amount, state: snapshot() };
+  }
+
+  async function applySetup() {
+    await setTimeframeFive();
+    await setExpirationFive();
+    await setRiskOnePercent();
+    return { changed: true, state: snapshot() };
   }
 
   function chartHost() {
@@ -383,7 +427,7 @@
     const bullish = candles.slice(-5).filter(item => item.close > item.open).length;
     const bearish = candles.slice(-5).filter(item => item.close < item.open).length;
     internal.state.protection.active = spike;
-    internal.state.protection.reason = spike ? "Amplitude acima de 2,35× a média das 20 velas anteriores" : internal.state.protection.pending ? "Proteção 2x aguardando novo sinal válido" : null;
+    internal.state.protection.reason = spike ? "Amplitude acima de 2,35× a média das 20 velas anteriores" : null;
     let direction = "WAIT";
     let confidence = 0;
     let reason = "Critérios mínimos ainda não foram atingidos";
@@ -423,16 +467,8 @@
     const current = parseBRL(input.value);
     if (current == null || Math.abs(current - amount) > .011) throw new Error("A plataforma não confirmou o valor calculado");
   }
-  async function loadHistory() {
-    const response = await fetch("/binary/history/0", { credentials: "include", cache: "no-store" });
-    if (!response.ok) return [];
-    const payload = await response.json();
-    return Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
-  }
-  function isDemoHistory(item) { return /demo/i.test(compact(item.account_name || item.account?.name)); }
-  function outcomeOf(item) {
+  function operationOutcome(item) {
     const numericStatus = Number(item.status);
-    if (numericStatus === 1) return null;
     if (numericStatus === 2) return "WIN";
     if (numericStatus === 3) return "LOSS";
     if (numericStatus === 4) return "DRAW";
@@ -442,88 +478,39 @@
     if (/win|won|ganh|success|profit/.test(status) || returned > amount) return "WIN";
     if (/loss|lost|perd|fail/.test(status) || (/clos|finish|expir/.test(status) && returned <= amount)) return "LOSS";
     if (/draw|tie|empate|refund/.test(status)) return "DRAW";
-    return null;
+    return "OPEN";
   }
-  async function reconcileLastOperation() {
-    if (!internal.pendingOrder) return;
-    const history = await loadHistory();
-    const candidates = history.filter(item => isDemoHistory(item) && !internal.historyBaseline.has(String(item.id)));
-    const match = candidates.find(item => !internal.pendingOrder.symbol || compact(item.symbol) === compact(internal.pendingOrder.symbol)) || candidates[0];
-    if (!match) return;
-    internal.pendingOrder.id = match.id;
-    internal.pendingOrder.expirationAt = Number(match.expiration_timestamp || 0) * 1000 || internal.pendingOrder.expirationAt;
-    internal.pendingOrder.strike = Number(match.symbol_price) || internal.pendingOrder.strike;
-    let outcome = outcomeOf(match);
-    let inferredFromCandle = false;
-    if (!outcome && internal.pendingOrder.expirationAt && Date.now() > internal.pendingOrder.expirationAt + 30000 && Number.isFinite(internal.pendingOrder.strike)) {
-      const candles = await fetchMarketCandles(internal.pendingOrder.symbol);
-      const finalCandle = candles.filter(item => item.time < internal.pendingOrder.expirationAt).at(-1);
-      if (finalCandle) {
-        const difference = finalCandle.close - internal.pendingOrder.strike;
-        if (Math.abs(difference) < Number.EPSILON) outcome = "DRAW";
-        else outcome = internal.pendingOrder.direction === "BUY" ? (difference > 0 ? "WIN" : "LOSS") : (difference < 0 ? "WIN" : "LOSS");
-        inferredFromCandle = true;
-      }
-    }
-    if (!outcome) return;
-    internal.state.lastOperation = { ...internal.pendingOrder, id: match.id, outcome, status: inferredFromCandle ? `INFERRED_${outcome}` : match.status, finishedAt: new Date().toISOString() };
-    if (inferredFromCandle) logEvent("Resultado confirmado pela vela", `O histórico da Hezilex ainda estava aberto; o fechamento oficial de 5m confirmou ${outcome === "WIN" ? "resultado positivo" : outcome === "LOSS" ? "resultado negativo" : "empate"}.`, outcome === "LOSS" ? "warning" : "success", `inferred-${match.id}`);
-    if (outcome === "LOSS" && internal.state.gale.current < MAX_GALES) {
-      internal.state.gale.current += 1;
-      internal.state.protection.pending = true;
-      if (internal.state.symbol === internal.pendingOrder.symbol) {
-        const candles = await fetchMarketCandles(internal.pendingOrder.symbol);
-        const values = candles.slice(-80).flatMap(item => [item.high, item.low]);
-        const minimum = Math.min(...values);
-        const priceRange = Math.max(...values) - minimum || 1;
-        renderMarkings([...internal.markings.filter(line => line.type !== "PROTECTION"), { type: "PROTECTION", y1: clamp(1 - (internal.pendingOrder.strike - minimum) / priceRange) }], "loss-protection");
-      }
-      logEvent("Proteção preparada", `Resultado negativo na Conta Demo. Próxima entrada válida em ${Math.pow(2, internal.state.gale.current)}x, com teto de ${MAX_GALES} proteções.`, "warning", `protection-${match.id}`);
-    } else if (outcome === "LOSS") {
-      internal.mode = "stopped";
-      internal.state.mode = "stopped";
-      internal.state.protection.pending = false;
-      logEvent("Limite de proteção atingido", "Duas proteções foram usadas. O Atlas parou automaticamente.", "danger", `gale-stop-${match.id}`);
-    } else {
-      internal.state.gale.current = 0;
-      internal.state.protection.pending = false;
-      internal.protectionBase = null;
-      renderMarkings(internal.markings.filter(line => line.type !== "PROTECTION"), internal.state.markings.source);
-      logEvent(outcome === "WIN" ? "Resultado positivo" : "Operação devolvida", "Proteção reiniciada para a entrada-base de 1%.", "success", `result-${match.id}`);
-    }
-    internal.pendingOrder = null;
+  async function observeManualOperation() {
+    if (Date.now() - internal.lastHistoryCheckAt < 10000) return;
+    internal.lastHistoryCheckAt = Date.now();
+    try {
+      const response = await fetch("/binary/history/0", { credentials: "include", cache: "no-store" });
+      if (!response.ok) return;
+      const payload = await response.json();
+      const history = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+      const latest = history.sort((left, right) => Number(right.created_at_timestamp || right.expiration_timestamp || right.id || 0) - Number(left.created_at_timestamp || left.expiration_timestamp || left.id || 0))[0];
+      if (!latest) return;
+      const outcome = operationOutcome(latest);
+      const id = String(latest.id ?? latest.operation_id ?? latest.created_at_timestamp ?? latest.expiration_timestamp ?? "latest");
+      const key = `${id}-${outcome}`;
+      if (key === internal.lastObservedOperationKey) return;
+      const rawTimestamp = Number(latest.updated_at_timestamp || latest.expiration_timestamp || latest.created_at_timestamp || 0);
+      const eventTimestamp = rawTimestamp > 1e12 ? rawTimestamp : rawTimestamp * 1000;
+      const firstObservation = internal.lastObservedOperationKey == null;
+      internal.lastObservedOperationKey = key;
+      if (firstObservation && (!eventTimestamp || Date.now() - eventTimestamp > 15 * 60 * 1000)) return;
+      const directionText = compact(latest.direction || latest.type || latest.operation || latest.option_type).toLowerCase();
+      const direction = /buy|call|up|compra|alta/.test(directionText) ? "BUY" : /sell|put|down|venda|baixa/.test(directionText) ? "SELL" : null;
+      internal.state.manualOperation = {
+        key,
+        asset: compact(latest.asset || latest.symbol || latest.instrument || internal.state.asset),
+        direction,
+        outcome,
+        amount: Number(latest.amount ?? Number(latest.amount_cents || 0) / 100) || null,
+        observedAt: new Date().toISOString()
+      };
+    } catch { /* o humor continua sem o histórico */ }
   }
-
-  async function placeDemoOrder() {
-    const analysis = internal.state.analysis;
-    if (internal.mode !== "running" || analysis.direction === "WAIT" || analysis.confidence < MIN_CONFIDENCE) return false;
-    if (internal.pendingOrder || internal.lastOrderCandle === analysis.candleTime || internal.state.userActive || internal.state.protection.active) return false;
-    if (!internal.state.account.verified || !internal.state.account.isDemo || internal.state.account.isReal !== false) {
-      logEvent("Entrada bloqueada", "A Conta Demo não pôde ser confirmada; nenhum botão foi acionado.", "danger", "demo-not-verified");
-      return false;
-    }
-    if (!(Number(internal.state.balance) > MINIMUM_BALANCE) || !internal.state.defaults.timeframe || !internal.state.defaults.expiration) return false;
-    const cycleBase = internal.protectionBase ?? internal.state.risk.baseAmount;
-    const amount = Math.round(cycleBase * Math.pow(2, internal.state.gale.current) * 100) / 100;
-    const permission = await chrome.runtime.sendMessage({ type: "financial_permission", demoVerified: true, isReal: false, amount });
-    if (!permission?.allowed) throw new Error(permission?.reason || "Operação não autorizada");
-    const history = await loadHistory();
-    internal.historyBaseline = new Set(history.filter(isDemoHistory).map(item => String(item.id)));
-    await applyRiskAmount(amount);
-    await detectAccount();
-    if (!internal.state.account.verified || !internal.state.account.isDemo || internal.state.account.isReal !== false) throw new Error("Conta mudou durante a preparação; operação cancelada");
-    const pattern = analysis.direction === "BUY" ? /comprar/i : /vender/i;
-    const button = [...document.querySelectorAll("button")].filter(visible).find(item => pattern.test(compact(item.textContent)));
-    if (!button) throw new Error("Botão de compra/venda não localizado");
-    button.click();
-    if (internal.state.gale.current === 0) internal.protectionBase = amount;
-    internal.lastOrderCandle = analysis.candleTime;
-    internal.pendingOrder = { id: null, symbol: internal.state.symbol, asset: internal.state.asset, direction: analysis.direction, amount, gale: internal.state.gale.current, reason: analysis.reason, placedAt: new Date().toISOString(), account: "Conta Demo" };
-    internal.state.lastOperation = { ...internal.pendingOrder, status: "OPEN" };
-    logEvent(`Entrada de ${analysis.direction === "BUY" ? "COMPRA" : "VENDA"} realizada`, `${internal.state.asset}, Conta Demo, R$ ${formatMoney(amount)}. Motivos: ${analysis.reason}.`, "signal", `order-${internal.state.symbol}-${analysis.candleTime}`);
-    return true;
-  }
-
   function cleanupExpiredMarkings() {
     const active = internal.markings.filter(line => !line.expiresAt || line.expiresAt > Date.now());
     if (active.length !== internal.markings.length) {
@@ -532,26 +519,11 @@
       logEvent("Linha de proteção removida", "A vela terminou e a marcação temporária foi limpa.", "success", `protection-clean-${Date.now()}`);
     }
   }
-  function injectAnalysisPanel() {
-    let panel = document.getElementById("__atlas_guard_panel");
-    if (!panel) {
-      panel = document.createElement("section");
-      panel.id = "__atlas_guard_panel";
-      panel.style.cssText = "position:fixed;z-index:2147483647;left:18px;right:18px;bottom:16px;min-height:68px;padding:12px 16px;border:1px solid rgba(184,245,63,.34);border-radius:12px;background:rgba(5,15,27,.94);box-shadow:0 18px 48px rgba(0,0,0,.45);color:#edf6ff;font-family:Inter,system-ui,sans-serif;pointer-events:none;display:flex;align-items:center;justify-content:space-between;gap:18px";
-      document.documentElement.appendChild(panel);
-    }
-    const direction = internal.state.analysis.direction === "BUY" ? "COMPRA" : internal.state.analysis.direction === "SELL" ? "VENDA" : "AGUARDAR";
-    const color = direction === "COMPRA" ? "#47dfa0" : direction === "VENDA" ? "#ff647c" : "#f4b955";
-    const amount = internal.state.risk.nextAmount == null ? "—" : `R$ ${formatMoney(internal.state.risk.nextAmount)}`;
-    panel.innerHTML = `<div><div style="color:#b8f53f;font-size:9px;font-weight:800;letter-spacing:.14em">ATLAS GUARD · CONTA DEMO · PRÓXIMA ${amount}</div><strong style="display:block;margin-top:6px;font-size:13px">${internal.state.analysis.reason}</strong></div><div style="text-align:right"><span style="display:block;color:#8195ac;font-size:8px">DIREÇÃO</span><b style="display:block;margin-top:5px;color:${color};font-size:12px">${direction}</b></div>`;
-    return true;
-  }
   function snapshot() {
     return {
       ...internal.state,
       account: { ...internal.state.account }, defaults: { ...internal.state.defaults }, analysis: { ...internal.state.analysis },
-      protection: { ...internal.state.protection }, risk: { ...internal.state.risk }, markings: { ...internal.state.markings }, gale: { ...internal.state.gale },
-      lastOperation: internal.state.lastOperation ? { ...internal.state.lastOperation } : null,
+      protection: { ...internal.state.protection }, risk: { ...internal.state.risk }, markings: { ...internal.state.markings },
       events: internal.state.events.map(event => ({ ...event }))
     };
   }
@@ -562,18 +534,13 @@
   async function monitorCycle(forceAnalysis = false) {
     await inspect();
     const changedAsset = internal.state.asset && internal.state.asset !== internal.lastAsset;
-    if (!internal.state.userActive && internal.state.asset && (!internal.state.defaults.timeframe || !internal.state.defaults.expiration || changedAsset)) await ensureDefaults();
     const candleChanged = fiveMinuteBoundary() > Number(internal.state.analysis.candleTime || 0);
     if (internal.state.chartDetected && (forceAnalysis || changedAsset || candleChanged || Date.now() - internal.lastAnalysisAt > 12000)) {
       await analyzeChart();
       internal.lastAnalysisAt = Date.now();
     }
+    await observeManualOperation();
     cleanupExpiredMarkings();
-    await reconcileLastOperation();
-    if (internal.mode === "running") {
-      injectAnalysisPanel();
-      try { await placeDemoOrder(); } catch (error) { logEvent("Operação cancelada", error.message, "danger", `order-error-${error.message}`); }
-    }
     internal.lastAsset = internal.state.asset;
     await publishState();
     return snapshot();
@@ -582,35 +549,12 @@
   async function dispatchCommand(command) {
     if (command.action === "inspect") return monitorCycle(true);
     if (command.action === "ensure_defaults") return ensureDefaults();
-    if (command.action === "overlay") return injectAnalysisPanel();
+    if (command.action === "set_timeframe") return setTimeframeFive();
+    if (command.action === "set_expiration") return setExpirationFive();
+    if (command.action === "set_risk") return setRiskOnePercent();
+    if (command.action === "apply_setup") return applySetup();
     if (command.action === "set_markings") return renderMarkings(command.lines || [], "dashboard");
-    if (command.action === "start") {
-      await monitorCycle(true);
-      if (!(Number(internal.state.balance) > MINIMUM_BALANCE)) throw new Error("Saldo precisa estar acima de R$ 500,00 para iniciar");
-      if (!internal.state.account.verified || !internal.state.account.isDemo || internal.state.account.isReal !== false) throw new Error("Selecione e confirme a Conta Demo. A conta real permanece bloqueada.");
-      internal.mode = "running";
-      internal.state.mode = "running";
-      logEvent("Robô iniciado na Conta Demo", `Entrada-base de 1% (R$ ${formatMoney(internal.state.risk.baseAmount)}) e proteção 2x, limitada a ${MAX_GALES}.`, "signal", `start-${Date.now()}`);
-      injectAnalysisPanel();
-      await publishState();
-      return snapshot();
-    }
-    if (command.action === "pause") {
-      internal.mode = "paused";
-      internal.state.mode = "paused";
-      logEvent("Robô pausado", "Novas entradas foram pausadas.", "warning", `pause-${Date.now()}`);
-      await publishState();
-      return snapshot();
-    }
-    if (command.action === "stop") {
-      internal.mode = "stopped";
-      internal.state.mode = "stopped";
-      internal.state.realOrderExecution = false;
-      document.getElementById("__atlas_guard_panel")?.remove();
-      logEvent("Robô parado", "O ciclo automático foi encerrado.", "danger", `stop-${Date.now()}`);
-      await publishState();
-      return snapshot();
-    }
+    if (["start", "buy", "sell", "place_order"].includes(command.action)) throw new Error("O Atlas analisa e configura a tela, mas não executa operações.");
     throw new Error("Ação desconhecida");
   }
   function enqueue(command) {
