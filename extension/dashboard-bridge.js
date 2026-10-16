@@ -20,6 +20,7 @@
         type: "ready",
         state: {
           bridge: "ready",
+          version: chrome.runtime.getManifest().version,
           mode: "stopped",
           asset: null,
           timeframe: null,

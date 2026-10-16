@@ -1,13 +1,35 @@
 <!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="popup.css"><title>Atlas Guard</title></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <link rel="stylesheet" href="popup.css">
+  <title>Atlas</title>
+</head>
 <body>
-  <header><span class="mark"><i></i><i></i><i></i></span><div><b>ATLAS</b><small>CONEXÃO LOCAL v2</small></div></header>
+  <header>
+    <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>
+    <div class="brand"><b>ATLAS</b><span>EXTENSÃO OFICIAL</span></div>
+    <span class="version-pill" id="headerVersion">v—</span>
+  </header>
   <main>
-    <div class="status"><span id="dot"></span><div><small>PAINEL ATUAL</small><strong id="origin">Verificando…</strong></div></div>
-    <p id="message">Autorize o painel Atlas aberto nesta aba para que ele envie comandos à Hezilex.</p>
-    <button id="authorize">Autorizar este painel</button>
-    <div class="safety"><b>OPERAÇÕES SEMPRE MANUAIS</b><span>O Atlas apenas lê o mercado e configura gráfico, expiração e valor.</span></div>
+    <section class="status-card">
+      <span class="status-dot" id="dot"></span>
+      <div><small id="statusEyebrow">VERIFICANDO</small><strong id="statusTitle">Só um instante…</strong></div>
+    </section>
+
+    <p id="message">Confirmando a conexão e procurando atualizações.</p>
+
+    <section class="versions" aria-label="Versões da extensão">
+      <div><small>INSTALADA</small><b id="installedVersion">—</b></div>
+      <div><small>MAIS RECENTE</small><b id="latestVersion">Verificando…</b></div>
+      <span id="updateBadge">VERIFICANDO</span>
+    </section>
+
+    <button class="primary" id="primaryAction" type="button" disabled>Verificando…</button>
+    <button class="secondary" id="openAtlas" type="button">Abrir o Atlas</button>
+
+    <div class="safety"><b>VOCÊ CONTINUA NO CONTROLE</b><span>O Atlas analisa o mercado e configura a tela. Compra e venda continuam manuais.</span></div>
   </main>
   <script src="popup.js"></script>
 </body>

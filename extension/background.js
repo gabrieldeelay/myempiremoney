@@ -1,17 +1,47 @@
 const DEFAULTS = {
   allowedOrigins: [],
-  assets: {}
+  assets: {},
+  updateState: null,
+  lastUpdateCheckAt: 0
 };
+
+const UPDATE_INTERVAL = 4 * 60 * 60 * 1000;
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(Object.keys(DEFAULTS));
   await chrome.storage.local.set({ ...DEFAULTS, ...current });
 });
 
+async function checkForUpdates(force = false) {
+  const stored = await chrome.storage.local.get(["lastUpdateCheckAt"]);
+  if (!force && Date.now() - Number(stored.lastUpdateCheckAt || 0) < UPDATE_INTERVAL) {
+    return { status: "recently_checked", checkedAt: stored.lastUpdateCheckAt };
+  }
+  if (typeof chrome.runtime.requestUpdateCheck !== "function") return { status: "unsupported" };
+  await chrome.storage.local.set({ lastUpdateCheckAt: Date.now() });
+  try {
+    const result = await chrome.runtime.requestUpdateCheck();
+    const status = result?.status || "no_update";
+    const updateState = { status, version: result?.version || null, checkedAt: Date.now() };
+    await chrome.storage.local.set({ updateState });
+    return updateState;
+  } catch (error) {
+    const updateState = { status: "error", error: error.message, checkedAt: Date.now() };
+    await chrome.storage.local.set({ updateState });
+    return updateState;
+  }
+}
+
+chrome.runtime.onStartup.addListener(() => { checkForUpdates(false); });
+chrome.runtime.onUpdateAvailable.addListener(async details => {
+  await chrome.storage.local.set({ updateState: { status: "reloading", version: details.version, checkedAt: Date.now() } });
+  chrome.runtime.reload();
+});
+
 function originCanBeAuthorized(origin) {
   try {
     const url = new URL(origin);
-    return url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname.endsWith(".vercel.app") || url.hostname.endsWith(".chatgpt.site");
+    return url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "atlas-guard-trading.vercel.app";
   } catch {
     return false;
   }
@@ -42,6 +72,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message?.type === "get_settings") {
       return chrome.storage.local.get(Object.keys(DEFAULTS));
+    }
+    if (message?.type === "check_for_updates") {
+      return checkForUpdates(message.force === true);
+    }
+    if (message?.type === "extension_info") {
+      const stored = await chrome.storage.local.get(["updateState", "lastUpdateCheckAt"]);
+      return { version: chrome.runtime.getManifest().version, ...stored };
     }
     if (message?.type === "dashboard_command") {
       const origin = senderOrigin(sender);

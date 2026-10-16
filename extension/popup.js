@@ -1,42 +1,131 @@
-const authorize = document.getElementById("authorize");
-const originLabel = document.getElementById("origin");
-const message = document.getElementById("message");
-const dot = document.getElementById("dot");
+const DASHBOARD_URL = "https://atlas-guard-trading.vercel.app/";
+const RELEASE_URL = `${DASHBOARD_URL}extension-release.json`;
+const installedVersion = chrome.runtime.getManifest().version;
+const elements = Object.fromEntries(["dot", "statusEyebrow", "statusTitle", "message", "installedVersion", "latestVersion", "updateBadge", "primaryAction", "openAtlas", "headerVersion"].map(id => [id, document.getElementById(id)]));
+let activeTab = null;
 let currentOrigin = null;
+let action = "open";
+let release = null;
 
 function eligible(origin) {
   try {
     const host = new URL(origin).hostname;
-    return host === "127.0.0.1" || host === "localhost" || host.endsWith(".vercel.app") || host.endsWith(".chatgpt.site");
+    return host === "127.0.0.1" || host === "localhost" || host === "atlas-guard-trading.vercel.app";
   } catch { return false; }
 }
 
-async function load() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  try { currentOrigin = new URL(tab.url).origin; } catch { currentOrigin = null; }
-  originLabel.textContent = currentOrigin || "Aba não compatível";
-  if (!eligible(currentOrigin)) {
-    authorize.disabled = true;
-    message.textContent = "Abra o painel Atlas Guard e clique novamente no ícone da extensão.";
-    return;
+function compareVersions(left, right) {
+  const a = String(left || "0").split(".").map(Number);
+  const b = String(right || "0").split(".").map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] || 0) - (b[index] || 0);
+    if (difference) return Math.sign(difference);
   }
-  const settings = await chrome.runtime.sendMessage({ type: "get_settings" });
-  if (settings.allowedOrigins?.includes(currentOrigin)) {
-    dot.classList.add("ready");
-    authorize.textContent = "Painel autorizado";
-    message.textContent = "Recarregue o painel Atlas para concluir a conexão com a Hezilex.";
-  }
+  return 0;
 }
 
-authorize.addEventListener("click", async () => {
-  if (!eligible(currentOrigin)) return;
-  const result = await chrome.runtime.sendMessage({ type: "authorize_origin", origin: currentOrigin });
-  if (result.ok) {
-    dot.classList.add("ready");
-    authorize.textContent = "Painel autorizado";
-    message.textContent = "Agora recarregue o painel Atlas Guard.";
+function setStatus(kind, eyebrow, title, copy) {
+  elements.dot.className = `status-dot${kind ? ` ${kind}` : ""}`;
+  elements.statusEyebrow.textContent = eyebrow;
+  elements.statusTitle.textContent = title;
+  elements.message.textContent = copy;
+}
+
+async function getRelease() {
+  try {
+    const response = await fetch(`${RELEASE_URL}?t=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error("release unavailable");
+    return response.json();
+  } catch { return null; }
+}
+
+function render(settings = {}) {
+  const publicVersion = release?.publicVersion || release?.version || null;
+  const outdated = publicVersion && compareVersions(publicVersion, installedVersion) > 0;
+  const authorized = eligible(currentOrigin) && settings.allowedOrigins?.includes(currentOrigin);
+  elements.installedVersion.textContent = `v${installedVersion}`;
+  elements.headerVersion.textContent = `v${installedVersion}`;
+  elements.latestVersion.textContent = publicVersion ? `v${publicVersion}` : "Indisponível";
+  elements.primaryAction.disabled = false;
+
+  if (outdated) {
+    action = "update";
+    elements.updateBadge.textContent = "ATUALIZAÇÃO";
+    elements.updateBadge.className = "outdated";
+    elements.primaryAction.textContent = "Atualizar agora";
+    setStatus("update", "NOVA VERSÃO", `v${publicVersion} disponível`, "Clique uma vez. O Edge baixa e aplica a atualização oficial automaticamente.");
+    return;
   }
+
+  elements.updateBadge.textContent = publicVersion ? "ATUALIZADA" : "SEM RESPOSTA";
+  elements.updateBadge.className = publicVersion ? "current" : "";
+  if (!eligible(currentOrigin)) {
+    action = "open";
+    const host = (() => { try { return new URL(activeTab?.url).hostname; } catch { return "esta aba"; } })();
+    elements.primaryAction.textContent = "Abrir o Atlas";
+    setStatus("ready", "EXTENSÃO ATIVA", "Atlas pronto", `Você abriu a extensão em ${host}. O Atlas só precisa se conectar dentro do próprio painel.`);
+    return;
+  }
+  if (!authorized) {
+    action = "authorize";
+    elements.primaryAction.textContent = "Conectar este painel";
+    setStatus("update", "PAINEL ENCONTRADO", "Falta conectar", "Este é o painel certo. Um clique conclui a conexão local.");
+    return;
+  }
+  action = "refresh";
+  elements.primaryAction.textContent = "Reconectar painel";
+  setStatus("ready", "TUDO CERTO", "Painel conectado", "A extensão está atualizada, autorizada e pronta para ler a Hezilex.");
+}
+
+async function load() {
+  [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  try { currentOrigin = new URL(activeTab?.url).origin; } catch { currentOrigin = null; }
+  const [settings, releaseResult] = await Promise.all([
+    chrome.runtime.sendMessage({ type: "get_settings" }),
+    getRelease()
+  ]);
+  release = releaseResult;
+  render(settings || {});
+}
+
+elements.primaryAction.addEventListener("click", async () => {
+  elements.primaryAction.disabled = true;
+  if (action === "update") {
+    const result = await chrome.runtime.sendMessage({ type: "check_for_updates", force: true });
+    if (result?.status === "update_available" || result?.status === "reloading") {
+      elements.primaryAction.textContent = "Aplicando atualização…";
+      elements.message.textContent = "Atualização encontrada. O Atlas será reiniciado pelo Edge em instantes.";
+      return;
+    }
+    elements.primaryAction.disabled = false;
+    elements.primaryAction.textContent = "Abrir página oficial";
+    elements.message.textContent = "A atualização ainda não chegou ao seu Edge. Abra a página oficial para forçar uma nova verificação.";
+    action = "store";
+    return;
+  }
+  if (action === "store") {
+    await chrome.tabs.create({ url: release?.storeUrl || DASHBOARD_URL });
+    window.close();
+    return;
+  }
+  if (action === "authorize") {
+    await chrome.runtime.sendMessage({ type: "authorize_origin", origin: currentOrigin });
+    if (activeTab?.id) await chrome.tabs.reload(activeTab.id);
+    window.close();
+    return;
+  }
+  if (action === "refresh") {
+    if (activeTab?.id) await chrome.tabs.reload(activeTab.id);
+    window.close();
+    return;
+  }
+  await chrome.tabs.create({ url: DASHBOARD_URL });
+  window.close();
+});
+
+elements.openAtlas.addEventListener("click", async () => {
+  await chrome.tabs.create({ url: DASHBOARD_URL });
+  window.close();
 });
 
 load();
-

@@ -10,16 +10,17 @@ module.exports = async function handler(request, response) {
     response.status(200).json({
       available,
       status: available ? "available" : "review",
-      version: "2.3.0",
+      publicVersion: "2.3.0",
+      candidateVersion: "2.4.0",
       storeUrl: available ? STORE_URL : null
     });
   } catch {
     response.status(200).json({
       available: false,
       status: "review",
-      version: "2.3.0",
+      publicVersion: "2.3.0",
+      candidateVersion: "2.4.0",
       storeUrl: null
     });
   }
 };
-
