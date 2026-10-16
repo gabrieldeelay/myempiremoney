@@ -8,7 +8,10 @@ const frame = $("hezilexFrame");
 const pending = new Map();
 let sequence = 0;
 let extensionReady = false;
+let directBridgeReady = false;
+let iframeBridgeReady = false;
 let verificationInFlight = false;
+let macroInFlight = false;
 let toastTimer = null;
 let lastLoginState = null;
 let state = {
@@ -261,8 +264,8 @@ function sendCommand(action, payload = {}, timeoutMs = 8000) {
     }, timeoutMs);
     pending.set(requestId, { resolve, reject, timer });
     const message = { source: DASHBOARD_SOURCE, type: "command", requestId, action, ...payload };
-    window.postMessage(message, location.origin);
-    frame.contentWindow?.postMessage(message, HEZILEX_ORIGIN);
+    if (directBridgeReady || !iframeBridgeReady) window.postMessage(message, location.origin);
+    else frame.contentWindow?.postMessage(message, HEZILEX_ORIGIN);
   });
 }
 
@@ -270,6 +273,8 @@ window.addEventListener("message", event => {
   const fromIframe = event.origin === HEZILEX_ORIGIN && event.source === frame.contentWindow && event.data?.source === EXTENSION_SOURCE;
   const fromDirect = event.origin === location.origin && event.source === window && event.data?.source === DIRECT_EXTENSION_SOURCE;
   if (!fromIframe && !fromDirect) return;
+  if (fromDirect) directBridgeReady = true;
+  if (fromIframe) iframeBridgeReady = true;
 
   if (event.data.type === "ready" || event.data.type === "state") {
     renderState(event.data.state || {});
@@ -285,7 +290,13 @@ window.addEventListener("message", event => {
 });
 
 async function runMacro(action, button, successMessage) {
+  if (macroInFlight) {
+    showToast("Termine o ajuste atual antes de iniciar outro.", "info");
+    return null;
+  }
+  macroInFlight = true;
   const original = button.innerHTML;
+  setControls(false);
   button.classList.add("loading");
   button.innerHTML = "<span>·</span><b>Aplicando…</b>";
   try {
@@ -315,9 +326,10 @@ async function runMacro(action, button, successMessage) {
     robot.speak("error", {}, true);
     return null;
   } finally {
+    macroInFlight = false;
     button.classList.remove("loading");
     button.innerHTML = original;
-    setControls(extensionReady);
+    setControls(extensionReady && marketReady());
   }
 }
 
@@ -325,7 +337,7 @@ async function verifyExtension() {
   if (verificationInFlight) return;
   verificationInFlight = true;
   try {
-    const result = await sendCommand("inspect", {}, 3500);
+    const result = await sendCommand("ping", {}, 1600);
     renderState(result);
   } catch {
     if (!extensionReady) {
@@ -365,7 +377,7 @@ $("robotQuestions").addEventListener("click", event => {
 
 robot.init();
 renderConnection(false);
-setInterval(verifyExtension, 4500);
+setInterval(verifyExtension, 2500);
 setInterval(() => {
   const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;
   if (extensionReady && inspectedAt && Date.now() - inspectedAt > 12000) $("monitorPulse").textContent = "Aguardando atualização";
