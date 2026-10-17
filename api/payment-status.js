@@ -17,9 +17,14 @@ module.exports = async function handler(req, res) {
     const payload = await response.json().catch(() => ({ ok: false, error: "Resposta inválida da Venopag." }));
     if (!payload.ok) return res.status(response.status === 429 ? 429 : 422).json({ error: payload.error || "Não foi possível consultar o PIX." });
     const status = String(payload.status || "pending").toLowerCase();
-    await supabase.from("payments").update({ status, raw: payload, updated_at: new Date().toISOString() }).eq("id", payment.id);
-    if (status === "confirmed") await supabase.from("profiles").update({ access_granted: true, access_status: "active", updated_at: new Date().toISOString() }).eq("id", user.id);
-    else if (REVOKED.has(status)) await supabase.from("profiles").update({ access_granted: false, access_status: status, updated_at: new Date().toISOString() }).eq("id", user.id);
+    if (status === "confirmed") {
+      await supabase.from("payments").update({ raw: payload, updated_at: new Date().toISOString() }).eq("id", payment.id);
+      const { error } = await supabase.rpc("activate_atlas_payment", { p_payment_id: payment.id });
+      if (error) throw error;
+    } else {
+      await supabase.from("payments").update({ status, raw: payload, updated_at: new Date().toISOString() }).eq("id", payment.id);
+      if (REVOKED.has(status)) await supabase.from("profiles").update({ access_granted: false, access_status: status, updated_at: new Date().toISOString() }).eq("id", user.id);
+    }
     return res.status(200).json({ status, accessGranted: status === "confirmed", remaining: payload.remaining ?? null });
   } catch (error) {
     return sendError(res, error);

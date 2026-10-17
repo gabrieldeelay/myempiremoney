@@ -1,4 +1,5 @@
 import { apiFetch, getAtlasClient } from "/modules/supabase-client.js";
+
 const $ = selector => document.querySelector(selector);
 const money = value => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 const client = await getAtlasClient();
@@ -6,22 +7,46 @@ const { data: sessionData } = await client.auth.getSession();
 if (!sessionData.session) location.replace("/acesso?returnTo=/checkout");
 
 let polling;
+let config;
+let planId = new URLSearchParams(location.search).get("plan") === "monthly" ? "monthly" : "lifetime";
+let couponCode = "";
+let quote;
+
+function renderPlans() {
+  const container = $("#checkoutPlans"); container.replaceChildren();
+  Object.values(config.plans).filter(plan => plan.active !== false).forEach(plan => {
+    const label = document.createElement("label"); label.className = "plan-choice";
+    const input = document.createElement("input"); input.type = "radio"; input.name = "checkoutPlan"; input.value = plan.id; input.checked = planId === plan.id;
+    input.addEventListener("change", async () => { planId = plan.id; couponCode = ""; $("#coupon").value = ""; await loadQuote(); });
+    const title = document.createElement("b"); title.textContent = plan.label;
+    const billing = document.createElement("small"); billing.textContent = plan.billing;
+    const badge = document.createElement("em"); badge.textContent = `${Math.max(0, Math.round((1 - plan.currentPrice / plan.oldPrice) * 100))}% DE DESCONTO`;
+    label.append(input, title, billing, badge); container.append(label);
+  });
+  if (!container.querySelector("input:checked")) { const first = container.querySelector("input"); if (first) { first.checked = true; planId = first.value; } }
+}
+
+async function loadQuote() {
+  const result = await apiFetch("/api/payment-create", { method: "POST", body: JSON.stringify({ action: "quote", planId, couponCode }) });
+  quote = result.quote;
+  $("#oldPrice").textContent = money(quote.originalPrice); $("#currentPrice").textContent = money(quote.amount); $("#checkoutSavings").textContent = `Você economiza ${money(quote.savings)} nesta oferta.`; $("#discountBadge").textContent = `${quote.discountPercent}% DE DESCONTO`;
+  $("#checkoutBenefits").replaceChildren(...quote.plan.benefits.map(text => { const item = document.createElement("li"); item.textContent = text; return item; }));
+  $("#checkoutValues").classList.remove("price-pop"); requestAnimationFrame(() => $("#checkoutValues").classList.add("price-pop"));
+}
+
 try {
-  const [account, config] = await Promise.all([apiFetch("/api/me"), fetch("/api/public-config").then(response => response.json())]);
+  const [account, publicConfig] = await Promise.all([apiFetch("/api/me"), fetch("/api/public-config").then(response => response.json())]);
   if (account.profile?.role === "admin") location.replace("/admin");
   if (account.profile?.access_granted) location.replace("/app");
-  $("#name").value = account.profile?.name || "";
-  $("#document").value = account.profile?.document || "";
-  $("#oldPrice").textContent = money(config.pricing.oldPrice);
-  $("#currentPrice").textContent = money(config.pricing.currentPrice);
+  config = publicConfig; renderPlans();
+  $("#name").value = account.profile?.name || ""; $("#document").value = account.profile?.document || "";
+  await loadQuote();
   if (account.payment?.status === "pending") checkStatus();
-} catch (error) { $("#paymentStatus").textContent = error.message; $("#paymentStatus").classList.add("error"); }
+} catch (error) { $("#paymentStatus").textContent = error.message; $("#paymentStatus").className = "status error"; }
 
 function showPayment(payment) {
   $("#emptyPix").classList.add("hidden"); $("#pixReady").classList.remove("hidden");
-  $("#qrImage").src = payment.qrUrl || payment.qrImage;
-  $("#pixAmount").textContent = money(payment.amount);
-  $("#pixCode").textContent = payment.pixCode;
+  $("#qrImage").src = payment.qrUrl || payment.qrImage; $("#pixAmount").textContent = money(payment.amount); $("#pixCode").textContent = payment.pixCode;
   clearInterval(polling); polling = setInterval(checkStatus, 5000); checkStatus();
 }
 
@@ -33,10 +58,11 @@ async function checkStatus() {
   } catch (error) { if (!error.message.includes("Nenhuma cobrança")) { $("#pixStatus").textContent = error.message; $("#pixStatus").className = "status error"; } }
 }
 
+$("#applyCoupon").addEventListener("click", async () => { const button = $("#applyCoupon"); button.disabled = true; try { couponCode = $("#coupon").value.trim().toUpperCase(); await loadQuote(); $("#couponStatus").textContent = quote.coupon ? `Cupom ${quote.coupon.code} aplicado.` : "Oferta atualizada."; $("#couponStatus").className = "step-message"; } catch (error) { $("#couponStatus").textContent = error.message; $("#couponStatus").className = "step-message error"; } finally { button.disabled = false; } });
 $("#paymentForm").addEventListener("submit", async event => {
   event.preventDefault(); const submit = event.currentTarget.querySelector("button[type=submit]"); submit.disabled = true;
-  try { const payment = await apiFetch("/api/payment-create", { method: "POST", body: JSON.stringify({ name: $("#name").value, document: $("#document").value }) }); if (payment.accessGranted) location.replace("/app"); else showPayment(payment.payment); }
+  try { const result = await apiFetch("/api/payment-create", { method: "POST", body: JSON.stringify({ planId, couponCode, name: $("#name").value, document: $("#document").value }) }); if (result.accessGranted) location.replace("/app"); else showPayment(result.payment); }
   catch (error) { $("#paymentStatus").textContent = error.message; $("#paymentStatus").className = "status error"; } finally { submit.disabled = false; }
 });
-$("#copyPix").addEventListener("click", async () => { await navigator.clipboard.writeText($("#pixCode").textContent); $("#copyPix").textContent = "Código copiado ✓"; setTimeout(() => $("#copyPix").textContent = "Copiar código PIX", 1800); });
+$("#copyPix").addEventListener("click", async () => { await navigator.clipboard.writeText($("#pixCode").textContent); $("#copyPix").textContent = "Código copiado ✓"; });
 $("#signOut").addEventListener("click", async () => { await client.auth.signOut(); location.replace("/"); });

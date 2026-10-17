@@ -43,9 +43,14 @@ module.exports = async function handler(req, res) {
     if (!requestNumber || !status) return res.status(422).json({ error: "Evento incompleto." });
     const { data: payment } = await supabase.from("payments").select("id,user_id,status").eq("request_number", requestNumber).maybeSingle();
     if (!payment) return res.status(200).json({ ok: true });
-    if (payment.status !== status) await supabase.from("payments").update({ status, raw: event, updated_at: new Date().toISOString() }).eq("id", payment.id);
-    if (status === "confirmed") await supabase.from("profiles").update({ access_granted: true, access_status: "active", updated_at: new Date().toISOString() }).eq("id", payment.user_id);
-    else if (REVOKED.has(status)) await supabase.from("profiles").update({ access_granted: false, access_status: status, updated_at: new Date().toISOString() }).eq("id", payment.user_id);
+    if (status === "confirmed") {
+      await supabase.from("payments").update({ raw: event, updated_at: new Date().toISOString() }).eq("id", payment.id);
+      const { error } = await supabase.rpc("activate_atlas_payment", { p_payment_id: payment.id });
+      if (error) throw error;
+    } else {
+      if (payment.status !== status) await supabase.from("payments").update({ status, raw: event, updated_at: new Date().toISOString() }).eq("id", payment.id);
+      if (REVOKED.has(status)) await supabase.from("profiles").update({ access_granted: false, access_status: status, updated_at: new Date().toISOString() }).eq("id", payment.user_id);
+    }
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error(error);

@@ -52,10 +52,42 @@ $("#loginForm").addEventListener("submit", async event => {
   } catch (error) { status("#loginStatus", error.message.includes("Invalid login") ? "E-mail ou senha incorretos." : error.message, "error"); submit.disabled = false; }
 });
 
-$("#signupForm").addEventListener("submit", async event => {
-  event.preventDefault();
-  const submit = event.currentTarget.querySelector("button[type=submit]");
-  submit.disabled = true; status("#signupStatus", "Criando sua conta…");
+const signupSteps = [...document.querySelectorAll("[data-signup-step]")];
+const signupFields = [$("#signupName"), $("#signupEmail"), $("#signupPhone"), $("#signupPassword"), $("#signupPasswordConfirmation")];
+const signupMessages = ["Vamos começar", "Bom começo", "Metade concluída", "Estamos quase lá", "Último passo"];
+let signupStep = 0;
+
+function renderSignupStep() {
+  signupSteps.forEach((step, index) => step.classList.toggle("active", index === signupStep));
+  $("#signupProgressText").textContent = `Passo ${signupStep + 1} de ${signupSteps.length}`;
+  $("#signupProgressMessage").textContent = signupMessages[signupStep];
+  $("#signupProgressBar").style.width = `${((signupStep + 1) / signupSteps.length) * 100}%`;
+  $("#signupBack").hidden = signupStep === 0;
+  $("#signupNext").textContent = signupStep === signupSteps.length - 1 ? "Criar conta e continuar" : "Continuar";
+  $("#signupStatus").textContent = "";
+  signupFields[signupStep]?.focus();
+}
+
+function validateSignupStep() {
+  const field = signupFields[signupStep];
+  if (!field.reportValidity()) return false;
+  if (signupStep === 0 && /\s/.test(field.value.trim())) {
+    $("#signupStatus").textContent = "Digite somente seu primeiro nome.";
+    $("#signupStatus").className = "step-message error";
+    return false;
+  }
+  if (signupStep === 4 && field.value !== $("#signupPassword").value) {
+    $("#signupStatus").textContent = "As senhas não são iguais.";
+    $("#signupStatus").className = "step-message error";
+    return false;
+  }
+  return true;
+}
+
+async function finishSignup() {
+  const submit = $("#signupNext");
+  submit.disabled = true;
+  $("#signupStatus").textContent = "Criando sua conta…";
   try {
     const email = $("#signupEmail").value.trim();
     const password = $("#signupPassword").value;
@@ -69,5 +101,18 @@ $("#signupForm").addEventListener("submit", async event => {
     const { error } = await client.auth.signInWithPassword({ email, password });
     if (error) throw error;
     location.replace("/checkout");
-  } catch (error) { status("#signupStatus", error.message, "error"); submit.disabled = false; }
+  } catch (error) {
+    $("#signupStatus").textContent = error.message;
+    $("#signupStatus").className = "step-message error";
+    submit.disabled = false;
+  }
+}
+
+$("#signupNext").addEventListener("click", async () => {
+  if (!validateSignupStep()) return;
+  if (signupStep < signupSteps.length - 1) { signupStep += 1; renderSignupStep(); }
+  else await finishSignup();
 });
+$("#signupBack").addEventListener("click", () => { if (signupStep > 0) { signupStep -= 1; renderSignupStep(); } });
+$("#signupForm").addEventListener("submit", event => { event.preventDefault(); $("#signupNext").click(); });
+renderSignupStep();

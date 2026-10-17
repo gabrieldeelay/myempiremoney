@@ -4,10 +4,15 @@ module.exports = async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Método não permitido." });
   try {
     const { user, profile, supabase } = await requireUser(req);
+    let currentProfile = profile;
+    if (profile?.plan_id === "monthly" && profile?.access_granted && profile?.access_expires_at && new Date(profile.access_expires_at) <= new Date()) {
+      const { data } = await supabase.from("profiles").update({ access_granted: false, access_status: "expired", updated_at: new Date().toISOString() }).eq("id", user.id).select("*").single();
+      currentProfile = data || { ...profile, access_granted: false, access_status: "expired" };
+    }
     const { data: payment } = await supabase.from("payments").select("request_number,status,amount,expires_at,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
     return res.status(200).json({
       user: { id: user.id, email: user.email },
-      profile: profile || { email: user.email, role: "user", access_granted: false, access_status: "pending" },
+      profile: currentProfile || { email: user.email, role: "user", access_granted: false, access_status: "pending" },
       payment: payment || null
     });
   } catch (error) {

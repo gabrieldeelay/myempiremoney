@@ -1,1 +1,28 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pagamento | Atlas</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/account.css?v=3.0.0"></head><body><main class="checkout"><header class="checkout-head"><a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><button class="tiny" id="signOut">Sair</button></header><div class="checkout-grid"><section class="checkout-card"><span class="price-old" id="oldPrice">R$ 1.499,00</span><strong class="price-current" id="currentPrice">R$ 499,90</strong><h1>Seu acesso começa depois da confirmação.</h1><p>Preencha seus dados para gerar um PIX seguro. O Atlas só libera o painel quando a Venopag confirmar o pagamento.</p><div class="secure-list"><span><i>✓</i> Liberação automática após confirmação</span><span><i>✓</i> Nenhuma senha bancária é solicitada</span><span><i>✓</i> Status reconciliado mesmo após o pagamento</span></div><form id="paymentForm"><div class="field"><label for="name">Nome completo</label><input id="name" autocomplete="name" required></div><div class="field"><label for="document">CPF ou CNPJ</label><input id="document" inputmode="numeric" required></div><button class="submit" type="submit">Gerar PIX</button><div class="status" id="paymentStatus"></div></form></section><section class="checkout-card pix-box"><div id="emptyPix"><h2>O QR Code aparece aqui.</h2><p>Depois de gerar a cobrança, você poderá copiar o código PIX e acompanhar a confirmação nesta mesma tela.</p></div><div id="pixReady" class="hidden"><img id="qrImage" alt="QR Code PIX"><h2 id="pixAmount"></h2><div class="pix-code" id="pixCode"></div><button class="submit" id="copyPix" type="button">Copiar código PIX</button><div class="status" id="pixStatus">Aguardando pagamento…</div></div></section></div></main><script type="module" src="/modules/checkout.js?v=3.0.0"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pagamento | Atlas</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/account.css?v=3.2.0">
+  <link rel="stylesheet" href="/funnel.css?v=3.2.0">
+</head>
+<body>
+  <main class="checkout">
+    <header class="checkout-head"><a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><button class="tiny" id="signOut">Sair</button></header>
+    <div class="checkout-grid">
+      <section class="checkout-card">
+        <span class="step-kicker">ESCOLHA SEU ACESSO</span><h1>Finalize em poucos passos.</h1><p>Selecione o plano, confira sua economia e gere o PIX.</p>
+        <div class="choice-grid" id="checkoutPlans"></div>
+        <div class="offer-values" id="checkoutValues"><del id="oldPrice"></del><strong id="currentPrice"></strong></div>
+        <div class="savings-copy" id="checkoutSavings"></div><ul class="benefit-list" id="checkoutBenefits"></ul>
+        <div class="coupon-row"><input id="coupon" maxlength="32" placeholder="CUPOM DE DESCONTO"><button id="applyCoupon" type="button">Aplicar</button></div><div class="step-message" id="couponStatus"></div>
+        <form id="paymentForm"><div class="field"><label for="name">Nome completo</label><input id="name" autocomplete="name" required></div><div class="field"><label for="document">CPF ou CNPJ</label><input id="document" inputmode="numeric" required></div><button class="submit" type="submit">Finalizar e gerar PIX</button><div class="status" id="paymentStatus"></div></form>
+      </section>
+      <section class="checkout-card pix-box"><div id="emptyPix"><span class="offer-badge" id="discountBadge">OFERTA ATIVA</span><h2>Pagamento rápido e seguro.</h2><p>O QR Code aparece aqui. O Atlas libera seu acesso após a confirmação do PIX.</p><div class="secure-list"><span><i>✓</i> Liberação automática</span><span><i>✓</i> Pagamento verificado</span><span><i>✓</i> Seus dados protegidos</span></div></div><div id="pixReady" class="hidden"><img id="qrImage" alt="QR Code PIX"><h2 id="pixAmount"></h2><div class="pix-code" id="pixCode"></div><button class="submit" id="copyPix" type="button">Copiar código PIX</button><div class="status" id="pixStatus">Aguardando pagamento…</div></div></section>
+    </div>
+  </main>
+  <script type="module" src="/modules/checkout.js?v=3.2.0"></script>
+</body>
+</html>

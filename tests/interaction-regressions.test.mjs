@@ -8,6 +8,8 @@ const styles = await readFile(new URL("../dist/styles.css", import.meta.url), "u
 const html = await readFile(new URL("../dist/app/index.html", import.meta.url), "utf8");
 const landing = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const access = await readFile(new URL("../dist/acesso/index.html", import.meta.url), "utf8");
+const quickSignup = await readFile(new URL("../dist/cadastro-rapido/index.html", import.meta.url), "utf8");
+const adminPage = await readFile(new URL("../dist/admin/index.html", import.meta.url), "utf8");
 
 assert.equal(normalizeAssetName("ETHUSDT"), "ETHEREUM");
 assert.equal(normalizeAssetName("sol/usdt"), "SOLANA");
@@ -66,11 +68,16 @@ assert.match(styles, /\.robot-head[^\n]+background:\s*linear-gradient\(145deg, #
 assert.match(styles, /\.cursor-glow/, "o fundo deve ter iluminação suave que acompanha o ponteiro");
 assert.match(html, /data-settings-trigger/, "a instalação deve ficar dentro de Configurações");
 assert.doesNotMatch(html, /Abrir em nova aba|app\.hezilex\.com<\/code>/, "o topo não deve exibir ações e endereço desnecessários");
-assert.match(landing, /Operar sem contexto aumenta o/, "a raiz deve apresentar a landing page do Atlas com linguagem profissional");
-assert.match(landing, /id="oldPrice"/, "a landing deve exibir o preço antigo configurável");
-assert.match(landing, /id="currentPrice"/, "a landing deve exibir o preço atual configurável");
-assert.match(landing, /href="\/acesso\?admin=1"/, "o rodapé deve oferecer acesso administrativo");
+assert.match(landing, /Operar no escuro/, "a raiz deve apresentar a nova chamada do Atlas");
+assert.doesNotMatch(landing, /id="oldPrice"|id="currentPrice"/, "a landing não deve revelar preços");
+assert.match(landing, /id="landingDiscount"/, "a landing deve destacar o desconto real");
+assert.match(landing, /href="\/admin"/, "o rodapé deve oferecer acesso administrativo direto");
 assert.match(access, /id="signupPhone"/, "o cadastro deve solicitar telefone");
 assert.match(access, /id="signupPasswordConfirmation"/, "o cadastro deve solicitar confirmação da senha");
+assert.match(access, /data-signup-step="4"/, "o cadastro tradicional deve avançar uma pergunta por vez");
+assert.match(quickSignup, /data-quick-step="8"/, "o cadastro rápido deve incluir resumo e pagamento no mesmo fluxo");
+assert.match(quickSignup, /id="quickProgressBar"/, "o cadastro rápido deve mostrar progresso");
+assert.match(adminPage, /id="adminLoginForm"/, "a rota administrativa deve exibir login próprio");
+assert.match(adminPage, /id="couponList"/, "o painel deve administrar cupons");
 
 console.log("interaction regressions: ok");

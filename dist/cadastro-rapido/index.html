@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Cadastro rápido | Atlas</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/account.css?v=3.2.0">
+  <link rel="stylesheet" href="/funnel.css?v=3.2.0">
+  <link rel="stylesheet" href="/quick.css?v=3.2.0">
+</head>
+<body class="quick-body">
+  <div class="quick-ambient" aria-hidden="true"></div>
+  <main class="quick-shell">
+    <header class="quick-head"><a href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><span>Compra rápida e segura</span></header>
+    <section class="quick-card">
+      <div class="wizard-progress"><div class="wizard-progress-top"><span id="quickProgressText">Passo 1 de 9</span><span id="quickProgressMessage">Leva menos de dois minutos</span></div><div class="wizard-track"><div class="wizard-bar" id="quickProgressBar"></div></div></div>
+      <form id="quickForm" novalidate>
+        <section class="quick-step active" data-quick-step="0"><span class="step-kicker">VAMOS COMEÇAR</span><h1>Qual é o seu primeiro nome?</h1><p>Queremos saber como chamar você.</p><div class="field"><label for="quickName">Primeiro nome</label><input id="quickName" autocomplete="given-name" maxlength="40" placeholder="Ex.: Carlos" required></div></section>
+        <section class="quick-step" data-quick-step="1"><span class="step-kicker">SEU ACESSO</span><h1>Qual é o seu melhor e-mail?</h1><p>Você usará esse e-mail para entrar no Atlas.</p><div class="field"><label for="quickEmail">E-mail</label><input id="quickEmail" type="email" autocomplete="email" placeholder="voce@email.com" required></div></section>
+        <section class="quick-step" data-quick-step="2"><span class="step-kicker">CONTATO</span><h1>Qual é o seu WhatsApp?</h1><p>O telefone é formatado automaticamente.</p><div class="field"><label for="quickPhone">Telefone ou WhatsApp</label><input id="quickPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="15" placeholder="(11) 99999-9999" required></div></section>
+        <section class="quick-step" data-quick-step="3"><span class="step-kicker">PROTEJA SUA CONTA</span><h1>Crie uma senha.</h1><p>Use pelo menos 8 caracteres.</p><div class="field"><label for="quickPassword">Senha</label><input id="quickPassword" type="password" minlength="8" autocomplete="new-password" required></div></section>
+        <section class="quick-step" data-quick-step="4"><span class="step-kicker">METADE CONCLUÍDA</span><h1>Confirme sua senha.</h1><p>Assim garantimos que não houve erro na digitação.</p><div class="field"><label for="quickPasswordConfirmation">Repita a senha</label><input id="quickPasswordConfirmation" type="password" minlength="8" autocomplete="new-password" required></div></section>
+        <section class="quick-step" data-quick-step="5"><span class="step-kicker">ESCOLHA SEU ACESSO</span><h1>Qual plano combina com você?</h1><p>O valor completo aparece antes do pagamento.</p><div class="choice-grid" id="quickPlans"></div></section>
+        <section class="quick-step" data-quick-step="6"><span class="step-kicker">ESTAMOS QUASE LÁ</span><h1>Qual é o seu nome completo?</h1><p>Essa informação será usada na cobrança PIX.</p><div class="field"><label for="quickFullName">Nome completo</label><input id="quickFullName" autocomplete="name" required></div></section>
+        <section class="quick-step" data-quick-step="7"><span class="step-kicker">FALTA SÓ MAIS UM PASSO</span><h1>Informe seu CPF ou CNPJ.</h1><p>O documento é necessário para gerar o pagamento.</p><div class="field"><label for="quickDocument">CPF ou CNPJ</label><input id="quickDocument" inputmode="numeric" maxlength="18" required></div></section>
+        <section class="quick-step" data-quick-step="8"><span class="step-kicker">RESUMO DA OFERTA</span><h1 id="offerPlanName">Seu acesso ao Atlas</h1><p id="offerBilling"></p><div id="offerBeforePix"><span class="offer-badge" id="offerDiscount">OFERTA ATIVA</span><div class="offer-values" id="offerValues"><del id="offerOldPrice"></del><strong id="offerFinalPrice"></strong></div><div class="savings-copy" id="offerSavings"></div><ul class="benefit-list" id="offerBenefits"></ul><div class="coupon-row"><input id="quickCoupon" placeholder="CUPOM DE DESCONTO" maxlength="32"><button type="button" id="applyCoupon">Aplicar</button></div><div class="step-message" id="couponMessage"></div><button class="submit" id="finishPayment" type="button">Finalizar e gerar PIX</button></div><div class="pix-box hidden" id="quickPix"><img id="quickQrImage" alt="QR Code PIX"><h2 id="quickPixAmount"></h2><div class="pix-code" id="quickPixCode"></div><button class="submit" id="quickCopyPix" type="button">Copiar código PIX</button><div class="status" id="quickPixStatus">Aguardando pagamento…</div></div></section>
+        <div class="step-message" id="quickStatus"></div>
+        <div class="wizard-actions" id="quickNavigation"><button class="wizard-back" id="quickBack" type="button" hidden>Voltar</button><button class="submit" id="quickNext" type="button">Continuar</button></div>
+      </form>
+    </section>
+    <footer class="quick-foot"><span>Ambiente protegido</span><span>Atlas, seu assistente de operação</span></footer>
+  </main>
+  <script type="module" src="/modules/quick-signup.js?v=3.2.0"></script>
+</body>
+</html>

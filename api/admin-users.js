@@ -4,7 +4,7 @@ module.exports = async function handler(req, res) {
   try {
     const { supabase } = await requireAdmin(req);
     if (req.method === "GET") {
-      const { data, error } = await supabase.from("profiles").select("id,email,name,phone,role,access_granted,access_status,created_at").order("created_at", { ascending: false }).limit(100);
+      const { data, error } = await supabase.from("profiles").select("id,email,name,phone,role,plan_id,access_granted,access_status,access_expires_at,created_at").order("created_at", { ascending: false }).limit(100);
       if (error) throw error;
       return res.status(200).json({ users: data });
     }

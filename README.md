@@ -4,20 +4,22 @@ Produto web com landing page, cadastro, acesso condicionado ao pagamento, painel
 
 ## Fluxo do usuário
 
-1. A pessoa cria uma conta com e-mail e senha.
-2. O checkout gera uma cobrança PIX pela Venopag.
-3. O painel permanece bloqueado enquanto o status for `pending`.
-4. Somente `confirmed` libera o Atlas. Estados expirados, cancelados, contestados, estornados ou chargeback retiram o acesso.
-5. No painel, o Atlas exibe notícias por impacto e as cinco tendências mais fortes calculadas em velas de 5 minutos.
+1. A pessoa cria uma conta por etapas, sem confirmação de e-mail.
+2. Escolhe o plano mensal ou vitalício e pode aplicar um cupom válido.
+3. O checkout calcula a oferta no servidor e gera uma cobrança PIX pela Venopag.
+4. O painel permanece bloqueado enquanto o status for `pending`.
+5. Somente `confirmed` libera o Atlas. Estados expirados, cancelados, contestados, estornados ou chargeback retiram o acesso.
+6. No painel, o Atlas exibe notícias por impacto e as cinco tendências mais fortes calculadas em velas de 5 minutos.
 
 ## Áreas
 
 - `/` — landing page e oferta configurável.
-- `/acesso` — login e criação de conta.
+- `/acesso` — login e criação de conta tradicional por etapas.
+- `/cadastro-rapido` — funil compacto para links de lives e campanhas.
 - `/recuperar-senha` — recuperação por e-mail.
 - `/checkout` — pagamento PIX e acompanhamento da confirmação.
 - `/app` — painel Atlas.
-- `/admin` — preço, textos, ativos, notícias, Venopag, usuários e senha do administrador.
+- `/admin` — login administrativo, planos, cupons, textos, ativos, notícias, Venopag, usuários e segurança.
 
 ## Dados de mercado
 

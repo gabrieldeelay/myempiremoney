@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Acesso | Atlas</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/account.css?v=3.1.0">
+  <link rel="stylesheet" href="/account.css?v=3.2.0">
+  <link rel="stylesheet" href="/funnel.css?v=3.2.0">
 </head>
 <body>
   <main class="account-page">
     <section class="account-story">
       <a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a>
-      <div class="story-copy"><span>VOCÊ DECIDE. O ATLAS ORGANIZA.</span><h1>Entre com contexto. Não com esperança.</h1><p>Crie sua conta em poucos segundos. Seu acesso é liberado após a confirmação do pagamento.</p></div>
+      <div class="story-copy"><span>VOCÊ DECIDE. O ATLAS ORGANIZA.</span><h1>Entre com contexto. Não com esperança.</h1><p>Uma pergunta por vez. Sua conta fica pronta em poucos segundos.</p></div>
       <div class="story-foot">Atlas · Assistente de operação</div>
     </section>
     <section class="account-panel">
@@ -28,21 +29,21 @@
           </form>
         </div>
         <div data-auth="signup" class="hidden">
-          <h2>Crie sua conta.</h2><p>Sem confirmação por e-mail. É cadastrar e continuar.</p>
-          <form id="signupForm">
-            <div class="field"><label for="signupName">Primeiro nome</label><input id="signupName" autocomplete="given-name" maxlength="40" placeholder="Ex.: Carlos" required></div>
-            <div class="field"><label for="signupEmail">E-mail</label><input id="signupEmail" type="email" autocomplete="email" required></div>
-            <div class="field"><label for="signupPhone">Telefone</label><input id="signupPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="15" placeholder="(11) 99999-9999" required></div>
-            <div class="field"><label for="signupPassword">Senha</label><input id="signupPassword" type="password" minlength="8" autocomplete="new-password" required></div>
-            <div class="field"><label for="signupPasswordConfirmation">Repita a senha</label><input id="signupPasswordConfirmation" type="password" minlength="8" autocomplete="new-password" required></div>
-            <button class="submit" type="submit">Criar conta e continuar</button>
-            <div class="form-row"><span>Já tem conta?</span><button type="button" class="tiny" data-mode="login">Entrar</button></div>
-            <div class="status" id="signupStatus"></div>
+          <div class="wizard-progress"><div class="wizard-progress-top"><span id="signupProgressText">Passo 1 de 5</span><span id="signupProgressMessage">Vamos começar</span></div><div class="wizard-track"><div class="wizard-bar" id="signupProgressBar"></div></div></div>
+          <form id="signupForm" novalidate>
+            <section class="signup-step active" data-signup-step="0"><span class="step-kicker">PRIMEIRO PASSO</span><h2>Como podemos chamar você?</h2><p>Digite somente seu primeiro nome.</p><div class="field"><label for="signupName">Primeiro nome</label><input id="signupName" autocomplete="given-name" maxlength="40" placeholder="Ex.: Carlos" required></div></section>
+            <section class="signup-step" data-signup-step="1"><span class="step-kicker">SEU ACESSO</span><h2>Qual é o seu melhor e-mail?</h2><p>Ele será usado para entrar no Atlas.</p><div class="field"><label for="signupEmail">E-mail</label><input id="signupEmail" type="email" autocomplete="email" placeholder="voce@email.com" required></div></section>
+            <section class="signup-step" data-signup-step="2"><span class="step-kicker">CONTATO</span><h2>Qual é o seu WhatsApp?</h2><p>O número é formatado automaticamente.</p><div class="field"><label for="signupPhone">Telefone</label><input id="signupPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="15" placeholder="(11) 99999-9999" required></div></section>
+            <section class="signup-step" data-signup-step="3"><span class="step-kicker">ESTAMOS QUASE LÁ</span><h2>Crie uma senha segura.</h2><p>Use no mínimo 8 caracteres.</p><div class="field"><label for="signupPassword">Senha</label><input id="signupPassword" type="password" minlength="8" autocomplete="new-password" required></div></section>
+            <section class="signup-step" data-signup-step="4"><span class="step-kicker">ÚLTIMO PASSO</span><h2>Repita sua senha.</h2><p>Falta só mais um passo para criar sua conta.</p><div class="field"><label for="signupPasswordConfirmation">Confirme a senha</label><input id="signupPasswordConfirmation" type="password" minlength="8" autocomplete="new-password" required></div></section>
+            <div class="step-message" id="signupStatus"></div>
+            <div class="wizard-actions"><button class="wizard-back" id="signupBack" type="button" hidden>Voltar</button><button class="submit" id="signupNext" type="button">Continuar</button></div>
           </form>
+          <div class="form-row"><span>Já tem conta?</span><button type="button" class="tiny" data-mode="login">Entrar</button></div>
         </div>
       </div>
     </section>
   </main>
-  <script type="module" src="/modules/auth.js?v=3.1.0"></script>
+  <script type="module" src="/modules/auth.js?v=3.2.0"></script>
 </body>
 </html>
