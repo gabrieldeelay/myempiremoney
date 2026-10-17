@@ -44,18 +44,23 @@ async function getRelease() {
 function render(settings = {}) {
   const publicVersion = release?.publicVersion || release?.version || null;
   const outdated = publicVersion && compareVersions(publicVersion, installedVersion) > 0;
+  const candidateVersion = release?.candidateVersion || null;
+  const candidatePending = candidateVersion && compareVersions(candidateVersion, installedVersion) > 0
+    && (!publicVersion || compareVersions(publicVersion, candidateVersion) < 0);
   const authorized = eligible(currentOrigin) && settings.allowedOrigins?.includes(currentOrigin);
   elements.installedVersion.textContent = `v${installedVersion}`;
   elements.headerVersion.textContent = `v${installedVersion}`;
-  elements.latestVersion.textContent = publicVersion ? `v${publicVersion}` : "Indisponível";
+  elements.latestVersion.textContent = candidatePending ? `v${candidateVersion} • em análise` : publicVersion ? `v${publicVersion}` : "Indisponível";
   elements.primaryAction.disabled = false;
 
-  if (outdated) {
+  if (outdated || candidatePending) {
     action = "update";
-    elements.updateBadge.textContent = "ATUALIZAÇÃO";
+    elements.updateBadge.textContent = candidatePending ? "EM LIBERAÇÃO" : "ATUALIZAÇÃO";
     elements.updateBadge.className = "outdated";
-    elements.primaryAction.textContent = "Atualizar agora";
-    setStatus("update", "NOVA VERSÃO", `v${publicVersion} disponível`, "Clique uma vez. O Edge baixa e aplica a atualização oficial automaticamente.");
+    elements.primaryAction.textContent = candidatePending ? "Verificar atualização" : "Atualizar agora";
+    setStatus("update", candidatePending ? "NOVA VERSÃO EM LIBERAÇÃO" : "NOVA VERSÃO", `v${candidateVersion || publicVersion}`, candidatePending
+      ? "Clique para consultar o Edge agora. Assim que a Microsoft liberar, a atualização será aplicada automaticamente."
+      : "Clique uma vez. O Edge baixa e aplica a atualização oficial automaticamente.");
     return;
   }
 
@@ -99,10 +104,15 @@ elements.primaryAction.addEventListener("click", async () => {
       elements.message.textContent = "Atualização encontrada. O Atlas será reiniciado pelo Edge em instantes.";
       return;
     }
+    const candidateVersion = release?.candidateVersion;
+    const candidatePending = candidateVersion && compareVersions(candidateVersion, installedVersion) > 0
+      && (!release?.publicVersion || compareVersions(release.publicVersion, candidateVersion) < 0);
     elements.primaryAction.disabled = false;
-    elements.primaryAction.textContent = "Abrir página oficial";
-    elements.message.textContent = "A atualização ainda não chegou ao seu Edge. Abra a página oficial para forçar uma nova verificação.";
-    action = "store";
+    elements.primaryAction.textContent = candidatePending ? "Verificar novamente" : "Abrir página oficial";
+    elements.message.textContent = candidatePending
+      ? `A verificação funcionou. A v${candidateVersion} ainda está aguardando liberação da Microsoft.`
+      : "O Edge ainda não recebeu a atualização. Você pode tentar novamente pela página oficial.";
+    action = candidatePending ? "update" : "store";
     return;
   }
   if (action === "store") {

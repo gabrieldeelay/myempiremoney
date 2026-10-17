@@ -1,4 +1,4 @@
-import { normalizeAssetName } from "./asset-name.js?v=2.5.0-r6";
+import { normalizeAssetName } from "./asset-name.js?v=2.5.1-r7";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -80,6 +80,8 @@ const robot = {
     sellAgainstBuy: ["[[bad:Escolha fraca.]] O cenário favorecia **compra** em {asset}; contrariar o fluxo aumenta o risco.", "[[bad:Pouco convincente.]] A força de {asset} estava compradora, sem apoio técnico para o outro lado.", "[[bad:Contexto desfavorável.]] Em {asset}, tendência e momento apontavam para **compra**.", "[[bad:Risco elevado.]] A leitura de {asset} estava no sentido oposto e pedia cautela."],
     buyWithoutSignal: ["[[bad:Entrada precipitada.]] Faltava confirmação para **compra** em {asset}.", "[[bad:Argumento fraco.]] O cenário de {asset} ainda estava neutro; esperar era mais sólido.", "[[bad:Sem vantagem clara.]] A compra precisava de confirmação que o gráfico ainda não entregou.", "[[bad:Decisão apressada.]] Em {asset}, a leitura ainda recomendava _ficar de fora_."],
     sellWithoutSignal: ["[[bad:Entrada precipitada.]] Faltava confirmação para **venda** em {asset}.", "[[bad:Argumento fraco.]] O cenário de {asset} ainda estava neutro; esperar era mais sólido.", "[[bad:Sem vantagem clara.]] A venda precisava de confirmação que o gráfico ainda não entregou.", "[[bad:Decisão apressada.]] Em {asset}, a leitura ainda recomendava _ficar de fora_."],
+    exposureDanger: ["[[bad:Mão pesada.]] {count} entradas já somam **{exposure}**, cerca de {risk}% do saldo.", "[[bad:Reduz a mão.]] Você acumulou {exposure} em poucos minutos; isso já virou risco, não convicção.", "[[bad:Exposição subindo.]] {count} entradas juntas estão grandes demais para um saldo de {balance}."],
+    exposureCritical: ["[[bad:Para.]] {count} entradas somam **{exposure}** contra um saldo de {balance}. Isso passou de {risk}% da banca.", "[[bad:Completamente fora de escala.]] Você expôs {exposure} com apenas {balance} de saldo.", "[[bad:Isso não é proteção, é concentração.]] A exposição chegou a {risk}% da banca. Não aumenta mais essa mão."],
     protectionReady: ["**Proteção no ponto.** {asset} chegou à região planejada: mantenha **{direction}** e, se decidir proteger, a referência é {amount}.", "A região de proteção chegou. Em {asset}, a reentrada continua no lado de **{direction}**; referência de {amount}.", "Agora sim: preço na faixa de proteção em {asset}. Mesma direção, **{direction}**, com referência de {amount}."],
     protectionTaken: ["[[good:Proteção bem posicionada.]] O preço chegou à região prevista antes da nova **{direction}** em {asset}.", "[[good:Boa leitura da proteção.]] A reentrada em **{direction}** aconteceu na faixa planejada de {asset}.", "A proteção respeitou o nível técnico. Agora deixa o gráfico trabalhar sem inventar uma terceira entrada."],
     protectionEarly: ["[[bad:Proteção antecipada.]] O preço ainda não tinha alcançado a região planejada de {asset}.", "Você protegeu cedo em {asset}. A ideia era esperar o preço chegar ao nível marcado antes da nova **{direction}**.", "[[bad:Faltou esperar o nível.]] A proteção veio antes do preço confirmar a região em {asset}."],
@@ -114,7 +116,7 @@ const robot = {
     if (!this.soundEnabled || !this.soundReady || !this.audioContext) return;
     const audio = this.audioContext;
     const positive = ["buyAligned", "sellAligned", "win", "protectionReady", "protectionTaken"].includes(context);
-    const negative = ["buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal", "loss", "error", "protectionEarly"].includes(context);
+    const negative = ["buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal", "loss", "error", "protectionEarly", "exposureDanger", "exposureCritical"].includes(context);
     const oscillator = audio.createOscillator();
     const gain = audio.createGain();
     oscillator.type = "sine";
@@ -144,6 +146,10 @@ const robot = {
       .replaceAll("{asset}", normalizeAssetName(values.asset || state.asset) || "ESSE ATIVO")
       .replaceAll("{confidence}", Math.round(Number(values.confidence ?? state.analysis.confidence) || 0))
       .replaceAll("{amount}", formatMoney(values.amount))
+      .replaceAll("{exposure}", formatMoney(values.exposure))
+      .replaceAll("{balance}", formatMoney(values.balance))
+      .replaceAll("{risk}", Math.round(Number(values.risk) || 0))
+      .replaceAll("{count}", Math.round(Number(values.count) || 1))
       .replaceAll("{direction}", values.direction === "SELL" ? "VENDA" : "COMPRA")
       .replaceAll("{reason}", String(values.reason || state.analysis.reason || "sem confirmação suficiente")));
     const variants = candidates.map((line, index) => ({ line, key: `${context}:${index}` }));
@@ -197,6 +203,20 @@ const robot = {
     if (!operation) return;
     if (operation.outcome !== "OPEN") {
       this.speak({ WIN: "win", LOSS: "loss", DRAW: "draw" }[operation.outcome] || "open", { asset: operation.asset }, true, true);
+      return;
+    }
+    const exposure = operation.exposure;
+    if (exposure?.severity === "critical" || exposure?.severity === "danger") {
+      const context = exposure.severity === "critical" ? "exposureCritical" : "exposureDanger";
+      this.speak(context, {
+        exposure: exposure.cumulativeAmount,
+        balance: exposure.balance,
+        risk: exposure.cumulativeRiskPercent,
+        count: exposure.operationCount
+      }, true, true);
+      showToast(exposure.severity === "critical"
+        ? `Exposição crítica: ${formatMoney(exposure.cumulativeAmount)} em operações para ${formatMoney(exposure.balance)} de saldo.`
+        : `Atenção: ${formatMoney(exposure.cumulativeAmount)} expostos em ${exposure.operationCount} operações.`, "error", 8000);
       return;
     }
     if (operation.isProtection) {
@@ -339,6 +359,18 @@ function showToast(message, kind = "info", duration = 4200) {
   toastTimer = setTimeout(() => { toast.hidden = true; }, duration);
 }
 
+let tradeFlashTimer = null;
+function flashTrade(direction, severity = "normal") {
+  const flash = $("tradeFlash");
+  if (!flash || !["BUY", "SELL"].includes(direction)) return;
+  clearTimeout(tradeFlashTimer);
+  flash.className = "trade-flash";
+  void flash.offsetWidth;
+  flash.classList.add(direction === "BUY" ? "buy" : "sell");
+  if (["danger", "critical"].includes(severity)) flash.classList.add(severity);
+  tradeFlashTimer = setTimeout(() => { flash.className = "trade-flash"; }, severity === "critical" ? 1500 : 1050);
+}
+
 function setControls(enabled) {
   for (const id of ["setTimeframe", "setExpiration", "setRisk", "applyAll"]) $(id).disabled = !enabled;
 }
@@ -402,12 +434,16 @@ function renderState(next = {}) {
   }
   lastLoginState = true;
   if (justLoggedIn) robot.speak("connect", {}, true, true);
+  const newOperation = state.manualOperation?.key && state.manualOperation.key !== previousOperationKey;
+  if (newOperation && state.manualOperation.outcome === "OPEN") {
+    flashTrade(state.manualOperation.direction, state.manualOperation.exposure?.severity);
+  }
   if (state.uiEvent?.type === "PROTECTION_READY" && state.uiEvent.key !== previousUiEventKey) {
     const amount = Number(state.uiEvent.suggestedAmount);
     robot.speak("protectionReady", { asset: state.uiEvent.asset, direction: state.uiEvent.direction, amount }, true, true);
     showToast(`Proteção no ponto em ${state.uiEvent.asset}: ${state.uiEvent.direction === "SELL" ? "VENDA" : "COMPRA"}${Number.isFinite(amount) ? ` de ${formatMoney(amount)}` : ""}.`, "success", 8000);
   }
-  else if (state.manualOperation?.key && state.manualOperation.key !== previousOperationKey) robot.commentOnOperation(state.manualOperation);
+  else if (newOperation) robot.commentOnOperation(state.manualOperation);
   else if (justLoggedIn) return;
   else if (state.analysis.direction !== previousDirection
     && state.analysis.direction !== "WAIT"

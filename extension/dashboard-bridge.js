@@ -41,6 +41,16 @@
     if (event.source !== window || event.origin !== location.origin) return;
     if (event.data?.source !== DASHBOARD_SOURCE || event.data?.type !== "command") return;
     try {
+      if (event.data.action === "check_update") {
+        const result = await chrome.runtime.sendMessage({ type: "check_for_updates", force: true });
+        post({
+          type: "update_result",
+          requestId: event.data.requestId,
+          result,
+          version: chrome.runtime.getManifest().version
+        });
+        return;
+      }
       const response = await chrome.runtime.sendMessage({
         type: "dashboard_command",
         command: event.data

@@ -2,7 +2,7 @@
   if (window.__atlasGuardBridgeLoaded || window.top === window) return;
   window.__atlasGuardBridgeLoaded = true;
 
-  const VERSION = "2.5.0";
+  const VERSION = "2.5.1";
   const BRIDGE_SOURCE = "atlas-guard-extension";
   const DASHBOARD_SOURCE = "atlas-guard-dashboard";
   const CANDLE_MINUTES = 5;
@@ -20,6 +20,7 @@
     lastUiEventAt: 0,
     lastObservedOperationKey: null,
     lastManualClick: null,
+    recentOperations: [],
     markings: [],
     trendLines: [],
     nativeDrawing: { task: Promise.resolve(), signatures: new Map() },
@@ -238,13 +239,36 @@
     const protection = internal.state.protection;
     const isProtection = Boolean(protection?.active && !protection.taken && protection.asset === asset && protection.direction === direction && protection.expiresAt > observedAt);
     const protectionStatus = isProtection ? (protectionLevelReached(protection) ? "READY" : "EARLY") : null;
+    const amount = locateAmountControl()?.amount ?? null;
+    internal.recentOperations = internal.recentOperations.filter(item => observedAt - item.at <= 300000);
+    if (Number.isFinite(amount) && amount > 0) internal.recentOperations.push({ key, asset, direction, amount, at: observedAt });
+    const balance = Number(internal.state.balance);
+    const cumulativeAmount = internal.recentOperations.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const assetAmount = internal.recentOperations.filter(item => item.asset === asset).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const singleRiskPercent = balance > 0 && Number.isFinite(amount) ? amount / balance * 100 : null;
+    const cumulativeRiskPercent = balance > 0 ? cumulativeAmount / balance * 100 : null;
+    const severity = (singleRiskPercent >= 10 || cumulativeRiskPercent >= 20 || cumulativeAmount > balance) ? "critical"
+      : (singleRiskPercent >= 2 || cumulativeRiskPercent >= 5 || internal.recentOperations.length >= 3) ? "danger"
+      : "normal";
+    const exposure = {
+      balance: Number.isFinite(balance) ? balance : null,
+      operationCount: internal.recentOperations.length,
+      singleAmount: amount,
+      singleRiskPercent,
+      cumulativeAmount,
+      cumulativeRiskPercent,
+      assetAmount,
+      severity,
+      exceedsBalance: balance > 0 && cumulativeAmount > balance
+    };
     internal.lastManualClick = { direction, asset, at: observedAt };
     internal.state.manualOperation = {
       key,
       asset,
       direction,
       outcome: "OPEN",
-      amount: locateAmountControl()?.amount ?? null,
+      amount,
+      exposure,
       analysisDirection: internal.state.analysis.direction,
       analysisConfidence: internal.state.analysis.confidence,
       analysisReason: internal.state.analysis.reason,
@@ -272,6 +296,14 @@
       "signal",
       key
     );
+    if (severity !== "normal") {
+      logEvent(
+        severity === "critical" ? "Exposição crítica" : "Exposição elevada",
+        `${internal.recentOperations.length} operação(ões) em 5 minutos somam R$ ${formatMoney(cumulativeAmount)}${Number.isFinite(cumulativeRiskPercent) ? ` (${Math.round(cumulativeRiskPercent)}% do saldo)` : ""}.`,
+        "danger",
+        `exposure-${key}`
+      );
+    }
     setTimeout(publishState, 0);
   }
   function parentOrigin() {
@@ -413,48 +445,90 @@
   }
   function moneyFromHost(host) {
     const values = [...host.querySelectorAll('input,[contenteditable="true"],[role="spinbutton"],strong,b,span,div')]
-      .filter(visible)
+      .filter(element => element.tagName === "INPUT" || visible(element))
       .map(element => element.tagName === "INPUT" ? element.value : compact(element.textContent))
       .filter(text => text && text.length < 40)
-      .map(text => text.match(/(?:R\$|\$)?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[.,]\d{1,2})?)/)?.[1])
-      .map(parseBRL)
-      .filter(Number.isFinite);
-    return values[0] ?? null;
+      .map(text => ({
+        raw: text,
+        match: text.match(/(?:R\$|\$)?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[.,]\d{1,2})?)/)?.[1]
+      }))
+      .filter(item => item.match)
+      .map(item => ({ value: parseBRL(item.match), score: /R\$|\$/.test(item.raw) ? 20 : /[.,]\d{1,2}\b/.test(item.raw) ? 10 : 0 }))
+      .filter(item => Number.isFinite(item.value))
+      .sort((left, right) => right.score - left.score);
+    return values[0]?.value ?? null;
+  }
+  function controlLabel(element) {
+    return compact(`${element?.textContent || ""} ${element?.value || ""} ${element?.getAttribute?.("aria-label") || ""} ${element?.getAttribute?.("title") || ""}`);
+  }
+  function adjustmentButtons(host) {
+    const buttons = [...host.querySelectorAll('button,[role="button"],[tabindex],[onclick]')].filter(visible);
+    const minus = buttons.find(button => /^(?:-|−|–)$/.test(controlLabel(button)) || /diminuir|menos|decrease/i.test(controlLabel(button)));
+    const plus = buttons.find(button => /^\+$/.test(controlLabel(button)) || /aumentar|mais|increase/i.test(controlLabel(button)));
+    return { minus, plus };
+  }
+  function amountHostScore(host) {
+    const text = compact(host.textContent);
+    const identity = compact(`${host.id || ""} ${host.className || ""} ${host.getAttribute?.("data-tour") || ""} ${host.getAttribute?.("data-testid") || ""}`);
+    const box = host.getBoundingClientRect();
+    let score = 0;
+    if (/tour_amount|amount/i.test(identity)) score += 360;
+    if (/(^|\s)valor(?:\s|$)/i.test(text)) score += 190;
+    if (/R\$|\$/.test(text)) score += 120;
+    if (/expira[cç][aã]o|lucro|payout/i.test(text)) score -= 260;
+    if (box.width <= 260) score += 40;
+    if (box.height <= 180) score += 25;
+    return score;
   }
   function locateAmountControl() {
-    const hosts = [];
+    const hosts = new Set();
     for (const doc of allDocuments()) {
       const directNodes = [...doc.querySelectorAll('#tour_amount,[data-tour*="amount" i],[data-testid*="amount" i],[id*="amount" i],[class*="amount" i]')];
       for (const node of directNodes) {
         let current = node;
         for (let depth = 0; current && depth < 5; depth += 1, current = current.parentElement) {
-          if (visible(current) && current.getBoundingClientRect().width <= 540) hosts.push(current);
+          if (visible(current) && current.getBoundingClientRect().width <= 540) hosts.add(current);
           if (/\bvalor\b/i.test(compact(current.textContent)) && current.querySelector('button,[role="button"],[tabindex]')) break;
         }
       }
       for (const label of [...doc.querySelectorAll("div,section,span,label")].filter(visible)) {
-        if (!/^valor$/i.test(compact(label.textContent))) continue;
+        if (!/^(?:valor|amount)$/i.test(compact(label.textContent))) continue;
         let current = label.parentElement;
-        for (let depth = 0; current && depth < 4; depth += 1, current = current.parentElement) {
-          if (current.getBoundingClientRect().width <= 540) hosts.push(current);
+        for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
+          if (visible(current) && current.getBoundingClientRect().width <= 540) hosts.add(current);
           if (moneyFromHost(current) != null && current.querySelector('button,[role="button"],[tabindex]')) break;
         }
       }
+      const adjusters = [...doc.querySelectorAll('button,[role="button"],[tabindex],[onclick]')]
+        .filter(visible)
+        .filter(element => /^(?:\+|-|−|–)$/.test(controlLabel(element)));
+      for (const adjuster of adjusters) {
+        let current = adjuster.parentElement;
+        for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
+          if (!visible(current) || current.getBoundingClientRect().width > 540) continue;
+          const pair = adjustmentButtons(current);
+          if (pair.plus && pair.minus && moneyFromHost(current) != null) hosts.add(current);
+        }
+      }
     }
-    hosts.sort((left, right) => left.getBoundingClientRect().width * left.getBoundingClientRect().height - right.getBoundingClientRect().width * right.getBoundingClientRect().height);
-    for (const host of hosts) {
+    const ranked = [...hosts].sort((left, right) => {
+      const score = amountHostScore(right) - amountHostScore(left);
+      if (score) return score;
+      return left.getBoundingClientRect().width * left.getBoundingClientRect().height - right.getBoundingClientRect().width * right.getBoundingClientRect().height;
+    });
+    for (const host of ranked) {
       if (!visible(host) || host.getBoundingClientRect().width > 540) continue;
-      const input = [...host.querySelectorAll('input,[contenteditable="true"],[role="spinbutton"]')].find(visible) || null;
-      const buttons = [...host.querySelectorAll('button,[role="button"],[tabindex],[onclick]')].filter(visible);
+      const input = [...host.querySelectorAll('input.form-control,input[type="number"],input[type="text"],input,[contenteditable="true"],[role="spinbutton"]')]
+        .find(element => element.tagName === "INPUT" || visible(element)) || null;
+      const { minus, plus } = adjustmentButtons(host);
       const amount = input?.tagName === "INPUT" ? parseBRL(input.value) : moneyFromHost(host);
       if (amount == null) continue;
-      const buttonLabel = button => compact(`${button.textContent || ""} ${button.getAttribute("aria-label") || ""} ${button.getAttribute("title") || ""}`);
       return {
         host,
         input: input || null,
         amount,
-        minus: buttons.find(button => /^(?:-|−|–)$/.test(buttonLabel(button)) || /diminuir|menos|decrease/i.test(buttonLabel(button))),
-        plus: buttons.find(button => /^\+$/.test(buttonLabel(button)) || /aumentar|mais|increase/i.test(buttonLabel(button)))
+        minus,
+        plus
       };
     }
     return null;
@@ -537,7 +611,7 @@
       const control = expiration.minutes < 5 ? expiration.plus : expiration.minus;
       if (!control) break;
       const before = expiration.minutes;
-      control.click();
+      activateElement(control);
       changed = true;
       expiration = await waitFor(() => {
         const next = locateExpirationControl();
@@ -569,7 +643,7 @@
       const control = expiration.minutes < 5 ? expiration.plus : expiration.minus;
       if (!control) throw new Error("Botão de ajuste da expiração não localizado");
       const before = expiration.minutes;
-      control.click();
+      activateElement(control);
       changed = true;
       expiration = await waitFor(() => {
         const next = locateExpirationControl();
@@ -624,9 +698,37 @@
   }
   function nativeMenuChoice(doc, type) {
     const matcher = type === "PROTECTION" ? /linha horizontal|horizontal line/i : /linha de tend[eê]ncia|trend line/i;
-    return [...doc.querySelectorAll('[role="menuitem"], [role="option"], button, [class*="item" i]')]
+    return [...doc.querySelectorAll('[role="menuitem"], [role="option"], button, [class*="item" i], [data-name], [data-tool]')]
       .filter(visible)
-      .find(element => matcher.test(compact(`${element.textContent} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`))) || null;
+      .find(element => matcher.test(compact(`${element.textContent} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""} ${element.getAttribute("data-tooltip") || ""}`))) || null;
+  }
+  async function openNativeDrawingChoice(doc, type, viewport) {
+    const directChoice = nativeMenuChoice(doc, type);
+    if (directChoice) return directChoice;
+    const exactTool = nativeToolButton(doc, type);
+    if (exactTool) {
+      activateElement(exactTool);
+      const choice = await waitFor(() => nativeMenuChoice(doc, type), 500, 25);
+      if (choice) return choice;
+    }
+    const chartBox = viewport.anchor.getBoundingClientRect();
+    const candidates = [...doc.querySelectorAll('button,[role="button"],[data-tooltip],[tabindex]')]
+      .filter(visible)
+      .filter(element => {
+        const box = element.getBoundingClientRect();
+        return box.width >= 20 && box.width <= 72 && box.height >= 20 && box.height <= 72
+          && box.left >= chartBox.left - 100 && box.left <= chartBox.left + 110
+          && box.top >= chartBox.top - 16 && box.bottom <= chartBox.bottom + 16;
+      })
+      .sort((left, right) => left.getBoundingClientRect().top - right.getBoundingClientRect().top);
+    for (const candidate of candidates) {
+      activateElement(candidate);
+      const choice = await waitFor(() => nativeMenuChoice(doc, type), 260, 20);
+      if (choice) return choice;
+      doc.dispatchEvent(new doc.defaultView.KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+      await sleep(25);
+    }
+    return null;
   }
   function dispatchChartPoint(doc, x, y) {
     const target = doc.elementFromPoint(x, y);
@@ -645,24 +747,11 @@
     let viewport = chartViewport();
     if (!viewport) return false;
     const { doc } = viewport;
-    let tool = nativeToolButton(doc, line.type);
-    if (!tool) {
-      const generic = [...doc.querySelectorAll('button,[role="button"]')].filter(visible).find(element => {
-        const label = compact(`${element.textContent} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""} ${element.getAttribute("data-tooltip") || ""}`);
-        return /desenho|draws?|drawing|ferramenta.*linha|line tool/i.test(label);
-      });
-      generic?.click();
-      await sleep(90);
-      tool = nativeMenuChoice(doc, line.type);
-    }
-    if (!tool) return false;
-    tool.click();
-    await sleep(80);
-    const choice = nativeMenuChoice(doc, line.type);
-    if (choice && choice !== tool) {
-      choice.click();
-      await sleep(60);
-    }
+    const choice = await openNativeDrawingChoice(doc, line.type, viewport);
+    if (!choice) return false;
+    activateElement(clickableOption(choice));
+    await sleep(90);
+    if (nativeMenuChoice(doc, line.type)) return false;
     viewport = chartViewport();
     if (!viewport || viewport.doc !== doc) return false;
     const box = viewport.anchor.getBoundingClientRect();
@@ -677,13 +766,16 @@
       ? { x: plot.left + plot.width * .84, y: start.y }
       : { x: plot.left + clamp(line.x2 ?? 1) * plot.width, y: plot.top + clamp(line.y2 ?? line.y1) * plot.height };
     const first = dispatchChartPoint(doc, start.x, start.y);
-    await sleep(75);
+    await sleep(95);
     const second = dispatchChartPoint(doc, end.x, end.y);
+    await sleep(120);
     doc.dispatchEvent(new doc.defaultView.KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
     return first && second;
   }
   function removeAtlasOverlay() {
-    for (const doc of allDocuments()) doc.getElementById("__atlas_guard_chart_overlay")?.remove();
+    for (const doc of allDocuments()) {
+      doc.querySelectorAll('#__atlas_guard_chart_overlay,[id^="__atlas_guard_chart_overlay"],[data-atlas-marking-overlay],.atlas-chart-marking').forEach(element => element.remove());
+    }
   }
   function nativeTypesForAsset(assetKey) {
     return ["LTA", "LTB", "PROTECTION"].filter(type => internal.nativeDrawing.signatures.has(`${assetKey}:${type}`));
@@ -761,8 +853,7 @@
     const x2Point = second.index / (candles.length - 1);
     const y1 = 1 - (first.value - minimum) / priceRange;
     const y2Point = 1 - (second.value - minimum) / priceRange;
-    const slope = (y2Point - y1) / Math.max(.001, x2Point - x1);
-    return { type, x1, y1: clamp(y1), x2: 1, y2: clamp(y2Point + slope * (1 - x2Point)) };
+    return { type, x1, y1: clamp(y1), x2: x2Point, y2: clamp(y2Point) };
   }
 
   async function analyzeChart() {
@@ -772,22 +863,24 @@
       return internal.state.analysis;
     }
     const live = raw.at(-1);
-    const candles = raw.filter(item => item.time + 300000 <= Date.now()).slice(-80);
+    const history = raw.filter(item => item.time + 300000 <= Date.now()).slice(-80);
+    const visibleCandles = history.slice(-24);
+    const candles = history;
     if (candles.length < 30) {
       renderMarkings([], null);
       internal.state.analysis = { direction: "WAIT", confidence: 0, reason: "Histórico oficial insuficiente", source: "official-5m-feed", candles: candles.length };
       return internal.state.analysis;
     }
-    const values = candles.flatMap(item => [item.high, item.low]);
+    const values = visibleCandles.flatMap(item => [item.high, item.low]);
     const minimum = Math.min(...values);
     const priceRange = Math.max(...values) - minimum || 1;
-    const lowPair = swings(candles, "low", "low").slice(-2);
-    const highPair = swings(candles, "high", "high").slice(-2);
+    const lowPair = swings(visibleCandles, "low", "low").slice(-2);
+    const highPair = swings(visibleCandles, "high", "high").slice(-2);
     const hasLta = lowPair.length === 2 && lowPair[1].index - lowPair[0].index >= 3 && lowPair[1].value > lowPair[0].value;
     const hasLtb = highPair.length === 2 && highPair[1].index - highPair[0].index >= 3 && highPair[1].value < highPair[0].value;
     const lines = [];
-    if (hasLta) lines.push(trendLine("LTA", lowPair[0], lowPair[1], candles, minimum, priceRange));
-    if (hasLtb) lines.push(trendLine("LTB", highPair[0], highPair[1], candles, minimum, priceRange));
+    if (hasLta) lines.push(trendLine("LTA", lowPair[0], lowPair[1], visibleCandles, minimum, priceRange));
+    if (hasLtb) lines.push(trendLine("LTB", highPair[0], highPair[1], visibleCandles, minimum, priceRange));
     const recentRanges = candles.slice(-21, -1).map(item => item.high - item.low);
     const averageRange = recentRanges.reduce((sum, value) => sum + value, 0) / recentRanges.length;
     const last = candles.at(-1);
@@ -845,11 +938,17 @@
     else input.textContent = value;
     input.dispatchEvent(new view.InputEvent("input", { bubbles: true, data: value, inputType: "insertText" }));
     input.dispatchEvent(new view.Event("change", { bubbles: true }));
+    input.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+    input.dispatchEvent(new view.KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true }));
     input.blur();
   }
   async function applyRiskAmount(amount) {
     let control = locateAmountControl();
-    const fallbackInput = [...document.querySelectorAll('input,[contenteditable="true"],[role="spinbutton"]')].find(item => visible(item) && /valor|amount/i.test(`${item.name || ""} ${item.placeholder || ""} ${item.getAttribute("aria-label") || ""}`));
+    const fallbackInput = queryAll('input.form-control,input,[contenteditable="true"],[role="spinbutton"]').find(item => {
+      const identity = `${item.name || ""} ${item.id || ""} ${item.className || ""} ${item.placeholder || ""} ${item.getAttribute("aria-label") || ""}`;
+      const context = compact(item.parentElement?.parentElement?.textContent || item.parentElement?.textContent || "");
+      return /valor|amount|tour_amount/i.test(`${identity} ${context}`) && !/expira[cç][aã]o/i.test(context);
+    });
     const input = control?.input || fallbackInput;
     if (input) {
       const formatted = input.tagName === "INPUT" && input.type === "number" ? Number(amount).toFixed(2) : Number(amount).toFixed(2).replace(".", ",");
@@ -869,7 +968,7 @@
         .filter(visible)
         .find(element => parseBRL(compact(element.textContent)) === control.amount && compact(element.textContent).length < 20);
       display?.click();
-      const openedInput = await waitFor(() => locateAmountControl()?.input, 280, 25);
+      const openedInput = await waitFor(() => locateAmountControl()?.input, 650, 25);
       if (openedInput) {
         const formatted = openedInput.tagName === "INPUT" && openedInput.type === "number" ? Number(amount).toFixed(2) : Number(amount).toFixed(2).replace(".", ",");
         setEditableValue(openedInput, formatted);
@@ -898,12 +997,12 @@
     if (!Number.isFinite(step) || step <= 0) throw new Error("Não foi possível identificar o intervalo do valor");
     const nearest = Math.max(step, Math.round(amount / step) * step);
     if (Math.round(Math.abs(nearest - control.amount) / step) > 300) throw new Error("O valor calculado está distante demais para o controle atual");
-    for (let frame = 0; frame < 120; frame += 1) {
+    for (let frame = 0; frame < 360; frame += 1) {
       control = locateAmountControl();
       if (!control || Math.abs(control.amount - nearest) <= step / 2 + .011) break;
       const liveDirection = nearest > control.amount ? "plus" : "minus";
       const remaining = Math.max(1, Math.round(Math.abs(nearest - control.amount) / step));
-      const burst = Math.min(12, remaining);
+      const burst = Math.min(24, remaining);
       button = control[liveDirection];
       if (!button) break;
       for (let index = 0; index < burst; index += 1) button.click();

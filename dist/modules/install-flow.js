@@ -12,6 +12,7 @@ let requestSequence = 0;
 let popupWatcher = null;
 let installAttempted = false;
 let resumeHandled = false;
+let updateCheckTimer = null;
 
 const selectors = {
   action: "[data-install-action]",
@@ -94,11 +95,14 @@ function updateUI() {
 
   if (extensionDetected) {
     setText(selectors.status, "Extensão ativa e conectada");
-    setMessage("Tudo pronto. A extensão já está ativa e o Atlas pode receber os dados da Hezilex.", "success");
+    const candidatePending = release?.candidateVersion && compareVersions(release.candidateVersion, extensionVersion) > 0;
+    setMessage(candidatePending
+      ? `A v${release.candidateVersion} está sendo liberada pela Microsoft. Você pode verificar agora sem sair desta tela.`
+      : "Tudo pronto. A extensão já está ativa e o Atlas pode receber os dados da Hezilex.", candidatePending ? "warning" : "success");
     actions.forEach(button => {
-      button.disabled = true;
-      button.textContent = extensionVersion ? `Atualizada • v${extensionVersion}` : "Extensão instalada";
-      button.classList.remove("ready");
+      button.disabled = false;
+      button.textContent = candidatePending ? "Verificar atualização" : `Verificar atualização • v${extensionVersion || "—"}`;
+      button.classList.toggle("ready", candidatePending);
     });
     return;
   }
@@ -155,6 +159,28 @@ function pingExtension() {
 window.addEventListener("message", event => {
   if (event.source !== window || event.origin !== location.origin) return;
   if (event.data?.source !== EXTENSION_SOURCE) return;
+  if (event.data.type === "update_result") {
+    clearTimeout(updateCheckTimer);
+    updateCheckTimer = null;
+    const result = event.data.result || {};
+    if (["update_available", "reloading"].includes(result.status)) {
+      setText(selectors.status, "Atualização encontrada");
+      setMessage("O Edge encontrou a nova versão e está reiniciando o Atlas automaticamente.", "success");
+      setTimeout(() => location.reload(), 1600);
+      return;
+    }
+    const candidatePending = release?.candidateVersion && compareVersions(release.candidateVersion, extensionVersion) > 0;
+    setText(selectors.status, candidatePending ? "Aguardando liberação da Microsoft" : "Extensão atualizada");
+    setMessage(candidatePending
+      ? `A verificação funcionou. A v${release.candidateVersion} ainda não foi entregue pela loja ao seu Edge.`
+      : `O Edge confirmou que a v${extensionVersion || "instalada"} é a versão mais recente disponível.`, candidatePending ? "warning" : "success");
+    all(selectors.action).forEach(button => {
+      button.disabled = false;
+      button.textContent = candidatePending ? "Verificar novamente" : `Verificar atualização • v${extensionVersion || "—"}`;
+      button.classList.toggle("ready", candidatePending);
+    });
+    return;
+  }
   extensionDetected = true;
   extensionVersion = event.data.state?.version || event.data.version || extensionVersion;
   updateUI();
@@ -162,6 +188,23 @@ window.addEventListener("message", event => {
 });
 
 function openInstaller() {
+  if (extensionDetected) {
+    const requestId = `atlas-update-${Date.now()}-${++requestSequence}`;
+    setText(selectors.status, "Verificando atualização");
+    setMessage("Consultando o serviço oficial de atualização do Edge…");
+    all(selectors.action).forEach(button => {
+      button.disabled = true;
+      button.textContent = "Verificando…";
+    });
+    window.postMessage({ source: DASHBOARD_SOURCE, type: "command", requestId, action: "check_update" }, location.origin);
+    clearTimeout(updateCheckTimer);
+    updateCheckTimer = setTimeout(() => {
+      all(selectors.action).forEach(button => { button.disabled = false; });
+      updateUI();
+      setMessage("A extensão não respondeu à verificação. Reabra o painel e tente novamente.", "warning");
+    }, 4500);
+    return;
+  }
   if (!storeAvailable) {
     setMessage("Conferindo novamente com a Microsoft…");
     checkStore();
