@@ -1,1 +1,48 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acesso — Atlas</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/account.css?v=3.0.0"></head><body><main class="account-page"><section class="account-story"><a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><div class="story-copy"><span>VOCÊ DECIDE. O ATLAS ORGANIZA.</span><h1>Entre com contexto. Não com esperança.</h1><p>Crie sua conta e deixe o Atlas acompanhar o mercado com você. Seu acesso é liberado após a confirmação do pagamento.</p></div><div class="story-foot">Atlas · Assistente de operação</div></section><section class="account-panel"><div class="form-card"><div class="tabs"><button class="active" type="button" data-mode="login">Entrar</button><button type="button" data-mode="signup">Criar conta</button></div><div data-auth="login"><h2>Bem-vindo de volta.</h2><p>Entre para continuar de onde parou.</p><form id="loginForm"><div class="field"><label for="loginId">E-mail ou usuário</label><input id="loginId" autocomplete="username" required></div><div class="field"><label for="loginPassword">Senha</label><input id="loginPassword" type="password" autocomplete="current-password" required></div><button class="submit" type="submit">Entrar no Atlas</button><div class="form-row"><a href="/recuperar-senha">Esqueci minha senha</a><a href="/">Voltar ao início</a></div><div class="status" id="loginStatus"></div></form></div><div data-auth="signup" class="hidden"><h2>Crie sua conta.</h2><p>Depois do cadastro, você continua para o pagamento.</p><form id="signupForm"><div class="field"><label for="signupName">Nome completo</label><input id="signupName" autocomplete="name" required></div><div class="field"><label for="signupEmail">E-mail</label><input id="signupEmail" type="email" autocomplete="email" required></div><div class="field"><label for="signupPassword">Senha</label><input id="signupPassword" type="password" minlength="8" autocomplete="new-password" required></div><button class="submit" type="submit">Criar conta e continuar</button><div class="form-row"><span>Já tem conta?</span><button type="button" class="tiny" data-mode="login">Entrar</button></div><div class="status" id="signupStatus"></div></form></div></div></section></main><script type="module" src="/modules/auth.js?v=3.0.0"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Acesso | Atlas</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/account.css?v=3.1.0">
+</head>
+<body>
+  <main class="account-page">
+    <section class="account-story">
+      <a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a>
+      <div class="story-copy"><span>VOCÊ DECIDE. O ATLAS ORGANIZA.</span><h1>Entre com contexto. Não com esperança.</h1><p>Crie sua conta em poucos segundos. Seu acesso é liberado após a confirmação do pagamento.</p></div>
+      <div class="story-foot">Atlas · Assistente de operação</div>
+    </section>
+    <section class="account-panel">
+      <div class="form-card">
+        <div class="tabs"><button class="active" type="button" data-mode="login">Entrar</button><button type="button" data-mode="signup">Criar conta</button></div>
+        <div data-auth="login">
+          <h2 id="loginTitle">Bem-vindo de volta.</h2><p id="loginIntro">Entre para continuar de onde parou.</p>
+          <form id="loginForm">
+            <div class="field"><label for="loginId" id="loginLabel">E-mail</label><input id="loginId" type="email" autocomplete="email" required></div>
+            <div class="field"><label for="loginPassword">Senha</label><input id="loginPassword" type="password" autocomplete="current-password" required></div>
+            <button class="submit" type="submit">Entrar no Atlas</button>
+            <div class="form-row"><a href="/recuperar-senha">Esqueci minha senha</a><a href="/">Voltar ao início</a></div>
+            <div class="status" id="loginStatus"></div>
+          </form>
+        </div>
+        <div data-auth="signup" class="hidden">
+          <h2>Crie sua conta.</h2><p>Sem confirmação por e-mail. É cadastrar e continuar.</p>
+          <form id="signupForm">
+            <div class="field"><label for="signupName">Primeiro nome</label><input id="signupName" autocomplete="given-name" maxlength="40" placeholder="Ex.: Carlos" required></div>
+            <div class="field"><label for="signupEmail">E-mail</label><input id="signupEmail" type="email" autocomplete="email" required></div>
+            <div class="field"><label for="signupPhone">Telefone</label><input id="signupPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="15" placeholder="(11) 99999-9999" required></div>
+            <div class="field"><label for="signupPassword">Senha</label><input id="signupPassword" type="password" minlength="8" autocomplete="new-password" required></div>
+            <div class="field"><label for="signupPasswordConfirmation">Repita a senha</label><input id="signupPasswordConfirmation" type="password" minlength="8" autocomplete="new-password" required></div>
+            <button class="submit" type="submit">Criar conta e continuar</button>
+            <div class="form-row"><span>Já tem conta?</span><button type="button" class="tiny" data-mode="login">Entrar</button></div>
+            <div class="status" id="signupStatus"></div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/modules/auth.js?v=3.1.0"></script>
+</body>
+</html>

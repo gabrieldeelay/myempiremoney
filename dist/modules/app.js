@@ -268,7 +268,7 @@ const robot = {
       const replies = {
         loginseen: "Um moço fuçando o aplicativo sem fazer login. Por enquanto, essa é toda a análise técnica disponível.",
         nologin: "Não, né, mano. Sem login eu não tenho ativo, velas nem saldo. Aí seria palpite fantasiado de análise.",
-        next: "Faz login na Hezilex. Quando o gráfico abrir, eu começo a analisar sozinho — sem você apertar mais nada."
+        next: "Faz login na Hezilex. Quando o gráfico abrir, eu começo a analisar sozinho, sem você apertar mais nada."
       };
       this.sayText(replies[question] || replies.loginseen, this.currentContext, true);
       return;

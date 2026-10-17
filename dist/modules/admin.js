@@ -1,5 +1,6 @@
 import { apiFetch, getAtlasClient } from "/modules/supabase-client.js";
 const $ = selector => document.querySelector(selector);
+const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
 const client = await getAtlasClient();
 const { data: authData } = await client.auth.getSession();
 if (!authData.session) location.replace("/acesso");
@@ -14,7 +15,7 @@ function fill(settings) {
 }
 async function loadUsers() {
   const payload = await apiFetch("/api/admin-users");
-  $("#userList").innerHTML = payload.users.map(user => `<div class="user-row"><span><b>${user.name || user.email}</b><small>${user.email} · ${user.role} · ${user.access_status}</small></span>${user.role === "admin" ? "<strong>ADMIN</strong>" : `<button class="tiny" type="button" data-user="${user.id}" data-access="${user.access_granted ? "0" : "1"}">${user.access_granted ? "Bloquear" : "Liberar"}</button>`}</div>`).join("");
+  $("#userList").innerHTML = payload.users.map(user => `<div class="user-row"><span><b>${escapeHtml(user.name || user.email)}</b><small>${escapeHtml(user.email)}${user.phone ? ` · ${escapeHtml(user.phone)}` : ""} · ${escapeHtml(user.role)} · ${escapeHtml(user.access_status)}</small></span>${user.role === "admin" ? "<strong>ADMIN</strong>" : `<button class="tiny" type="button" data-user="${escapeHtml(user.id)}" data-access="${user.access_granted ? "0" : "1"}">${user.access_granted ? "Bloquear" : "Liberar"}</button>`}</div>`).join("");
   document.querySelectorAll("[data-user]").forEach(button => button.addEventListener("click", async () => { button.disabled = true; await apiFetch("/api/admin-users", { method: "PUT", body: JSON.stringify({ id: button.dataset.user, access: button.dataset.access === "1" }) }); await loadUsers(); }));
 }
 

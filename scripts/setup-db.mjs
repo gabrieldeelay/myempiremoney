@@ -11,6 +11,7 @@ await sql.unsafe(`
     id uuid primary key references auth.users(id) on delete cascade,
     email text not null,
     name text,
+    phone text,
     document text,
     role text not null default 'user' check (role in ('user','admin')),
     access_granted boolean not null default false,
@@ -18,6 +19,8 @@ await sql.unsafe(`
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
   );
+
+  alter table public.profiles add column if not exists phone text;
 
   create table if not exists public.app_settings (
     key text primary key,
@@ -58,8 +61,8 @@ await sql.unsafe(`
   create or replace function public.handle_new_user()
   returns trigger language plpgsql security definer set search_path = public as $$
   begin
-    insert into public.profiles (id, email, name)
-    values (new.id, coalesce(new.email, ''), coalesce(new.raw_user_meta_data->>'name', ''))
+    insert into public.profiles (id, email, name, phone)
+    values (new.id, coalesce(new.email, ''), coalesce(new.raw_user_meta_data->>'name', ''), coalesce(new.raw_user_meta_data->>'phone', ''))
     on conflict (id) do nothing;
     return new;
   end;
@@ -84,13 +87,21 @@ await sql.unsafe(`
 
   insert into public.app_settings (key, value) values
     ('pricing', '{"oldPrice":1499,"currentPrice":499.90}'::jsonb),
-    ('content', '{"eyebrow":"SEU ASSISTENTE DE OPERAÇÃO","headline":"Operar sozinho é uma burrice cara.","subheadline":"O Atlas lê o contexto, organiza as informações e fica ao seu lado antes de cada decisão. Você continua no controle — só não precisa decidir no escuro."}'::jsonb),
+    ('content', '{"eyebrow":"SEU ASSISTENTE DE OPERAÇÃO","headline":"Operar sem contexto aumenta o risco.","subheadline":"O Atlas lê o contexto, organiza as informações e fica ao seu lado antes de cada decisão. Você continua no controle e não precisa decidir no escuro."}'::jsonb),
     ('market', '{"newsQuery":"(bitcoin OR ethereum OR \\"central bank\\" OR inflation OR markets)","symbols":["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT","ADAUSDT","DOGEUSDT","LTCUSDT","AVAXUSDT"]}'::jsonb)
   on conflict (key) do nothing;
 
   update public.app_settings
   set value = jsonb_set(value, '{newsQuery}', to_jsonb('(bitcoin OR ethereum OR "central bank" OR inflation OR markets)'::text)), updated_at = now()
   where key = 'market' and value->>'newsQuery' = '(mercado OR economia OR inflação OR juros OR bitcoin OR criptomoedas)';
+
+  update public.app_settings
+  set value = jsonb_build_object(
+    'eyebrow', coalesce(value->>'eyebrow', 'SEU ASSISTENTE DE OPERAÇÃO'),
+    'headline', 'Operar sem contexto aumenta o risco.',
+    'subheadline', 'O Atlas lê o contexto, organiza as informações e fica ao seu lado antes de cada decisão. Você continua no controle e não precisa decidir no escuro.'
+  ), updated_at = now()
+  where key = 'content' and (value->>'headline' ilike '%burrice%' or value->>'subheadline' like '%—%');
 `);
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -12,6 +12,25 @@ function setMode(mode) {
 
 buttons.forEach(button => button.addEventListener("click", () => setMode(button.dataset.mode)));
 if (new URLSearchParams(location.search).get("mode") === "signup") setMode("signup");
+const adminMode = new URLSearchParams(location.search).get("admin") === "1";
+if (adminMode) {
+  $("#loginTitle").textContent = "Acesso administrativo.";
+  $("#loginIntro").textContent = "Entre com o usuário e a senha do administrador.";
+  $("#loginLabel").textContent = "Usuário";
+  $("#loginId").type = "text";
+  $("#loginId").value = "admin";
+  document.querySelector(".tabs").classList.add("hidden");
+}
+
+function formatPhone(value) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 2) return digits ? `(${digits}` : "";
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+$("#signupPhone").addEventListener("input", event => { event.currentTarget.value = formatPhone(event.currentTarget.value); });
 
 const client = await getAtlasClient();
 const { data: existing } = await client.auth.getSession();
@@ -30,7 +49,7 @@ $("#loginForm").addEventListener("submit", async event => {
     if (error) throw error;
     const account = await apiFetch("/api/me");
     location.replace(account.profile?.role === "admin" ? "/admin" : account.profile?.access_granted ? "/app" : "/checkout");
-  } catch (error) { status("#loginStatus", error.message.includes("Invalid login") ? "E-mail, usuário ou senha incorretos." : error.message, "error"); submit.disabled = false; }
+  } catch (error) { status("#loginStatus", error.message.includes("Invalid login") ? "E-mail ou senha incorretos." : error.message, "error"); submit.disabled = false; }
 });
 
 $("#signupForm").addEventListener("submit", async event => {
@@ -38,9 +57,17 @@ $("#signupForm").addEventListener("submit", async event => {
   const submit = event.currentTarget.querySelector("button[type=submit]");
   submit.disabled = true; status("#signupStatus", "Criando sua conta…");
   try {
-    const { data, error } = await client.auth.signUp({ email: $("#signupEmail").value.trim(), password: $("#signupPassword").value, options: { data: { name: $("#signupName").value.trim() }, emailRedirectTo: `${location.origin}/checkout` } });
+    const email = $("#signupEmail").value.trim();
+    const password = $("#signupPassword").value;
+    const response = await fetch("/api/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "signup", name: $("#signupName").value.trim(), email, phone: $("#signupPhone").value, password, passwordConfirmation: $("#signupPasswordConfirmation").value })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Não foi possível criar sua conta.");
+    const { error } = await client.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    if (data.session) location.replace("/checkout");
-    else { status("#signupStatus", "Conta criada. Confira seu e-mail para confirmar o cadastro e depois faça login.", "success"); submit.disabled = false; }
+    location.replace("/checkout");
   } catch (error) { status("#signupStatus", error.message, "error"); submit.disabled = false; }
 });

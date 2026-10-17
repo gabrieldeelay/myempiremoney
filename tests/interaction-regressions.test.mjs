@@ -7,6 +7,7 @@ const bridge = await readFile(new URL("../extension/content-script.js", import.m
 const styles = await readFile(new URL("../dist/styles.css", import.meta.url), "utf8");
 const html = await readFile(new URL("../dist/app/index.html", import.meta.url), "utf8");
 const landing = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
+const access = await readFile(new URL("../dist/acesso/index.html", import.meta.url), "utf8");
 
 assert.equal(normalizeAssetName("ETHUSDT"), "ETHEREUM");
 assert.equal(normalizeAssetName("sol/usdt"), "SOLANA");
@@ -65,8 +66,11 @@ assert.match(styles, /\.robot-head[^\n]+background:\s*linear-gradient\(145deg, #
 assert.match(styles, /\.cursor-glow/, "o fundo deve ter iluminação suave que acompanha o ponteiro");
 assert.match(html, /data-settings-trigger/, "a instalação deve ficar dentro de Configurações");
 assert.doesNotMatch(html, /Abrir em nova aba|app\.hezilex\.com<\/code>/, "o topo não deve exibir ações e endereço desnecessários");
-assert.match(landing, /Operar sozinho é uma/, "a raiz deve apresentar a landing page do Atlas");
+assert.match(landing, /Operar sem contexto aumenta o/, "a raiz deve apresentar a landing page do Atlas com linguagem profissional");
 assert.match(landing, /id="oldPrice"/, "a landing deve exibir o preço antigo configurável");
 assert.match(landing, /id="currentPrice"/, "a landing deve exibir o preço atual configurável");
+assert.match(landing, /href="\/acesso\?admin=1"/, "o rodapé deve oferecer acesso administrativo");
+assert.match(access, /id="signupPhone"/, "o cadastro deve solicitar telefone");
+assert.match(access, /id="signupPasswordConfirmation"/, "o cadastro deve solicitar confirmação da senha");
 
 console.log("interaction regressions: ok");
