@@ -1,4 +1,4 @@
-const DASHBOARD_URL = "https://atlas-guard-trading.vercel.app/";
+const DASHBOARD_URL = "https://nossoatlas.com/";
 const STATUS_URL = `${DASHBOARD_URL}api/extension-status`;
 const RELEASE_URL = `${DASHBOARD_URL}extension-release.json`;
 const installedVersion = chrome.runtime.getManifest().version;
@@ -11,7 +11,11 @@ let release = null;
 function eligible(origin) {
   try {
     const host = new URL(origin).hostname;
-    return host === "127.0.0.1" || host === "localhost" || host === "atlas-guard-trading.vercel.app";
+    return host === "127.0.0.1"
+      || host === "localhost"
+      || host === "atlas-guard-trading.vercel.app"
+      || host === "nossoatlas.com"
+      || host === "www.nossoatlas.com";
   } catch { return false; }
 }
 
