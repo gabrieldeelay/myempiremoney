@@ -47,7 +47,7 @@ module.exports = async function handler(req, res) {
     const { user, profile, supabase } = await requireUser(req);
     if (profile?.access_granted) return res.status(200).json({ accessGranted: true });
     const settings = await getPublicSettings(supabase);
-    const planId = req.body?.planId === "monthly" ? "monthly" : "lifetime";
+    const planId = "monthly";
     const quote = await buildQuote(supabase, settings, planId, req.body?.couponCode);
     if (req.body?.action === "quote") return res.status(200).json({ quote: { ...quote, coupon: quote.coupon ? { code: quote.coupon.code } : null } });
     const credentials = await getVenoCredentials(supabase);
@@ -65,7 +65,7 @@ module.exports = async function handler(req, res) {
         "X-Client-Secret": credentials.clientSecret,
         "Idempotency-Key": `atlas-${user.id}-${crypto.randomUUID()}`
       },
-      body: JSON.stringify({ amount, name, document, description: `${quote.plan.label} Atlas`, webhook_url: `${origin}/api/venopag-webhook` })
+      body: JSON.stringify({ amount, name, document, description: quote.plan.label, webhook_url: `${origin}/api/venopag-webhook` })
     });
     const payload = await response.json().catch(() => ({ ok: false, error: "Resposta inválida da Venopag." }));
     if (!payload.ok) return res.status(response.status === 429 ? 429 : 422).json({ error: payload.error || "Não foi possível gerar o PIX." });

@@ -33,7 +33,7 @@ module.exports = async function handler(req, res) {
       const veno = await getVenoCredentials(supabase).catch(() => null);
       const { data: coupons, error: couponError } = await supabase.from("coupons").select("*").order("created_at", { ascending: false });
       if (couponError) throw couponError;
-      return res.status(200).json({ ...settings, coupons: coupons || [], venopag: { configured: Boolean(veno?.clientId && veno?.clientSecret && veno?.webhookSecret), clientIdHint: veno?.clientId ? `${veno.clientId.slice(0, 4)}••••` : "" } });
+      return res.status(200).json({ ...settings, coupons: coupons || [], venopag: { configured: Boolean(veno?.clientId && veno?.clientSecret && veno?.webhookSecret), clientId: veno?.clientId || "", clientSecret: veno?.clientSecret || "", webhookSecret: veno?.webhookSecret || "", updatedAt: veno?.updatedAt || null } });
     }
     if (req.method === "POST" && req.body?.action === "coupon") {
       const id = String(req.body?.coupon?.id || "").trim();
@@ -59,11 +59,12 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
     if (req.method !== "PUT") return res.status(405).json({ error: "Método não permitido." });
+    const monthly = cleanPlan(req.body?.plans?.monthly, "monthly");
+    monthly.active = true;
     const plans = {
-      monthly: cleanPlan(req.body?.plans?.monthly, "monthly"),
-      lifetime: cleanPlan(req.body?.plans?.lifetime, "lifetime")
+      monthly,
+      lifetime: { id: "lifetime", label: "Acesso descontinuado", billing: "", oldPrice: monthly.oldPrice, currentPrice: monthly.currentPrice, active: false, benefits: [] }
     };
-    if (!plans.monthly.active && !plans.lifetime.active) return res.status(422).json({ error: "Mantenha pelo menos um plano ativo." });
     const content = {
       eyebrow: String(req.body?.content?.eyebrow || "").trim().slice(0, 80),
       headline: String(req.body?.content?.headline || "").trim().slice(0, 140),
@@ -72,7 +73,7 @@ module.exports = async function handler(req, res) {
     const symbols = cleanSymbols(req.body?.market?.symbols);
     if (!symbols.length) return res.status(422).json({ error: "Adicione ao menos um ativo terminado em USDT." });
     const market = { newsQuery: String(req.body?.market?.newsQuery || "").trim().slice(0, 240), symbols };
-    for (const [key, value] of Object.entries({ pricing: { oldPrice: plans.lifetime.oldPrice, currentPrice: plans.lifetime.currentPrice }, plans, content, market })) {
+    for (const [key, value] of Object.entries({ pricing: { oldPrice: monthly.oldPrice, currentPrice: monthly.currentPrice }, plans, content, market })) {
       const { error } = await supabase.from("app_settings").upsert({ key, value, updated_at: new Date().toISOString() });
       if (error) throw error;
     }

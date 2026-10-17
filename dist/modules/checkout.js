@@ -8,22 +8,13 @@ if (!sessionData.session) location.replace("/acesso?returnTo=/checkout");
 
 let polling;
 let config;
-let planId = new URLSearchParams(location.search).get("plan") === "monthly" ? "monthly" : "lifetime";
+let planId = "monthly";
 let couponCode = "";
 let quote;
 
 function renderPlans() {
-  const container = $("#checkoutPlans"); container.replaceChildren();
-  Object.values(config.plans).filter(plan => plan.active !== false).forEach(plan => {
-    const label = document.createElement("label"); label.className = "plan-choice";
-    const input = document.createElement("input"); input.type = "radio"; input.name = "checkoutPlan"; input.value = plan.id; input.checked = planId === plan.id;
-    input.addEventListener("change", async () => { planId = plan.id; couponCode = ""; $("#coupon").value = ""; await loadQuote(); });
-    const title = document.createElement("b"); title.textContent = plan.label;
-    const billing = document.createElement("small"); billing.textContent = plan.billing;
-    const badge = document.createElement("em"); badge.textContent = `${Math.max(0, Math.round((1 - plan.currentPrice / plan.oldPrice) * 100))}% DE DESCONTO`;
-    label.append(input, title, billing, badge); container.append(label);
-  });
-  if (!container.querySelector("input:checked")) { const first = container.querySelector("input"); if (first) { first.checked = true; planId = first.value; } }
+  const access = config.plans?.monthly || Object.values(config.plans || {}).find(plan => plan.active !== false);
+  if (access) planId = access.id;
 }
 
 async function loadQuote() {

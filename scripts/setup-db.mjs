@@ -46,7 +46,7 @@ await sql.unsafe(`
     amount numeric(12,2) not null,
     original_amount numeric(12,2),
     discount_amount numeric(12,2) not null default 0,
-    plan_id text not null default 'lifetime',
+    plan_id text not null default 'monthly',
     status text not null default 'pending',
     pix_code text,
     qr_url text,
@@ -72,7 +72,7 @@ await sql.unsafe(`
 
   alter table public.payments add column if not exists original_amount numeric(12,2);
   alter table public.payments add column if not exists discount_amount numeric(12,2) not null default 0;
-  alter table public.payments add column if not exists plan_id text not null default 'lifetime';
+  alter table public.payments add column if not exists plan_id text not null default 'monthly';
   alter table public.payments add column if not exists coupon_id uuid references public.coupons(id) on delete set null;
   alter table public.payments add column if not exists coupon_redeemed_at timestamptz;
 
@@ -125,11 +125,7 @@ await sql.unsafe(`
       update public.payments set coupon_redeemed_at = now() where id = current_payment.id;
     end if;
     update public.payments set status = 'confirmed', updated_at = now() where id = current_payment.id;
-    if current_payment.plan_id = 'monthly' then
-      update public.profiles set access_granted = true, access_status = 'active', plan_id = 'monthly', access_expires_at = greatest(now(), coalesce(access_expires_at, now())) + interval '30 days', updated_at = now() where id = current_payment.user_id;
-    else
-      update public.profiles set access_granted = true, access_status = 'active', plan_id = 'lifetime', access_expires_at = null, updated_at = now() where id = current_payment.user_id;
-    end if;
+    update public.profiles set access_granted = true, access_status = 'active', plan_id = 'monthly', access_expires_at = greatest(now(), coalesce(access_expires_at, now())) + interval '30 days', updated_at = now() where id = current_payment.user_id;
   end;
   $$;
 
@@ -138,10 +134,14 @@ await sql.unsafe(`
 
   insert into public.app_settings (key, value) values
     ('pricing', '{"oldPrice":1499,"currentPrice":499.90}'::jsonb),
-    ('plans', '{"monthly":{"id":"monthly","label":"Plano mensal","billing":"30 dias de acesso","oldPrice":199.90,"currentPrice":99.90,"active":true,"benefits":["Radar de notícias e tendências","Assistente durante as operações","Atualizações incluídas"]},"lifetime":{"id":"lifetime","label":"Plano vitalício","billing":"Acesso sem mensalidade","oldPrice":1499,"currentPrice":499.90,"active":true,"benefits":["Acesso vitalício ao Atlas","Radar de notícias e tendências","Atualizações incluídas"]}}'::jsonb),
+    ('plans', '{"monthly":{"id":"monthly","label":"Acesso Atlas","billing":"Acesso completo ao Atlas","oldPrice":1499,"currentPrice":499.90,"active":true,"benefits":["Radar de notícias e tendências","Assistente durante as operações","Atualizações incluídas"]},"lifetime":{"id":"lifetime","label":"Acesso descontinuado","billing":"","oldPrice":1499,"currentPrice":499.90,"active":false,"benefits":[]}}'::jsonb),
     ('content', '{"eyebrow":"SEU ASSISTENTE DE OPERAÇÃO","headline":"Operar no escuro, não dá certo.","subheadline":"O Atlas lê o contexto, organiza as informações e fica ao seu lado antes de cada decisão. Você continua no controle e não precisa decidir no escuro."}'::jsonb),
     ('market', '{"newsQuery":"(bitcoin OR ethereum OR \\"central bank\\" OR inflation OR markets)","symbols":["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT","ADAUSDT","DOGEUSDT","LTCUSDT","AVAXUSDT"]}'::jsonb)
   on conflict (key) do nothing;
+
+  update public.app_settings set value = '{"monthly":{"id":"monthly","label":"Acesso Atlas","billing":"Acesso completo ao Atlas","oldPrice":1499,"currentPrice":499.90,"active":true,"benefits":["Radar de notícias e tendências","Assistente durante as operações","Atualizações incluídas"]},"lifetime":{"id":"lifetime","label":"Acesso descontinuado","billing":"","oldPrice":1499,"currentPrice":499.90,"active":false,"benefits":[]}}'::jsonb, updated_at = now() where key = 'plans';
+  update public.app_settings set value = '{"oldPrice":1499,"currentPrice":499.90}'::jsonb, updated_at = now() where key = 'pricing';
+  update public.profiles set plan_id = 'monthly', access_expires_at = now() + interval '30 days', updated_at = now() where role <> 'admin' and access_granted = true and access_expires_at is null;
 
   update public.app_settings
   set value = jsonb_set(value, '{newsQuery}', to_jsonb('(bitcoin OR ethereum OR "central bank" OR inflation OR markets)'::text)), updated_at = now()
@@ -159,13 +159,14 @@ await sql.unsafe(`
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 const adminPassword = process.env.ATLAS_ADMIN_SEED_PASSWORD;
-if (!supabaseUrl || !serviceKey || !adminPassword) throw new Error("Credenciais de seed ausentes.");
+if (!supabaseUrl || !serviceKey) throw new Error("Credenciais do Supabase ausentes.");
 const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 const adminEmail = "admin@atlas.local";
 const { data: listed, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
 if (listError) throw listError;
 let admin = listed.users.find(user => user.email === adminEmail);
 if (!admin) {
+  if (!adminPassword) throw new Error("ATLAS_ADMIN_SEED_PASSWORD é necessária apenas para criar o administrador inicial.");
   const { data, error } = await supabase.auth.admin.createUser({ email: adminEmail, password: adminPassword, email_confirm: true, user_metadata: { name: "Administrador Atlas", username: "admin" } });
   if (error) throw error;
   admin = data.user;

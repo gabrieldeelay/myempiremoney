@@ -4,9 +4,9 @@ const $ = selector => document.querySelector(selector);
 const money = value => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 const storageKey = "atlas-fast-checkout-v1";
 const saved = JSON.parse(sessionStorage.getItem(storageKey) || "{}");
-const state = { step: Number(saved.step) || 0, name: saved.name || "", email: saved.email || "", phone: saved.phone || "", planId: saved.planId || new URLSearchParams(location.search).get("plan") || "lifetime", fullName: saved.fullName || "", document: saved.document || "", couponCode: saved.couponCode || "", accountCreated: false };
+const state = { step: Number(saved.step) || 0, name: saved.name || "", email: saved.email || "", phone: saved.phone || "", planId: "monthly", fullName: saved.fullName || "", document: saved.document || "", couponCode: saved.couponCode || "", accountCreated: false };
 const steps = [...document.querySelectorAll("[data-quick-step]")];
-const messages = ["Leva menos de dois minutos", "Seu acesso", "Contato", "Conta segura", "Metade concluída", "Escolha seu plano", "Estamos quase lá", "Último dado", "Oferta pronta"];
+const messages = ["Leva menos de dois minutos", "Seu acesso", "Contato", "Conta segura", "Metade concluída", "Estamos quase lá", "Último dado", "Oferta pronta"];
 let config;
 let quote;
 let polling;
@@ -37,41 +37,32 @@ function renderStep() {
   $("#quickProgressText").textContent = `Passo ${state.step + 1} de ${steps.length}`;
   $("#quickProgressMessage").textContent = messages[state.step];
   $("#quickProgressBar").style.width = `${((state.step + 1) / steps.length) * 100}%`;
-  $("#quickBack").hidden = state.step === 0 || state.step === 8 || (state.accountCreated && state.step <= 5);
-  $("#quickNext").textContent = state.step === 7 ? "Ver minha oferta" : "Continuar";
-  $("#quickNavigation").classList.toggle("hidden", state.step === 8);
+  $("#quickBack").hidden = state.step === 0 || state.step === 7 || (state.accountCreated && state.step <= 4);
+  $("#quickNext").textContent = state.step === 6 ? "Ver minha oferta" : "Continuar";
+  $("#quickNavigation").classList.toggle("hidden", state.step === 7);
   setStatus(""); persist();
   const activeInput = steps[state.step]?.querySelector("input:not([type=radio])");
   activeInput?.focus();
 }
 
 function renderPlans() {
-  const container = $("#quickPlans"); container.replaceChildren();
-  Object.values(config.plans).filter(plan => plan.active !== false).forEach(plan => {
-    const label = document.createElement("label"); label.className = "plan-choice";
-    const input = document.createElement("input"); input.type = "radio"; input.name = "quickPlan"; input.value = plan.id; input.checked = state.planId === plan.id;
-    input.addEventListener("change", () => { state.planId = plan.id; persist(); });
-    const title = document.createElement("b"); title.textContent = plan.label;
-    const billing = document.createElement("small"); billing.textContent = plan.billing;
-    const badge = document.createElement("em"); badge.textContent = `${Math.max(0, Math.round((1 - plan.currentPrice / plan.oldPrice) * 100))}% DE DESCONTO`;
-    label.append(input, title, billing, badge); container.append(label);
-  });
-  if (!container.querySelector("input:checked")) { const first = container.querySelector("input"); if (first) { first.checked = true; state.planId = first.value; } }
+  const access = config.plans?.monthly || Object.values(config.plans || {}).find(plan => plan.active !== false);
+  if (access) state.planId = access.id;
 }
 
 function currentField() {
-  return [$("#quickName"), $("#quickEmail"), $("#quickPhone"), $("#quickPassword"), $("#quickPasswordConfirmation"), document.querySelector('input[name="quickPlan"]:checked'), $("#quickFullName"), $("#quickDocument")][state.step];
+  return [$("#quickName"), $("#quickEmail"), $("#quickPhone"), $("#quickPassword"), $("#quickPasswordConfirmation"), $("#quickFullName"), $("#quickDocument")][state.step];
 }
 
 function validateStep() {
   const field = currentField();
-  if (!field) { setStatus("Escolha um plano para continuar.", true); return false; }
+  if (!field) return false;
   if (field.reportValidity && !field.reportValidity()) return false;
   if (state.step === 0 && /\s/.test(field.value.trim())) { setStatus("Digite somente seu primeiro nome.", true); return false; }
   if (state.step === 2 && ![10, 11].includes(field.value.replace(/\D/g, "").length)) { setStatus("Informe um telefone com DDD.", true); return false; }
   if (state.step === 4 && field.value !== $("#quickPassword").value) { setStatus("As senhas não são iguais.", true); return false; }
-  if (state.step === 6 && !/\s/.test(field.value.trim())) { setStatus("Informe seu nome completo.", true); return false; }
-  if (state.step === 7 && ![11, 14].includes(field.value.replace(/\D/g, "").length)) { setStatus("Informe um CPF ou CNPJ válido.", true); return false; }
+  if (state.step === 5 && !/\s/.test(field.value.trim())) { setStatus("Informe seu nome completo.", true); return false; }
+  if (state.step === 6 && ![11, 14].includes(field.value.replace(/\D/g, "").length)) { setStatus("Informe um CPF ou CNPJ válido.", true); return false; }
   return true;
 }
 
@@ -112,8 +103,7 @@ async function advance() {
   if (!validateStep()) return;
   const button = $("#quickNext"); button.disabled = true;
   try {
-    if (state.step === 5) state.planId = document.querySelector('input[name="quickPlan"]:checked').value;
-    if (state.step === 7) { setStatus("Preparando sua oferta…"); await ensureAccount(); state.step = 8; await loadQuote(); }
+    if (state.step === 6) { setStatus("Preparando sua oferta…"); await ensureAccount(); state.step = 7; await loadQuote(); }
     else state.step += 1;
     renderStep();
   } catch (error) { setStatus(error.message, true); } finally { button.disabled = false; }
@@ -153,8 +143,8 @@ const { data: currentSession } = await client.auth.getSession();
 if (currentSession.session) {
   const account = await apiFetch("/api/me");
   if (account.profile?.access_granted) location.replace("/app");
-  state.accountCreated = true; state.email = currentSession.session.user.email; state.name = account.profile?.name?.split(" ")[0] || state.name; state.phone = account.profile?.phone || state.phone; state.fullName = account.profile?.name || state.fullName; state.document = account.profile?.document || state.document; state.step = Math.max(5, Math.min(state.step, 8));
+  state.accountCreated = true; state.email = currentSession.session.user.email; state.name = account.profile?.name?.split(" ")[0] || state.name; state.phone = account.profile?.phone || state.phone; state.fullName = account.profile?.name || state.fullName; state.document = account.profile?.document || state.document; state.step = Math.max(5, Math.min(state.step, 7));
   $("#quickName").value = state.name; $("#quickEmail").value = state.email; $("#quickPhone").value = formatPhone(state.phone); $("#quickFullName").value = state.fullName; $("#quickDocument").value = formatDocument(state.document);
-  if (state.step === 8) await loadQuote();
+  if (state.step === 7) await loadQuote();
 } else if (state.step > 3) state.step = 3;
 renderStep();

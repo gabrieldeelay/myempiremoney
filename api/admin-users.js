@@ -4,6 +4,23 @@ module.exports = async function handler(req, res) {
   try {
     const { supabase } = await requireAdmin(req);
     if (req.method === "GET") {
+      if (String(req.query?.view || "") === "payments") {
+        const [{ data: payments, error: paymentError }, { data: profiles, error: profileError }] = await Promise.all([
+          supabase.from("payments").select("id,user_id,request_number,transaction_id,amount,original_amount,discount_amount,status,created_at,updated_at,expires_at").order("created_at", { ascending: false }).limit(500),
+          supabase.from("profiles").select("id,email,name,phone,created_at,access_status,access_expires_at").neq("role", "admin").order("created_at", { ascending: false }).limit(500)
+        ]);
+        if (paymentError) throw paymentError;
+        if (profileError) throw profileError;
+        const profileMap = new Map((profiles || []).map(profile => [profile.id, profile]));
+        const enriched = (payments || []).map(payment => ({ ...payment, customer: profileMap.get(payment.user_id) || null }));
+        const stats = {
+          attempts: enriched.length,
+          confirmed: enriched.filter(item => ["confirmed", "paid", "approved"].includes(String(item.status).toLowerCase())).length,
+          pending: enriched.filter(item => String(item.status).toLowerCase() === "pending").length,
+          accounts: (profiles || []).length
+        };
+        return res.status(200).json({ payments: enriched, accounts: profiles || [], stats });
+      }
       const { data, error } = await supabase.from("profiles").select("id,email,name,phone,role,plan_id,access_granted,access_status,access_expires_at,created_at").order("created_at", { ascending: false }).limit(1000);
       if (error) throw error;
       const users = data || [];
@@ -29,12 +46,22 @@ module.exports = async function handler(req, res) {
     }
     if (req.method !== "PUT") return res.status(405).json({ error: "Método não permitido." });
     const id = String(req.body?.id || "");
+    if (!id) return res.status(422).json({ error: "Cliente não informado." });
+    if (req.body?.action === "reset_password") {
+      const password = String(req.body?.password || "");
+      if (password.length < 8) return res.status(422).json({ error: "A nova senha precisa ter pelo menos 8 caracteres." });
+      const { error: passwordError } = await supabase.auth.admin.updateUserById(id, { password });
+      if (passwordError) throw passwordError;
+      await supabase.from("profiles").update({ updated_at: new Date().toISOString() }).eq("id", id);
+      return res.status(200).json({ ok: true });
+    }
     const access = Boolean(req.body?.access);
-    const { data, error } = await supabase.from("profiles").update({ access_granted: access, access_status: access ? "active" : "blocked", updated_at: new Date().toISOString() }).eq("id", id).select("id,email,access_granted,access_status").single();
+    const update = { access_granted: access, access_status: access ? "active" : "blocked", updated_at: new Date().toISOString() };
+    if (access) update.access_expires_at = new Date(Date.now() + 30 * 86400000).toISOString();
+    const { data, error } = await supabase.from("profiles").update(update).eq("id", id).select("id,email,access_granted,access_status,access_expires_at").single();
     if (error) throw error;
     return res.status(200).json({ user: data });
   } catch (error) {
     return sendError(res, error);
   }
 };
-
