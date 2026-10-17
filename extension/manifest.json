@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "__MSG_extensionDescription__",
   "default_locale": "pt_BR",
   "icons": {
@@ -13,7 +13,9 @@
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://app.hezilex.com/*",
-    "https://atlas-guard-trading.vercel.app/*"
+    "https://atlas-guard-trading.vercel.app/*",
+    "https://nossoatlas.com/*",
+    "https://www.nossoatlas.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -21,7 +23,9 @@
   "content_scripts": [
     {
       "matches": [
-        "https://atlas-guard-trading.vercel.app/*"
+        "https://atlas-guard-trading.vercel.app/*",
+        "https://nossoatlas.com/*",
+        "https://www.nossoatlas.com/*"
       ],
       "js": ["dashboard-bridge.js"],
       "run_at": "document_idle"

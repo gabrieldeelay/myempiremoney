@@ -41,7 +41,11 @@ chrome.runtime.onUpdateAvailable.addListener(async details => {
 function originCanBeAuthorized(origin) {
   try {
     const url = new URL(origin);
-    return url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "atlas-guard-trading.vercel.app";
+    return url.hostname === "127.0.0.1"
+      || url.hostname === "localhost"
+      || url.hostname === "atlas-guard-trading.vercel.app"
+      || url.hostname === "nossoatlas.com"
+      || url.hostname === "www.nossoatlas.com";
   } catch {
     return false;
   }

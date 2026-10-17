@@ -2,7 +2,7 @@
   if (window.__atlasGuardBridgeLoaded || window.top === window) return;
   window.__atlasGuardBridgeLoaded = true;
 
-  const VERSION = "2.5.1";
+  const VERSION = "2.5.2";
   const BRIDGE_SOURCE = "atlas-guard-extension";
   const DASHBOARD_SOURCE = "atlas-guard-dashboard";
   const CANDLE_MINUTES = 5;
