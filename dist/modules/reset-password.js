@@ -5,7 +5,7 @@ form.addEventListener("submit", async event => {
   try {
     const token = new URLSearchParams(location.search).get("token");
     if (token) {
-      const response = await fetch("/api/password-reset-confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password: password.value }) });
+      const response = await fetch("/api/password-reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "confirm", token, password: password.value }) });
       const payload = await response.json(); if (!response.ok) throw new Error(payload.error);
     } else {
       const client = await getAtlasClient(); const { error } = await client.auth.updateUser({ password: password.value }); if (error) throw error;
