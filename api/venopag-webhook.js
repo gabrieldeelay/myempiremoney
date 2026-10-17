@@ -10,20 +10,34 @@ function safeEqual(a, b) {
   return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
 }
 
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
   try {
     const supabase = getAdminClient();
     const credentials = await getVenoCredentials(supabase);
     if (!credentials?.webhookSecret) return res.status(503).json({ error: "Webhook não configurado." });
-    const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body || {});
+    const rawBody = typeof req.body === "string"
+      ? req.body
+      : req.body && Object.keys(req.body).length
+        ? JSON.stringify(req.body)
+        : await readRawBody(req);
     const signature = String(req.headers["x-veno-signature"] || "");
     const entries = Object.fromEntries(signature.split(",").map(part => part.split("=").map(value => value.trim())));
     const timestamp = Number(entries.t);
     if (!timestamp || Math.abs(Date.now() / 1000 - timestamp) > 300) return res.status(401).json({ error: "Assinatura expirada." });
     const expected = crypto.createHmac("sha256", credentials.webhookSecret).update(`${timestamp}.${rawBody}`).digest("hex");
     if (!safeEqual(entries.v1, expected)) return res.status(401).json({ error: "Assinatura inválida." });
-    const event = typeof req.body === "object" ? req.body : JSON.parse(rawBody);
+    const event = req.body && typeof req.body === "object" && Object.keys(req.body).length
+      ? req.body
+      : JSON.parse(rawBody);
     const requestNumber = String(event.request_number || event.data?.request_number || "");
     const status = String(event.status || event.data?.status || "").toLowerCase();
     if (!requestNumber || !status) return res.status(422).json({ error: "Evento incompleto." });
