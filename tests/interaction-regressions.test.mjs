@@ -5,7 +5,8 @@ import { normalizeAssetName } from "../dist/modules/asset-name.js";
 const app = await readFile(new URL("../dist/modules/app.js", import.meta.url), "utf8");
 const bridge = await readFile(new URL("../extension/content-script.js", import.meta.url), "utf8");
 const styles = await readFile(new URL("../dist/styles.css", import.meta.url), "utf8");
-const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
+const html = await readFile(new URL("../dist/app/index.html", import.meta.url), "utf8");
+const landing = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 
 assert.equal(normalizeAssetName("ETHUSDT"), "ETHEREUM");
 assert.equal(normalizeAssetName("sol/usdt"), "SOLANA");
@@ -36,11 +37,9 @@ assert.match(app, /protectionReady/, "o robô precisa anunciar quando a proteç�
 assert.match(app, /protectionEarly/, "o robô precisa comentar uma proteção antecipada");
 assert.match(app, /showToast\(`Proteção no ponto/, "o alerta de proteção precisa aparecer na interface");
 assert.match(bridge, /lastHistoryCheckAt < 1500/, "a confirmação pelo histórico precisa ser rápida");
-assert.match(bridge, /new view\.MouseEvent\("mousedown"/, "o seletor M5 deve reproduzir a ativação completa do controle");
-assert.match(bridge, /waitFor\(timeframeIsFive, 1500/, "o macro M5 deve aguardar a confirmação visual");
-assert.match(bridge, /adjustmentButtons\(current\)/, "o macro de 1% deve localizar o controle pelos botões de ajuste atuais");
-assert.match(bridge, /input\.form-control,input\[type="number"\]/, "o macro de 1% deve usar o campo nativo da Hezilex quando disponível");
-assert.match(bridge, /new view\.KeyboardEvent\("keydown", \{ key: "Enter"/, "o valor deve ser confirmado no controle nativo");
+assert.doesNotMatch(html, /id="setTimeframe"|id="setExpiration"|id="setRisk"|id="applyAll"/, "os macros devem ser removidos do painel");
+assert.match(html, /data-intel-tab="news"/, "a antiga área de macros deve exibir notícias");
+assert.match(html, /data-intel-tab="trends"/, "a antiga área de macros deve exibir tendências");
 assert.match(bridge, /openNativeDrawingChoice/, "LTA e LTB devem abrir a ferramenta nativa da Hezilex");
 assert.match(bridge, /linha de tend\[eê\]ncia\|trend line/, "o desenho deve selecionar explicitamente Linha de Tendência");
 assert.match(bridge, /return \{ type, x1, y1: clamp\(y1\), x2: x2Point, y2: clamp\(y2Point\) \}/, "a linha deve terminar no segundo pivô, não no espaço futuro do gráfico");
@@ -66,5 +65,8 @@ assert.match(styles, /\.robot-head[^\n]+background:\s*linear-gradient\(145deg, #
 assert.match(styles, /\.cursor-glow/, "o fundo deve ter iluminação suave que acompanha o ponteiro");
 assert.match(html, /data-settings-trigger/, "a instalação deve ficar dentro de Configurações");
 assert.doesNotMatch(html, /Abrir em nova aba|app\.hezilex\.com<\/code>/, "o topo não deve exibir ações e endereço desnecessários");
+assert.match(landing, /Operar sozinho é uma/, "a raiz deve apresentar a landing page do Atlas");
+assert.match(landing, /id="oldPrice"/, "a landing deve exibir o preço antigo configurável");
+assert.match(landing, /id="currentPrice"/, "a landing deve exibir o preço atual configurável");
 
 console.log("interaction regressions: ok");

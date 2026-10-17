@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Atlas — seu assistente de operação com leitura de mercado, notícias e tendências." />
+  <meta name="theme-color" content="#061326" />
+  <title>Atlas — Assistente de operações</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css?v=3.0.0" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Atlas">
+        <span class="brand-orbit" aria-hidden="true"><i></i></span>
+        <span><b>ATLAS</b><small>assistente de mercado</small></span>
+      </a>
+
+      <div class="connection" id="connectionState">
+        <i></i><span id="connectionText">Conectando…</span>
+      </div>
+
+      <div class="top-actions">
+        <button class="icon-button" id="reloadFrame" type="button" aria-label="Recarregar Hezilex" title="Recarregar Hezilex">↻</button>
+        <button class="settings-button" type="button" data-settings-trigger aria-controls="installModal">⚙ <span>Configurações</span></button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="terminal" aria-label="Plataforma oficial Hezilex">
+        <div class="terminal-bar">
+          <span><i></i> Hezilex oficial</span>
+          <small id="monitorPulse">Aguardando conexão</small>
+        </div>
+
+        <div class="frame-wrap">
+          <div class="frame-loader" id="frameLoader">
+            <span class="loader-ring"></span>
+            <p>Abrindo a plataforma…</p>
+          </div>
+          <iframe
+            id="hezilexFrame"
+            title="Plataforma oficial Hezilex"
+            src="https://app.hezilex.com/"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allow="clipboard-read; clipboard-write; fullscreen"
+          ></iframe>
+        </div>
+      </section>
+
+      <section class="copilot" aria-label="Análise Atlas">
+        <div class="signal-card" id="signalCard">
+          <div class="signal-icon" id="signalIcon">—</div>
+          <div class="signal-copy">
+            <small>LEITURA ATUAL</small>
+            <div class="signal-line">
+              <h1 id="analysisDirection">AGUARDAR</h1>
+              <span id="confidenceBadge">0%</span>
+            </div>
+            <p id="analysisReason">Entre na Hezilex para iniciar a análise em tempo real.</p>
+          </div>
+        </div>
+
+        <div class="market-facts">
+          <div><small>ATIVO</small><strong id="agentAsset">—</strong></div>
+          <div><small>GRÁFICO</small><strong id="agentTimeframe">—</strong></div>
+          <div><small>EXPIRAÇÃO</small><strong id="agentExpiration">—</strong></div>
+          <div><small>VALOR 1%</small><strong id="riskAmount">—</strong></div>
+        </div>
+
+        <div class="market-intel" aria-label="Notícias e tendências de mercado">
+          <div class="intel-head">
+            <div><span>Radar Atlas</span><small>Informação nova sem atrapalhar o gráfico.</small></div>
+            <div class="intel-tabs" role="tablist">
+              <button class="active" type="button" data-intel-tab="news">Notícias</button>
+              <button type="button" data-intel-tab="trends">Tendências</button>
+            </div>
+          </div>
+          <div class="intel-stage">
+            <div class="intel-feed" id="newsFeed" data-intel-panel="news"><span class="intel-loading">Buscando notícias do mercado…</span></div>
+            <div class="intel-feed" id="trendsFeed" data-intel-panel="trends" hidden><span class="intel-loading">Calculando as tendências em 5M…</span></div>
+          </div>
+        </div>
+
+        <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+      </section>
+    </main>
+
+    <aside class="robot-overlay" id="robotOverlay" aria-label="Comentários do Atlas Bot">
+      <button class="robot-toggle" id="robotToggle" type="button" aria-expanded="true" aria-label="Minimizar Atlas Bot">−</button>
+      <div class="robot-bubble">
+        <p id="robotLine" aria-live="polite">Calma aí, tô esperando a tela terminar de falar comigo.</p>
+        <div class="robot-questions" id="robotQuestions" hidden>
+          <button type="button" data-question="what">O que eu deveria ter feito?</button>
+          <button type="button" data-question="why">Por que essa direção?</button>
+          <button type="button" data-question="risk">Qual é o risco agora?</button>
+        </div>
+      </div>
+      <div class="robot-character" id="robotCharacter" role="button" tabindex="0" aria-label="Conversar com o Atlas Bot">
+        <span class="robot-antenna"><i></i></span>
+        <div class="robot-head">
+          <span class="robot-eye left"></span>
+          <span class="robot-eye right"></span>
+          <span class="robot-mouth"></span>
+        </div>
+        <div class="robot-neck"></div>
+        <div class="robot-body"><i>↗</i></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="cursor-glow" id="cursorGlow" aria-hidden="true"></div>
+  <div class="trade-flash" id="tradeFlash" aria-hidden="true"></div>
+
+  <div class="install-modal" id="installModal" hidden>
+    <div class="install-backdrop" data-install-close></div>
+    <section class="install-dialog" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+      <button class="install-close" type="button" data-install-close aria-label="Fechar">×</button>
+      <span class="install-kicker"><i></i> Preferências</span>
+      <h2 id="installTitle">Configurações</h2>
+      <p class="install-lead">Ajuste a experiência do Atlas e gerencie a conexão com a Hezilex sem poluir o painel principal.</p>
+
+      <div class="settings-group">
+        <div>
+          <b>Som do robô</b>
+          <small>Um sinal curto e suave quando um comentário importante aparecer.</small>
+        </div>
+        <label class="switch" aria-label="Ativar som do robô">
+          <input id="robotSoundToggle" type="checkbox" checked />
+          <span></span>
+        </label>
+      </div>
+
+      <div class="settings-section-title">
+        <span>Conexão com a Hezilex</span>
+        <em data-extension-summary>Verificando…</em>
+      </div>
+
+      <div class="install-progress" aria-label="Progresso da instalação">
+        <div class="install-step" data-install-step="browser"><span>1</span><div><b>Navegador</b><small data-browser-label>Verificando…</small></div></div>
+        <div class="install-step" data-install-step="store"><span>2</span><div><b>Disponibilidade</b><small data-store-label>Consultando Microsoft…</small></div></div>
+        <div class="install-step" data-install-step="extension"><span>3</span><div><b>Ativação</b><small data-extension-label>Aguardando instalação</small></div></div>
+      </div>
+
+      <div class="install-message" data-install-message>Preparando a instalação…</div>
+      <button class="install-action" type="button" data-install-action disabled>Verificando disponibilidade…</button>
+      <p class="install-note">Instalação oficial e automática pelo Edge. O site nunca recebe seu login ou senha.</p>
+    </section>
+  </div>
+
+  <script type="module" src="/modules/app-guard.js?v=3.0.0"></script>
+  <script type="module" src="/modules/app.js?v=3.0.0"></script>
+  <script type="module" src="/modules/insights.js?v=3.0.0"></script>
+  <script type="module" src="/modules/install-flow.js?v=3.0.0"></script>
+</body>
+</html>

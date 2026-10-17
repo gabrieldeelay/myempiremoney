@@ -1,27 +1,48 @@
-# Atlas — assistente de mercado
+# Atlas — seu assistente de operação
 
-Interface minimalista em tema escuro e laranja que mantém a Hezilex oficial dentro do painel e apresenta uma leitura técnica contínua das velas de 5 minutos.
+Produto web com landing page, cadastro, acesso condicionado ao pagamento, painel administrativo e área de mercado com a Hezilex oficial.
 
-## Comportamento
+## Fluxo do usuário
 
-- A análise é atualizada automaticamente ao entrar na Traderoom e ao trocar de ativo.
-- Os sinais `COMPRA`, `VENDA` e `AGUARDAR` vêm do feed OHLC oficial de 5 minutos; não existem sinais aleatórios.
-- LTA, LTB e a proteção contra picos são calculadas com velas fechadas.
-- Os únicos comandos disponíveis ajustam gráfico para 5M, expiração para 5M e o campo de valor para 1% do saldo visível.
-- O Atlas nunca aciona os botões de compra ou venda. A execução é sempre manual.
-- O mascote minimizável comenta ativo, sinal e configurações com frases curtas, contextuais e sem repetição imediata.
+1. A pessoa cria uma conta com e-mail e senha.
+2. O checkout gera uma cobrança PIX pela Venopag.
+3. O painel permanece bloqueado enquanto o status for `pending`.
+4. Somente `confirmed` libera o Atlas. Estados expirados, cancelados, contestados, estornados ou chargeback retiram o acesso.
+5. No painel, o Atlas exibe notícias por impacto e as cinco tendências mais fortes calculadas em velas de 5 minutos.
 
-## Login e privacidade
+## Áreas
 
-O conteúdo de login e negociação vem diretamente de `https://app.hezilex.com`. O Atlas não lê nem armazena campos de senha. Para permanecer conectado, use a sessão oficial da Hezilex e o gerenciador de senhas do Chrome ou Edge.
+- `/` — landing page e oferta configurável.
+- `/acesso` — login e criação de conta.
+- `/recuperar-senha` — recuperação por e-mail.
+- `/checkout` — pagamento PIX e acompanhamento da confirmação.
+- `/app` — painel Atlas.
+- `/admin` — preço, textos, ativos, notícias, Venopag, usuários e senha do administrador.
 
-O componente local em `extension/` funciona silenciosamente como ponte entre dois domínios isolados pelo navegador. Ele não aparece na interface, não possui permissão de execução financeira e nega qualquer pedido de ordem.
+## Dados de mercado
 
-## Publicação
+- Notícias: Google News RSS, com GDELT como segunda fonte.
+- Impacto: classificação determinística por termos macroeconômicos e de mercado, identificada na interface como estimativa do Atlas.
+- Tendências: Binance Spot pública, EMA9, EMA21, RSI14 e momentum sobre velas de 5 minutos. A análise não executa operações.
 
-O projeto inclui `vercel.json` e publica o conteúdo estático de `dist/`.
+## Segurança
 
-O instalador em `/install` consulta `/api/extension-status` para detectar automaticamente quando a versão da Microsoft Edge Add-ons estiver disponível. O painel abre apenas a confirmação oficial em uma janela separada, continua aberto e reconhece a extensão assim que ela responde.
+- Autenticação e contas no Supabase Auth.
+- Dados persistentes no Postgres do Supabase com RLS.
+- Credenciais da Venopag criptografadas com AES-256-GCM antes de irem ao banco.
+- O navegador nunca recebe Client Secret ou Webhook Secret.
+- O webhook valida HMAC e aceita no máximo cinco minutos de diferença.
+- Preços e acesso nunca são confiados ao navegador.
 
+## Desenvolvimento
+
+```text
+npm install
+npm run build
+npm test
+vercel dev
+```
+
+Use `npm run db:setup` somente com as variáveis do Supabase disponíveis e `ATLAS_ADMIN_SEED_PASSWORD` definido apenas no processo de seed.
 
 Produção: https://atlas-guard-trading.vercel.app

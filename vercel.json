@@ -1,8 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "dist",
+  "installCommand": "npm install --ignore-scripts",
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/news.js": { "maxDuration": 30 },
+    "api/trends.js": { "maxDuration": 30 },
+    "api/payment-status.js": { "maxDuration": 30 }
+  },
   "headers": [
     {
       "source": "/extension-release.json",

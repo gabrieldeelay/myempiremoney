@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 64" role="img" aria-labelledby="title">
+  <title id="title">Atlas</title>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7eb6ff"/><stop offset="1" stop-color="#395cff"/></linearGradient></defs>
+  <g transform="translate(8 7)"><path d="M25 2 48 14v25L25 52 2 39V14Z" fill="#07152d" stroke="url(#g)" stroke-width="2"/><circle cx="25" cy="27" r="8" fill="url(#g)"/><path d="M3 31c12-14 33-20 47-10" fill="none" stroke="#d8e8ff" stroke-width="2" stroke-linecap="round"/><circle cx="48" cy="21" r="3" fill="#7eb6ff"/></g>
+  <text x="72" y="42" fill="#f7faff" font-family="Arial,Helvetica,sans-serif" font-size="34" font-weight="800" letter-spacing="5">ATLAS</text>
+</svg>

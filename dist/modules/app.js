@@ -13,7 +13,6 @@ let extensionReady = false;
 let directBridgeReady = false;
 let iframeBridgeReady = false;
 let verificationInFlight = false;
-let macroInFlight = false;
 let toastTimer = null;
 let lastLoginState = null;
 let state = {
@@ -371,15 +370,10 @@ function flashTrade(direction, severity = "normal") {
   tradeFlashTimer = setTimeout(() => { flash.className = "trade-flash"; }, severity === "critical" ? 1500 : 1050);
 }
 
-function setControls(enabled) {
-  for (const id of ["setTimeframe", "setExpiration", "setRisk", "applyAll"]) $(id).disabled = !enabled;
-}
-
 function renderConnection(connected) {
   extensionReady = connected;
   $("connectionState").classList.toggle("ready", connected);
   $("connectionText").textContent = connected ? (marketReady() ? "Análise ao vivo" : "Esperando login") : "Aguardando mercado";
-  setControls(connected && marketReady());
 }
 
 function renderState(next = {}) {
@@ -487,49 +481,6 @@ window.addEventListener("message", event => {
   else request.resolve(event.data.result);
 });
 
-async function runMacro(action, button, successMessage) {
-  if (macroInFlight) {
-    showToast("Termine o ajuste atual antes de iniciar outro.", "info");
-    return null;
-  }
-  macroInFlight = true;
-  const original = button.innerHTML;
-  setControls(false);
-  button.classList.add("loading");
-  button.innerHTML = "<span>·</span><b>Aplicando…</b>";
-  try {
-    const timeout = action === "apply_setup" ? 22000 : action === "set_risk" ? 16000 : 9000;
-    const result = await sendCommand(action, {}, timeout);
-    if (result?.state) renderState(result.state);
-    else if (result?.analysis || result?.bridge) renderState(result);
-    showToast(successMessage, "success");
-    return result;
-  } catch (error) {
-    const needsUpdate = /desconhecida|unknown|não reconhecida/i.test(error.message);
-    if (needsUpdate && ["set_timeframe", "set_expiration"].includes(action)) {
-      try {
-        const fallback = await sendCommand("ensure_defaults", {}, 12000);
-        if (fallback?.state) renderState(fallback.state);
-        else if (fallback?.analysis || fallback?.bridge) renderState(fallback);
-        showToast(action === "set_timeframe" ? "Gráfico e expiração ajustados para 5 minutos." : "Expiração e gráfico ajustados para 5 minutos.", "success");
-        return fallback;
-      } catch (fallbackError) {
-        showToast(fallbackError.message, "error");
-        robot.speak("error", {}, true, true);
-        return null;
-      }
-    }
-    showToast(needsUpdate ? "Sua configuração local precisa ser atualizada para usar este macro." : error.message, "error");
-    robot.speak("error", {}, true, true);
-    return null;
-  } finally {
-    macroInFlight = false;
-    button.classList.remove("loading");
-    button.innerHTML = original;
-    setControls(extensionReady && marketReady());
-  }
-}
-
 async function verifyExtension() {
   if (verificationInFlight) return;
   verificationInFlight = true;
@@ -555,10 +506,6 @@ $("reloadFrame").addEventListener("click", () => {
   $("frameLoader").classList.remove("hidden");
   frame.src = "https://app.hezilex.com/";
 });
-$("setTimeframe").addEventListener("click", event => runMacro("set_timeframe", event.currentTarget, "Gráfico ajustado para 5 minutos."));
-$("setExpiration").addEventListener("click", event => runMacro("set_expiration", event.currentTarget, "Expiração ajustada para 5 minutos."));
-$("setRisk").addEventListener("click", event => runMacro("set_risk", event.currentTarget, "Valor ajustado para 1% do saldo."));
-$("applyAll").addEventListener("click", event => runMacro("apply_setup", event.currentTarget, "Configuração aplicada: gráfico 5M, expiração 5M e valor em 1%."));
 $("robotToggle").addEventListener("click", () => robot.toggle());
 let suppressRobotClickUntil = 0;
 const robotDrag = { active: false, moved: false, pointerId: null, startX: 0, startY: 0, left: 0, top: 0 };
