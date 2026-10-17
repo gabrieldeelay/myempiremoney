@@ -10,6 +10,8 @@ const landing = await readFile(new URL("../dist/index.html", import.meta.url), "
 const access = await readFile(new URL("../dist/acesso/index.html", import.meta.url), "utf8");
 const quickSignup = await readFile(new URL("../dist/cadastro-rapido/index.html", import.meta.url), "utf8");
 const adminPage = await readFile(new URL("../dist/admin/index.html", import.meta.url), "utf8");
+const adminModule = await readFile(new URL("../dist/modules/admin.js", import.meta.url), "utf8");
+const checkoutPage = await readFile(new URL("../dist/checkout/index.html", import.meta.url), "utf8");
 
 assert.equal(normalizeAssetName("ETHUSDT"), "ETHEREUM");
 assert.equal(normalizeAssetName("sol/usdt"), "SOLANA");
@@ -79,5 +81,12 @@ assert.match(quickSignup, /data-quick-step="8"/, "o cadastro rápido deve inclui
 assert.match(quickSignup, /id="quickProgressBar"/, "o cadastro rápido deve mostrar progresso");
 assert.match(adminPage, /id="adminLoginForm"/, "a rota administrativa deve exibir login próprio");
 assert.match(adminPage, /id="couponList"/, "o painel deve administrar cupons");
+assert.match(adminPage, /data-admin-tab="clients"/, "o painel administrativo deve separar clientes em uma aba");
+assert.match(adminPage, /id="userSearch"/, "o painel deve pesquisar clientes por texto");
+assert.match(adminPage, /id="userStatus"/, "o painel deve filtrar clientes por status");
+assert.match(adminModule, /params\.set\("q", search\)/, "a busca de clientes deve consultar a API do Supabase");
+assert.match(checkoutPage, /checkout-offer-summary/, "o checkout deve usar o resumo compacto da oferta");
+assert.match(checkoutPage, /checkout\.css\?v=3\.3\.0/, "o checkout deve carregar o layout compacto");
 
 console.log("interaction regressions: ok");
+

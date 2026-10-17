@@ -5,6 +5,21 @@ const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character =>
 const money = value => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 const client = await getAtlasClient();
 let settingsCache;
+let userSearchTimer;
+
+const planLabel = plan => ({ monthly: "Mensal", lifetime: "Vitalício" })[plan] || "Sem plano";
+const statusLabel = status => ({ active: "ATIVO", blocked: "BLOQUEADO", pending: "PENDENTE" })[status] || "PENDENTE";
+const dateLabel = value => value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(value)) : "—";
+
+function setAdminTab(tab) {
+  const allowed = ["overview", "clients", "sales", "content", "integrations", "security"];
+  const next = allowed.includes(tab) ? tab : "overview";
+  document.querySelectorAll("[data-admin-tab]").forEach(button => button.classList.toggle("active", button.dataset.adminTab === next));
+  document.querySelectorAll("[data-admin-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.adminPanel === next));
+  $("#saveDock").classList.toggle("hidden", !["sales", "content", "integrations"].includes(next));
+  history.replaceState(null, "", `#${next}`);
+  scrollTo({ top: 0, behavior: "smooth" });
+}
 
 function setStatus(message, kind = "") { $("#globalStatus").textContent = message; $("#globalStatus").className = `status ${kind}`; }
 function showLogin(message = "") {
@@ -80,9 +95,25 @@ async function deleteCoupon(id) {
 }
 
 async function loadUsers() {
-  const payload = await apiFetch("/api/admin-users");
-  $("#userList").innerHTML = payload.users.map(user => `<div class="user-row"><span><b>${escapeHtml(user.name || user.email)}</b><small>${escapeHtml(user.email)}${user.phone ? ` · ${escapeHtml(user.phone)}` : ""}${user.plan_id ? ` · ${escapeHtml(user.plan_id)}` : ""} · ${escapeHtml(user.access_status)}</small></span>${user.role === "admin" ? "<strong>ADMIN</strong>" : `<button class="tiny" type="button" data-user="${escapeHtml(user.id)}" data-access="${user.access_granted ? "0" : "1"}">${user.access_granted ? "Bloquear" : "Liberar"}</button>`}</div>`).join("");
-  document.querySelectorAll("[data-user]").forEach(button => button.addEventListener("click", async () => { button.disabled = true; await apiFetch("/api/admin-users", { method: "PUT", body: JSON.stringify({ id: button.dataset.user, access: button.dataset.access === "1" }) }); await loadUsers(); }));
+  const params = new URLSearchParams();
+  const search = $("#userSearch")?.value.trim();
+  const status = $("#userStatus")?.value;
+  const plan = $("#userPlan")?.value;
+  if (search) params.set("q", search);
+  if (status && status !== "all") params.set("status", status);
+  if (plan && plan !== "all") params.set("plan", plan);
+  $("#userList").innerHTML = '<div class="empty-admin">Carregando clientes…</div>';
+  const payload = await apiFetch(`/api/admin-users?${params}`);
+  $("#statTotal").textContent = payload.stats.total;
+  $("#statActive").textContent = payload.stats.active;
+  $("#statPending").textContent = payload.stats.pending;
+  $("#statBlocked").textContent = payload.stats.blocked;
+  $("#userResultCount").textContent = `${payload.total} ${payload.total === 1 ? "cliente" : "clientes"}`;
+  $("#userList").innerHTML = payload.users.length ? payload.users.map(user => {
+    const status = user.access_status || "pending";
+    const initial = String(user.name || user.email || "C").trim().charAt(0).toUpperCase();
+    return `<article class="user-row"><div class="user-identity"><span class="user-avatar">${escapeHtml(initial)}</span><span><b>${escapeHtml(user.name || "Cliente sem nome")}</b><small>${escapeHtml(user.email)}${user.phone ? ` · ${escapeHtml(user.phone)}` : ""}</small></span></div><span class="user-plan">${escapeHtml(planLabel(user.plan_id))}</span><span class="user-status ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span><span class="user-date">${escapeHtml(dateLabel(user.created_at))}</span><button class="tiny${user.access_granted ? " danger" : ""}" type="button" data-user="${escapeHtml(user.id)}" data-access="${user.access_granted ? "0" : "1"}">${user.access_granted ? "Bloquear" : "Liberar"}</button></article>`;
+  }).join("") : '<div class="empty-admin"><b>Nenhum cliente encontrado.</b><br>Revise a busca ou limpe os filtros.</div>';
 }
 
 async function loadSettings() { const settings = await apiFetch("/api/admin-settings"); fill(settings); }
@@ -94,6 +125,7 @@ async function openDashboard() {
     showDashboard();
     await Promise.all([loadSettings(), loadUsers()]);
     $("#adminForm").classList.remove("hidden");
+    setAdminTab(location.hash.replace("#", "") || "overview");
     setStatus("Painel pronto.", "success");
   } catch (error) { await client.auth.signOut(); showLogin(error.message); }
 }
@@ -128,6 +160,20 @@ $("#couponSave").addEventListener("click", async () => {
 });
 $("#couponClear").addEventListener("click", clearCoupon);
 
+document.querySelectorAll("[data-admin-tab]").forEach(button => button.addEventListener("click", () => setAdminTab(button.dataset.adminTab)));
+document.querySelectorAll("[data-switch-tab]").forEach(button => button.addEventListener("click", () => setAdminTab(button.dataset.switchTab)));
+$("#userSearch").addEventListener("input", () => { clearTimeout(userSearchTimer); userSearchTimer = setTimeout(() => loadUsers().catch(error => setStatus(error.message, "error")), 260); });
+$("#userStatus").addEventListener("change", () => loadUsers().catch(error => setStatus(error.message, "error")));
+$("#userPlan").addEventListener("change", () => loadUsers().catch(error => setStatus(error.message, "error")));
+$("#clearUserFilters").addEventListener("click", () => { $("#userSearch").value = ""; $("#userStatus").value = "all"; $("#userPlan").value = "all"; loadUsers().catch(error => setStatus(error.message, "error")); });
+$("#userList").addEventListener("click", async event => {
+  const button = event.target.closest("[data-user]");
+  if (!button) return;
+  button.disabled = true;
+  try { await apiFetch("/api/admin-users", { method: "PUT", body: JSON.stringify({ id: button.dataset.user, access: button.dataset.access === "1" }) }); await loadUsers(); }
+  catch (error) { setStatus(error.message, "error"); button.disabled = false; }
+});
+
 $("#changePassword").addEventListener("click", async () => {
   const button = $("#changePassword"); button.disabled = true;
   try { const { error } = await client.auth.updateUser({ password: $("#newPassword").value }); if (error) throw error; $("#newPassword").value = ""; $("#passwordStatus").textContent = "Senha alterada com sucesso."; $("#passwordStatus").className = "status success"; }
@@ -137,3 +183,4 @@ $("#signOut").addEventListener("click", async () => { await client.auth.signOut(
 
 const { data: authData } = await client.auth.getSession();
 if (authData.session) await openDashboard(); else showLogin();
+

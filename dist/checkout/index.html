@@ -7,22 +7,23 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/account.css?v=3.2.0">
   <link rel="stylesheet" href="/funnel.css?v=3.2.0">
+  <link rel="stylesheet" href="/checkout.css?v=3.3.0">
 </head>
 <body>
-  <main class="checkout">
+  <main class="checkout checkout-v2">
     <header class="checkout-head"><a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><button class="tiny" id="signOut">Sair</button></header>
     <div class="checkout-grid">
-      <section class="checkout-card">
-        <span class="step-kicker">ESCOLHA SEU ACESSO</span><h1>Finalize em poucos passos.</h1><p>Selecione o plano, confira sua economia e gere o PIX.</p>
+      <section class="checkout-card checkout-main">
+        <div class="checkout-title"><span class="step-kicker">ESCOLHA SEU ACESSO</span><h1>Seu Atlas está quase pronto.</h1><p>Escolha o plano, revise os dados e gere o PIX.</p></div>
         <div class="choice-grid" id="checkoutPlans"></div>
-        <div class="offer-values" id="checkoutValues"><del id="oldPrice"></del><strong id="currentPrice"></strong></div>
-        <div class="savings-copy" id="checkoutSavings"></div><ul class="benefit-list" id="checkoutBenefits"></ul>
+        <div class="checkout-offer-summary"><div><span class="summary-label">TOTAL DA OFERTA</span><div class="offer-values" id="checkoutValues"><del id="oldPrice"></del><strong id="currentPrice"></strong></div><div class="savings-copy" id="checkoutSavings"></div></div><ul class="benefit-list" id="checkoutBenefits"></ul></div>
         <div class="coupon-row"><input id="coupon" maxlength="32" placeholder="CUPOM DE DESCONTO"><button id="applyCoupon" type="button">Aplicar</button></div><div class="step-message" id="couponStatus"></div>
-        <form id="paymentForm"><div class="field"><label for="name">Nome completo</label><input id="name" autocomplete="name" required></div><div class="field"><label for="document">CPF ou CNPJ</label><input id="document" inputmode="numeric" required></div><button class="submit" type="submit">Finalizar e gerar PIX</button><div class="status" id="paymentStatus"></div></form>
+        <form id="paymentForm"><div class="payment-fields"><div class="field"><label for="name">Nome completo</label><input id="name" autocomplete="name" required></div><div class="field"><label for="document">CPF ou CNPJ</label><input id="document" inputmode="numeric" required></div></div><button class="submit" type="submit">Gerar PIX com segurança</button><div class="status" id="paymentStatus"></div></form>
       </section>
-      <section class="checkout-card pix-box"><div id="emptyPix"><span class="offer-badge" id="discountBadge">OFERTA ATIVA</span><h2>Pagamento rápido e seguro.</h2><p>O QR Code aparece aqui. O Atlas libera seu acesso após a confirmação do PIX.</p><div class="secure-list"><span><i>✓</i> Liberação automática</span><span><i>✓</i> Pagamento verificado</span><span><i>✓</i> Seus dados protegidos</span></div></div><div id="pixReady" class="hidden"><img id="qrImage" alt="QR Code PIX"><h2 id="pixAmount"></h2><div class="pix-code" id="pixCode"></div><button class="submit" id="copyPix" type="button">Copiar código PIX</button><div class="status" id="pixStatus">Aguardando pagamento…</div></div></section>
+      <section class="checkout-card pix-box checkout-side"><div id="emptyPix"><div class="secure-icon">✓</div><span class="offer-badge" id="discountBadge">OFERTA ATIVA</span><h2>Pagamento rápido e seguro.</h2><p>O QR Code aparece aqui assim que você confirmar os dados. O acesso é liberado após a confirmação.</p><div class="secure-list"><span><i>✓</i><b>Liberação automática</b></span><span><i>✓</i><b>Pagamento verificado</b></span><span><i>✓</i><b>Dados protegidos</b></span></div><small>Processamento via VenoPag</small></div><div id="pixReady" class="hidden"><img id="qrImage" alt="QR Code PIX"><h2 id="pixAmount"></h2><div class="pix-code" id="pixCode"></div><button class="submit" id="copyPix" type="button">Copiar código PIX</button><div class="status" id="pixStatus">Aguardando pagamento…</div></div></section>
     </div>
   </main>
   <script type="module" src="/modules/checkout.js?v=3.2.0"></script>
 </body>
 </html>
+

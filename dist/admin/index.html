@@ -5,35 +5,94 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Painel administrativo | Atlas</title>
   <link rel="icon" href="/favicon.svg">
-  <link rel="stylesheet" href="/account.css?v=3.2.0">
-  <link rel="stylesheet" href="/admin.css?v=3.2.0">
+  <link rel="stylesheet" href="/account.css?v=3.3.0">
+  <link rel="stylesheet" href="/admin.css?v=3.3.0">
 </head>
 <body>
   <main class="account-page" id="adminLogin">
-    <section class="account-story"><a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><div class="story-copy"><span>ÁREA RESTRITA</span><h1>Controle do Atlas.</h1><p>Planos, cupons, pagamentos e acesso dos usuários em um só lugar.</p></div><div class="story-foot">Acesso exclusivo do administrador</div></section>
+    <section class="account-story"><a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><div class="story-copy"><span>ÁREA RESTRITA</span><h1>Controle do Atlas.</h1><p>Clientes, planos, cupons e integrações organizados em um painel simples.</p></div><div class="story-foot">Acesso exclusivo do administrador</div></section>
     <section class="account-panel"><form class="form-card" id="adminLoginForm"><h2>Acesso administrativo</h2><p>Entre com suas credenciais de administrador.</p><div class="field"><label for="adminUser">Usuário</label><input id="adminUser" value="admin" autocomplete="username" required></div><div class="field"><label for="adminPassword">Senha</label><input id="adminPassword" type="password" autocomplete="current-password" required></div><button class="submit" type="submit">Entrar no painel</button><div class="status" id="adminLoginStatus"></div><div class="form-row"><a href="/">Voltar ao início</a></div></form></section>
   </main>
 
   <main class="admin-shell hidden" id="adminDashboard">
-    <header class="admin-nav"><a href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><div><a class="tiny" href="/app">Abrir Atlas</a> <button class="tiny" id="signOut" type="button">Sair</button></div></header>
-    <div class="status" id="globalStatus">Carregando configurações…</div>
-    <form id="adminForm" class="admin-grid hidden">
-      <section class="admin-card wide"><h2>Planos e preços</h2><p>Os valores aparecem somente na compra. A landing page mostra o desconto calculado automaticamente.</p><div class="plan-admin-grid">
-        <fieldset><legend>Plano mensal</legend><div class="field"><label for="monthlyLabel">Nome</label><input id="monthlyLabel"></div><div class="split"><div class="field"><label for="monthlyOldPrice">Preço original</label><input id="monthlyOldPrice" type="number" min="1" step="0.01"></div><div class="field"><label for="monthlyCurrentPrice">Preço atual</label><input id="monthlyCurrentPrice" type="number" min="1" step="0.01"></div></div><div class="field"><label for="monthlyBilling">Descrição da cobrança</label><input id="monthlyBilling"></div><div class="field"><label for="monthlyBenefits">Benefícios, um por linha</label><textarea id="monthlyBenefits"></textarea></div><label class="check-row"><input id="monthlyActive" type="checkbox"> Plano ativo</label></fieldset>
-        <fieldset><legend>Plano vitalício</legend><div class="field"><label for="lifetimeLabel">Nome</label><input id="lifetimeLabel"></div><div class="split"><div class="field"><label for="lifetimeOldPrice">Preço original</label><input id="lifetimeOldPrice" type="number" min="1" step="0.01"></div><div class="field"><label for="lifetimeCurrentPrice">Preço atual</label><input id="lifetimeCurrentPrice" type="number" min="1" step="0.01"></div></div><div class="field"><label for="lifetimeBilling">Descrição da cobrança</label><input id="lifetimeBilling"></div><div class="field"><label for="lifetimeBenefits">Benefícios, um por linha</label><textarea id="lifetimeBenefits"></textarea></div><label class="check-row"><input id="lifetimeActive" type="checkbox"> Plano ativo</label></fieldset>
-      </div></section>
+    <header class="admin-nav">
+      <a class="admin-brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"><span>Painel administrativo</span></a>
+      <div class="admin-nav-actions"><span class="connection-pill"><i></i> Supabase conectado</span><a class="tiny" href="/app">Abrir Atlas</a><button class="tiny" id="signOut" type="button">Sair</button></div>
+    </header>
 
-      <section class="admin-card"><h2>Textos da apresentação</h2><div class="field"><label for="eyebrow">Chamada curta</label><input id="eyebrow"></div><div class="field"><label for="headline">Título principal</label><input id="headline"></div><div class="field"><label for="subheadline">Descrição</label><textarea id="subheadline"></textarea></div></section>
-      <section class="admin-card"><h2>Notícias e tendências</h2><div class="field"><label for="newsQuery">Consulta de notícias</label><textarea id="newsQuery"></textarea></div><div class="field"><label for="symbols">Ativos, um por linha</label><textarea id="symbols"></textarea></div></section>
+    <div class="admin-layout">
+      <aside class="admin-sidebar" aria-label="Seções do painel">
+        <div class="admin-profile"><span>A</span><div><b>Administrador</b><small>Controle total</small></div></div>
+        <nav class="admin-tabs">
+          <button class="active" type="button" data-admin-tab="overview"><i>⌂</i><span>Visão geral</span></button>
+          <button type="button" data-admin-tab="clients"><i>◎</i><span>Clientes</span></button>
+          <button type="button" data-admin-tab="sales"><i>◇</i><span>Planos e cupons</span></button>
+          <button type="button" data-admin-tab="content"><i>✦</i><span>Conteúdo</span></button>
+          <button type="button" data-admin-tab="integrations"><i>↗</i><span>Integrações</span></button>
+          <button type="button" data-admin-tab="security"><i>⌁</i><span>Segurança</span></button>
+        </nav>
+        <div class="sidebar-note"><b>Base de clientes</b><span>Contas e acessos são salvos no Supabase.</span></div>
+      </aside>
 
-      <section class="admin-card wide"><h2>Cupons de desconto</h2><div class="coupon-admin-grid"><div><input id="couponId" type="hidden"><div class="field"><label for="couponCode">Código</label><input id="couponCode" maxlength="32" placeholder="LIVE25"></div><div class="split"><div class="field"><label for="couponType">Tipo</label><select id="couponType"><option value="percent">Percentual</option><option value="fixed">Valor fixo</option></select></div><div class="field"><label for="couponValue">Desconto</label><input id="couponValue" type="number" min="0.01" step="0.01"></div></div><div class="split"><div class="field"><label for="couponMaxUses">Limite de usos</label><input id="couponMaxUses" type="number" min="1" placeholder="Sem limite"></div><div class="field"><label for="couponValidUntil">Válido até</label><input id="couponValidUntil" type="datetime-local"></div></div><label class="check-row"><input id="couponActive" type="checkbox" checked> Cupom ativo</label><div class="wizard-actions"><button class="tiny" id="couponClear" type="button">Limpar</button><button class="submit" id="couponSave" type="button">Salvar cupom</button></div><div class="status" id="couponStatus"></div></div><div class="coupon-list" id="couponList"></div></div></section>
+      <section class="admin-content">
+        <div class="status admin-global-status" id="globalStatus">Carregando configurações…</div>
+        <form id="adminForm" class="hidden">
+          <section class="admin-tab-panel active" data-admin-panel="overview">
+            <div class="admin-page-head"><div><span>PAINEL ATLAS</span><h1>Visão geral</h1><p>Acompanhe a base de clientes e acesse rapidamente cada configuração.</p></div><button class="submit compact" type="button" data-switch-tab="clients">Ver clientes</button></div>
+            <div class="metric-grid">
+              <article class="metric-card"><span>Total de clientes</span><strong id="statTotal">0</strong><small>Contas cadastradas</small></article>
+              <article class="metric-card positive"><span>Acessos ativos</span><strong id="statActive">0</strong><small>Clientes liberados</small></article>
+              <article class="metric-card pending"><span>Aguardando</span><strong id="statPending">0</strong><small>Pagamento ou liberação</small></article>
+              <article class="metric-card blocked"><span>Bloqueados</span><strong id="statBlocked">0</strong><small>Acesso suspenso</small></article>
+            </div>
+            <div class="overview-grid">
+              <article class="admin-card overview-card"><span class="card-icon">◎</span><div><h2>Clientes</h2><p>Pesquise por nome, e-mail ou telefone e controle o acesso de cada conta.</p></div><button type="button" data-switch-tab="clients">Gerenciar</button></article>
+              <article class="admin-card overview-card"><span class="card-icon">◇</span><div><h2>Oferta</h2><p>Ajuste preços, planos e cupons sem precisar alterar o site.</p></div><button type="button" data-switch-tab="sales">Configurar</button></article>
+              <article class="admin-card overview-card"><span class="card-icon">↗</span><div><h2>Pagamentos</h2><p>Confira a conexão do PIX e as credenciais da VenoPag.</p></div><button type="button" data-switch-tab="integrations">Ver integração</button></article>
+            </div>
+          </section>
 
-      <section class="admin-card"><h2>VenoPag</h2><p id="venoState">Verificando integração…</p><div class="field"><label for="venoClientId">Client ID</label><input id="venoClientId" autocomplete="off"></div><div class="field"><label for="venoClientSecret">Client Secret</label><input id="venoClientSecret" type="password" autocomplete="new-password"></div><div class="field"><label for="venoWebhookSecret">Webhook Secret</label><input id="venoWebhookSecret" type="password" autocomplete="new-password"></div><small>Campos vazios mantêm as credenciais atuais. Webhook: <b id="webhookUrl"></b></small></section>
-      <section class="admin-card"><h2>Segurança</h2><div class="field"><label for="newPassword">Nova senha do admin</label><input id="newPassword" type="password" minlength="8" autocomplete="new-password"></div><button class="tiny" type="button" id="changePassword">Alterar senha</button><div class="status" id="passwordStatus"></div></section>
-      <section class="admin-card"><h2>Publicar alterações</h2><p>Planos, textos e configurações entram no site imediatamente.</p><button class="submit" type="submit">Salvar configurações</button></section>
-      <section class="admin-card wide"><h2>Usuários e acesso</h2><div class="user-list" id="userList"></div></section>
-    </form>
+          <section class="admin-tab-panel" data-admin-panel="clients">
+            <div class="admin-page-head"><div><span>BASE SUPABASE</span><h1>Clientes</h1><p>Encontre contas e controle a liberação de acesso.</p></div><div class="result-count" id="userResultCount">0 clientes</div></div>
+            <div class="client-toolbar">
+              <label class="search-box" for="userSearch"><i>⌕</i><input id="userSearch" type="search" placeholder="Buscar por nome, e-mail ou telefone"></label>
+              <select id="userStatus" aria-label="Filtrar por status"><option value="all">Todos os status</option><option value="active">Ativos</option><option value="pending">Pendentes</option><option value="blocked">Bloqueados</option></select>
+              <select id="userPlan" aria-label="Filtrar por plano"><option value="all">Todos os planos</option><option value="monthly">Mensal</option><option value="lifetime">Vitalício</option><option value="none">Sem plano</option></select>
+              <button class="tiny" id="clearUserFilters" type="button">Limpar</button>
+            </div>
+            <section class="admin-card clients-card"><div class="user-table-head"><span>Cliente</span><span>Plano</span><span>Status</span><span>Cadastro</span><span>Ação</span></div><div class="user-list" id="userList"></div></section>
+          </section>
+
+          <section class="admin-tab-panel" data-admin-panel="sales">
+            <div class="admin-page-head"><div><span>COMERCIAL</span><h1>Planos e cupons</h1><p>Controle sua oferta sem poluir as outras áreas do painel.</p></div></div>
+            <section class="admin-card"><div class="section-title"><div><h2>Planos e preços</h2><p>A landing calcula o desconto automaticamente.</p></div></div><div class="plan-admin-grid">
+              <fieldset><legend>Plano mensal</legend><div class="field"><label for="monthlyLabel">Nome</label><input id="monthlyLabel"></div><div class="split"><div class="field"><label for="monthlyOldPrice">Preço original</label><input id="monthlyOldPrice" type="number" min="1" step="0.01"></div><div class="field"><label for="monthlyCurrentPrice">Preço atual</label><input id="monthlyCurrentPrice" type="number" min="1" step="0.01"></div></div><div class="field"><label for="monthlyBilling">Descrição da cobrança</label><input id="monthlyBilling"></div><div class="field"><label for="monthlyBenefits">Benefícios, um por linha</label><textarea id="monthlyBenefits"></textarea></div><label class="check-row"><input id="monthlyActive" type="checkbox"> Plano ativo</label></fieldset>
+              <fieldset><legend>Plano vitalício</legend><div class="field"><label for="lifetimeLabel">Nome</label><input id="lifetimeLabel"></div><div class="split"><div class="field"><label for="lifetimeOldPrice">Preço original</label><input id="lifetimeOldPrice" type="number" min="1" step="0.01"></div><div class="field"><label for="lifetimeCurrentPrice">Preço atual</label><input id="lifetimeCurrentPrice" type="number" min="1" step="0.01"></div></div><div class="field"><label for="lifetimeBilling">Descrição da cobrança</label><input id="lifetimeBilling"></div><div class="field"><label for="lifetimeBenefits">Benefícios, um por linha</label><textarea id="lifetimeBenefits"></textarea></div><label class="check-row"><input id="lifetimeActive" type="checkbox"> Plano ativo</label></fieldset>
+            </div></section>
+            <section class="admin-card"><div class="section-title"><div><h2>Cupons</h2><p>Crie descontos com validade e limite de uso.</p></div></div><div class="coupon-admin-grid"><div><input id="couponId" type="hidden"><div class="field"><label for="couponCode">Código</label><input id="couponCode" maxlength="32" placeholder="LIVE25"></div><div class="split"><div class="field"><label for="couponType">Tipo</label><select id="couponType"><option value="percent">Percentual</option><option value="fixed">Valor fixo</option></select></div><div class="field"><label for="couponValue">Desconto</label><input id="couponValue" type="number" min="0.01" step="0.01"></div></div><div class="split"><div class="field"><label for="couponMaxUses">Limite de usos</label><input id="couponMaxUses" type="number" min="1" placeholder="Sem limite"></div><div class="field"><label for="couponValidUntil">Válido até</label><input id="couponValidUntil" type="datetime-local"></div></div><label class="check-row"><input id="couponActive" type="checkbox" checked> Cupom ativo</label><div class="wizard-actions"><button class="tiny" id="couponClear" type="button">Limpar</button><button class="submit compact" id="couponSave" type="button">Salvar cupom</button></div><div class="status" id="couponStatus"></div></div><div class="coupon-list" id="couponList"></div></div></section>
+          </section>
+
+          <section class="admin-tab-panel" data-admin-panel="content">
+            <div class="admin-page-head"><div><span>APRESENTAÇÃO</span><h1>Conteúdo</h1><p>Edite os textos públicos, as notícias e os ativos monitorados.</p></div></div>
+            <div class="content-grid"><section class="admin-card"><h2>Textos da apresentação</h2><div class="field"><label for="eyebrow">Chamada curta</label><input id="eyebrow"></div><div class="field"><label for="headline">Título principal</label><input id="headline"></div><div class="field"><label for="subheadline">Descrição</label><textarea id="subheadline"></textarea></div></section><section class="admin-card"><h2>Notícias e tendências</h2><div class="field"><label for="newsQuery">Consulta de notícias</label><textarea id="newsQuery"></textarea></div><div class="field"><label for="symbols">Ativos, um por linha</label><textarea id="symbols"></textarea></div></section></div>
+          </section>
+
+          <section class="admin-tab-panel" data-admin-panel="integrations">
+            <div class="admin-page-head"><div><span>CONEXÕES</span><h1>Integrações</h1><p>Gerencie o pagamento e acompanhe a base de dados.</p></div></div>
+            <div class="integration-grid"><section class="admin-card integration-card"><span class="integration-logo">V</span><div><h2>VenoPag</h2><p id="venoState">Verificando integração…</p></div><div class="field"><label for="venoClientId">Client ID</label><input id="venoClientId" autocomplete="off"></div><div class="field"><label for="venoClientSecret">Client Secret</label><input id="venoClientSecret" type="password" autocomplete="new-password"></div><div class="field"><label for="venoWebhookSecret">Webhook Secret</label><input id="venoWebhookSecret" type="password" autocomplete="new-password"></div><small>Campos vazios mantêm as credenciais atuais. Webhook: <b id="webhookUrl"></b></small></section><section class="admin-card integration-card connected"><span class="integration-logo">S</span><div><h2>Supabase</h2><p>Autenticação e perfis conectados.</p></div><ul><li>Contas persistidas</li><li>Sessões protegidas</li><li>Busca de clientes ativa</li></ul><span class="integration-state">CONECTADO</span></section></div>
+          </section>
+
+          <section class="admin-tab-panel" data-admin-panel="security">
+            <div class="admin-page-head"><div><span>CONTA ADMIN</span><h1>Segurança</h1><p>Atualize a senha usada para entrar neste painel.</p></div></div>
+            <section class="admin-card security-card"><div><h2>Alterar senha</h2><p>Use pelo menos 8 caracteres e guarde a nova senha em um local seguro.</p></div><div class="field"><label for="newPassword">Nova senha do administrador</label><input id="newPassword" type="password" minlength="8" autocomplete="new-password"></div><button class="submit compact" type="button" id="changePassword">Alterar senha</button><div class="status" id="passwordStatus"></div></section>
+          </section>
+
+          <div class="save-dock hidden" id="saveDock"><span>Alterações não entram no site até serem salvas.</span><button class="submit compact" type="submit">Salvar alterações</button></div>
+        </form>
+      </section>
+    </div>
   </main>
-  <script type="module" src="/modules/admin.js?v=3.2.0"></script>
+  <script type="module" src="/modules/admin.js?v=3.3.0"></script>
 </body>
 </html>
+
