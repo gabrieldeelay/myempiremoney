@@ -1,4 +1,4 @@
-import { getAtlasClient } from "/modules/supabase-client.js";
+import { getAtlasClient } from "/modules/atlas-client.js";
 const form = document.querySelector("#newPassword"); const status = document.querySelector("#status");
 form.addEventListener("submit", async event => {
   event.preventDefault(); const button = form.querySelector("button"); button.disabled = true;

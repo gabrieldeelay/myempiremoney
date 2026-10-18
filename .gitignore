@@ -8,5 +8,7 @@ work/
 .env*
 !.env.example
 node_modules/
+deploy-temp/
+atlas-mysql*.zip
 
 .env*.local

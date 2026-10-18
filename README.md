@@ -29,8 +29,8 @@ Produto web com landing page, cadastro, acesso condicionado ao pagamento, painel
 
 ## Segurança
 
-- Autenticação e contas no Supabase Auth.
-- Dados persistentes no Postgres do Supabase com RLS.
+- Autenticação própria com sessões protegidas e senhas usando bcrypt.
+- Dados persistentes no MySQL exclusivo do Atlas no servers.guru.
 - Credenciais da Venopag criptografadas com AES-256-GCM antes de irem ao banco.
 - O navegador nunca recebe Client Secret ou Webhook Secret.
 - O webhook valida HMAC e aceita no máximo cinco minutos de diferença.
@@ -42,9 +42,9 @@ Produto web com landing page, cadastro, acesso condicionado ao pagamento, painel
 npm install
 npm run build
 npm test
-vercel dev
+npm start
 ```
 
-Use `npm run db:setup` somente com as variáveis do Supabase disponíveis e `ATLAS_ADMIN_SEED_PASSWORD` definido apenas no processo de seed.
+Use `npm run db:setup` com as variáveis `MYSQL_*` disponíveis e `ATLAS_ADMIN_SEED_PASSWORD` definido apenas na criação inicial do administrador.
 
-Produção: https://atlas-guard-trading.vercel.app
+Produção: https://nossoatlas.com

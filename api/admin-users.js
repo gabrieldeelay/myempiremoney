@@ -1,29 +1,43 @@
-const { requireAdmin, sendError } = require("../lib/supabase-admin");
+const { one, toIso } = require("../lib/db");
+const { hashPassword, profileFrom, requireAdmin, sendError } = require("../lib/auth");
+
+function normalizeDates(record) {
+  if (!record) return record;
+  for (const key of ["created_at", "updated_at", "expires_at", "access_expires_at"]) {
+    if (record[key]) record[key] = toIso(record[key]);
+  }
+  if ("access_granted" in record) record.access_granted = Boolean(record.access_granted);
+  return record;
+}
 
 module.exports = async function handler(req, res) {
   try {
-    const { supabase } = await requireAdmin(req);
+    const { db } = await requireAdmin(req);
     if (req.method === "GET") {
       if (String(req.query?.view || "") === "payments") {
-        const [{ data: payments, error: paymentError }, { data: profiles, error: profileError }] = await Promise.all([
-          supabase.from("payments").select("id,user_id,request_number,transaction_id,amount,original_amount,discount_amount,status,created_at,updated_at,expires_at").order("created_at", { ascending: false }).limit(500),
-          supabase.from("profiles").select("id,email,name,phone,created_at,access_status,access_expires_at").neq("role", "admin").order("created_at", { ascending: false }).limit(500)
+        const [[payments], [accounts]] = await Promise.all([
+          db.query(`SELECT p.id,p.user_id,p.request_number,p.transaction_id,p.amount,p.original_amount,p.discount_amount,p.status,p.created_at,p.updated_at,p.expires_at,
+            u.email AS customer_email,u.name AS customer_name,u.phone AS customer_phone,u.access_status AS customer_access_status,u.access_expires_at AS customer_access_expires_at
+            FROM payments p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.created_at DESC LIMIT 500`),
+          db.query("SELECT id,email,name,phone,created_at,access_status,access_expires_at FROM users WHERE role <> 'admin' ORDER BY created_at DESC LIMIT 500")
         ]);
-        if (paymentError) throw paymentError;
-        if (profileError) throw profileError;
-        const profileMap = new Map((profiles || []).map(profile => [profile.id, profile]));
-        const enriched = (payments || []).map(payment => ({ ...payment, customer: profileMap.get(payment.user_id) || null }));
+        const enriched = payments.map(payment => {
+          normalizeDates(payment);
+          const customer = payment.customer_email ? { id: payment.user_id, email: payment.customer_email, name: payment.customer_name, phone: payment.customer_phone, access_status: payment.customer_access_status, access_expires_at: toIso(payment.customer_access_expires_at) } : null;
+          for (const key of ["customer_email", "customer_name", "customer_phone", "customer_access_status", "customer_access_expires_at"]) delete payment[key];
+          return { ...payment, customer };
+        });
+        accounts.forEach(normalizeDates);
         const stats = {
           attempts: enriched.length,
           confirmed: enriched.filter(item => ["confirmed", "paid", "approved"].includes(String(item.status).toLowerCase())).length,
           pending: enriched.filter(item => String(item.status).toLowerCase() === "pending").length,
-          accounts: (profiles || []).length
+          accounts: accounts.length
         };
-        return res.status(200).json({ payments: enriched, accounts: profiles || [], stats });
+        return res.status(200).json({ payments: enriched, accounts, stats });
       }
-      const { data, error } = await supabase.from("profiles").select("id,email,name,phone,role,plan_id,access_granted,access_status,access_expires_at,created_at").order("created_at", { ascending: false }).limit(1000);
-      if (error) throw error;
-      const users = data || [];
+      const [users] = await db.query("SELECT id,email,name,phone,role,plan_id,access_granted,access_status,access_expires_at,created_at,updated_at FROM users ORDER BY created_at DESC LIMIT 1000");
+      users.forEach(normalizeDates);
       const normalized = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const q = normalized(req.query?.q).trim();
       const status = String(req.query?.status || "all").toLowerCase();
@@ -36,13 +50,16 @@ module.exports = async function handler(req, res) {
         return matchesSearch && matchesStatus && matchesPlan;
       });
       const customerUsers = users.filter(user => user.role !== "admin");
-      const stats = {
-        total: customerUsers.length,
-        active: customerUsers.filter(user => user.access_granted && user.access_status === "active").length,
-        pending: customerUsers.filter(user => !user.access_granted && user.access_status !== "blocked").length,
-        blocked: customerUsers.filter(user => user.access_status === "blocked").length
-      };
-      return res.status(200).json({ users: filtered.slice(0, 250), total: filtered.length, stats });
+      return res.status(200).json({
+        users: filtered.slice(0, 250),
+        total: filtered.length,
+        stats: {
+          total: customerUsers.length,
+          active: customerUsers.filter(user => user.access_granted && user.access_status === "active").length,
+          pending: customerUsers.filter(user => !user.access_granted && user.access_status !== "blocked").length,
+          blocked: customerUsers.filter(user => user.access_status === "blocked").length
+        }
+      });
     }
     if (req.method !== "PUT") return res.status(405).json({ error: "Método não permitido." });
     const id = String(req.body?.id || "");
@@ -50,17 +67,16 @@ module.exports = async function handler(req, res) {
     if (req.body?.action === "reset_password") {
       const password = String(req.body?.password || "");
       if (password.length < 8) return res.status(422).json({ error: "A nova senha precisa ter pelo menos 8 caracteres." });
-      const { error: passwordError } = await supabase.auth.admin.updateUserById(id, { password });
-      if (passwordError) throw passwordError;
-      await supabase.from("profiles").update({ updated_at: new Date().toISOString() }).eq("id", id);
+      await db.execute("UPDATE users SET password_hash = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?", [await hashPassword(password), id]);
       return res.status(200).json({ ok: true });
     }
     const access = Boolean(req.body?.access);
-    const update = { access_granted: access, access_status: access ? "active" : "blocked", updated_at: new Date().toISOString() };
-    if (access) update.access_expires_at = new Date(Date.now() + 30 * 86400000).toISOString();
-    const { data, error } = await supabase.from("profiles").update(update).eq("id", id).select("id,email,access_granted,access_status,access_expires_at").single();
-    if (error) throw error;
-    return res.status(200).json({ user: data });
+    await db.execute(
+      `UPDATE users SET access_granted = ?, access_status = ?, access_expires_at = IF(?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 DAY), access_expires_at), updated_at = UTC_TIMESTAMP() WHERE id = ?`,
+      [access ? 1 : 0, access ? "active" : "blocked", access ? 1 : 0, id]
+    );
+    const user = profileFrom(await one("SELECT * FROM users WHERE id = ?", [id]));
+    return res.status(200).json({ user });
   } catch (error) {
     return sendError(res, error);
   }

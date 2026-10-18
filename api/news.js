@@ -1,4 +1,4 @@
-const { getAdminClient } = require("../lib/supabase-admin");
+const { getDb } = require("../lib/db");
 const { getPublicSettings } = require("../lib/settings");
 
 const HIGH = /(banco central|central bank|fed\b|fomc|taxa de juros|interest rate|infla[cç][aã]o|inflation|payroll|emprego|guerra|war\b|san[cç][aã]o|sanction|hack|exploit|etf|regula[cç][aã]o|regulation)/i;
@@ -39,7 +39,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Método não permitido." });
   res.setHeader("Cache-Control", "public, s-maxage=180, stale-while-revalidate=600");
   try {
-    const settings = await getPublicSettings(getAdminClient());
+    const settings = await getPublicSettings(getDb());
     const rssItems = await googleNewsFallback(settings.market.newsQuery).catch(() => []);
     if (rssItems.length) return res.status(200).json({ items: rssItems, source: "Google News RSS", updatedAt: new Date().toISOString() });
     const url = new URL("https://api.gdeltproject.org/api/v2/doc/doc");
@@ -74,7 +74,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ items, source: "GDELT", updatedAt: new Date().toISOString() });
   } catch (error) {
     try {
-      const settings = await getPublicSettings(getAdminClient());
+      const settings = await getPublicSettings(getDb());
       const items = await googleNewsFallback(settings.market.newsQuery);
       return res.status(200).json({ items, source: "Google News RSS (fallback do GDELT)", updatedAt: new Date().toISOString() });
     } catch (fallbackError) {

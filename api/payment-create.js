@@ -1,10 +1,11 @@
 const crypto = require("node:crypto");
-const { requireUser, sendError } = require("../lib/supabase-admin");
+const { requireUser, sendError } = require("../lib/auth");
+const { one } = require("../lib/db");
 const { getPublicSettings, getVenoCredentials } = require("../lib/settings");
 
 function digits(value) { return String(value || "").replace(/\D/g, ""); }
 
-async function buildQuote(supabase, settings, planId, couponCode) {
+async function buildQuote(db, settings, planId, couponCode) {
   const plan = settings.plans?.[planId];
   if (!plan || plan.active === false) {
     const error = new Error("Este plano não está disponível.");
@@ -17,7 +18,7 @@ async function buildQuote(supabase, settings, planId, couponCode) {
   let couponDiscount = 0;
   const code = String(couponCode || "").trim().toUpperCase();
   if (code) {
-    const { data } = await supabase.from("coupons").select("*").eq("code", code).eq("active", true).maybeSingle();
+    const data = await one("SELECT * FROM coupons WHERE code = ? AND active = 1 LIMIT 1", [code]);
     const now = Date.now();
     if (!data || (data.valid_from && new Date(data.valid_from).getTime() > now) || (data.valid_until && new Date(data.valid_until).getTime() < now) || (data.max_uses && data.uses_count >= data.max_uses)) {
       const error = new Error("Cupom inválido, expirado ou esgotado.");
@@ -44,19 +45,19 @@ async function buildQuote(supabase, settings, planId, couponCode) {
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
   try {
-    const { user, profile, supabase } = await requireUser(req);
+    const { user, profile, db } = await requireUser(req);
     if (profile?.access_granted) return res.status(200).json({ accessGranted: true });
-    const settings = await getPublicSettings(supabase);
+    const settings = await getPublicSettings(db);
     const planId = "monthly";
-    const quote = await buildQuote(supabase, settings, planId, req.body?.couponCode);
+    const quote = await buildQuote(db, settings, planId, req.body?.couponCode);
     if (req.body?.action === "quote") return res.status(200).json({ quote: { ...quote, coupon: quote.coupon ? { code: quote.coupon.code } : null } });
-    const credentials = await getVenoCredentials(supabase);
+    const credentials = await getVenoCredentials(db);
     if (!credentials) return res.status(503).json({ error: "O pagamento ainda não foi ativado pelo administrador." });
     const name = String(req.body?.name || profile?.name || "").trim();
     const document = digits(req.body?.document || profile?.document);
     if (name.length < 3 || ![11, 14].includes(document.length)) return res.status(422).json({ error: "Informe nome completo e CPF/CNPJ para gerar o PIX." });
     const amount = quote.amount;
-    const origin = `https://${req.headers["x-forwarded-host"] || req.headers.host || "atlas-guard-trading.vercel.app"}`;
+    const origin = `https://${req.headers["x-forwarded-host"] || req.headers.host || "nossoatlas.com"}`;
     const response = await fetch("https://venopagments.com/api/cashin", {
       method: "POST",
       headers: {
@@ -70,24 +71,13 @@ module.exports = async function handler(req, res) {
     const payload = await response.json().catch(() => ({ ok: false, error: "Resposta inválida da Venopag." }));
     if (!payload.ok) return res.status(response.status === 429 ? 429 : 422).json({ error: payload.error || "Não foi possível gerar o PIX." });
     const expiresAt = new Date(Date.now() + Number(payload.expire_minutes || 30) * 60000).toISOString();
-    const { error } = await supabase.from("payments").upsert({
-      user_id: user.id,
-      request_number: payload.request_number,
-      transaction_id: payload.transaction_id || "",
-      amount,
-      original_amount: quote.originalPrice,
-      discount_amount: quote.couponDiscount,
-      plan_id: planId,
-      coupon_id: quote.coupon?.id || null,
-      status: payload.status || "pending",
-      pix_code: payload.copyPaste || "",
-      qr_url: payload.qr_url || "",
-      expires_at: expiresAt,
-      raw: payload,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "request_number" });
-    if (error) throw error;
-    await supabase.from("profiles").update({ name, document, access_status: "pending", updated_at: new Date().toISOString() }).eq("id", user.id);
+    await db.execute(
+      `INSERT INTO payments (id,user_id,request_number,transaction_id,amount,original_amount,discount_amount,plan_id,coupon_id,status,pix_code,qr_url,expires_at,raw,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())
+       ON DUPLICATE KEY UPDATE transaction_id=VALUES(transaction_id),amount=VALUES(amount),original_amount=VALUES(original_amount),discount_amount=VALUES(discount_amount),plan_id=VALUES(plan_id),coupon_id=VALUES(coupon_id),status=VALUES(status),pix_code=VALUES(pix_code),qr_url=VALUES(qr_url),expires_at=VALUES(expires_at),raw=VALUES(raw),updated_at=UTC_TIMESTAMP()`,
+      [crypto.randomUUID(), user.id, payload.request_number, payload.transaction_id || "", amount, quote.originalPrice, quote.couponDiscount, planId, quote.coupon?.id || null, payload.status || "pending", payload.copyPaste || "", payload.qr_url || "", new Date(expiresAt), JSON.stringify(payload)]
+    );
+    await db.execute("UPDATE users SET name=?,document=?,access_status='pending',updated_at=UTC_TIMESTAMP() WHERE id=?", [name, document, user.id]);
     return res.status(200).json({ quote: { ...quote, coupon: quote.coupon ? { code: quote.coupon.code } : null }, payment: { requestNumber: payload.request_number, amount, status: payload.status, pixCode: payload.copyPaste, qrUrl: payload.qr_url, qrImage: payload.qr_img ? `data:image/png;base64,${payload.qr_img}` : "", expiresAt } });
   } catch (error) {
     return sendError(res, error);

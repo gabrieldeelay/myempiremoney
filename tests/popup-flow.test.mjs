@@ -46,21 +46,14 @@ async function renderPopup({ tabUrl, installedVersion, publicVersion, allowedOri
 }
 
 {
-  const origin = "https://atlas-guard-trading.vercel.app";
+  const origin = "https://nossoatlas.com";
   const ui = await renderPopup({ tabUrl: `${origin}/`, installedVersion: "2.3.0", publicVersion: "2.3.0", allowedOrigins: [origin] });
   assert.equal(ui.primaryAction.textContent, "Reconectar painel");
   assert.equal(ui.updateBadge.textContent, "ATUALIZADA");
 }
 
 {
-  const origin = "https://nossoatlas.com";
-  const ui = await renderPopup({ tabUrl: `${origin}/`, installedVersion: "2.5.2", publicVersion: "2.5.2", allowedOrigins: [origin] });
-  assert.equal(ui.primaryAction.textContent, "Reconectar painel");
-  assert.equal(ui.updateBadge.textContent, "ATUALIZADA");
-}
-
-{
-  const ui = await renderPopup({ tabUrl: "https://atlas-guard-trading.vercel.app/", installedVersion: "2.3.0", publicVersion: "2.4.0" });
+  const ui = await renderPopup({ tabUrl: "https://nossoatlas.com/", installedVersion: "2.3.0", publicVersion: "2.4.0" });
   assert.equal(ui.primaryAction.textContent, "Atualizar agora");
   assert.equal(ui.latestVersion.textContent, "v2.4.0");
 }

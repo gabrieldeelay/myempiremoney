@@ -1,4 +1,4 @@
-import { apiFetch, getAtlasClient } from "/modules/supabase-client.js";
+import { apiFetch, getAtlasClient } from "/modules/atlas-client.js";
 
 const $ = selector => document.querySelector(selector);
 const buttons = [...document.querySelectorAll("[data-mode]")];

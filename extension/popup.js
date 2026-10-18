@@ -13,7 +13,6 @@ function eligible(origin) {
     const host = new URL(origin).hostname;
     return host === "127.0.0.1"
       || host === "localhost"
-      || host === "atlas-guard-trading.vercel.app"
       || host === "nossoatlas.com"
       || host === "www.nossoatlas.com";
   } catch { return false; }

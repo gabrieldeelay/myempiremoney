@@ -1,4 +1,4 @@
-const { getAdminClient } = require("../lib/supabase-admin");
+const { getDb } = require("../lib/db");
 const { getPublicSettings } = require("../lib/settings");
 
 function ema(values, period) {
@@ -47,7 +47,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Método não permitido." });
   res.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=90");
   try {
-    const settings = await getPublicSettings(getAdminClient());
+    const settings = await getPublicSettings(getDb());
     const settled = await Promise.allSettled(settings.market.symbols.slice(0, 12).map(analyze));
     const items = settled.filter(item => item.status === "fulfilled").map(item => item.value).sort((a, b) => Math.abs(b.score) - Math.abs(a.score)).slice(0, 5);
     if (!items.length) throw new Error("Nenhum ativo respondeu.");

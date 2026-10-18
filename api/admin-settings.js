@@ -1,4 +1,6 @@
-const { requireAdmin, sendError } = require("../lib/supabase-admin");
+const crypto = require("node:crypto");
+const { requireAdmin, sendError } = require("../lib/auth");
+const { one, toIso } = require("../lib/db");
 const { encryptJson } = require("../lib/crypto-store");
 const { getPublicSettings, getVenoCredentials } = require("../lib/settings");
 
@@ -27,12 +29,12 @@ function cleanPlan(input, fallbackId) {
 
 module.exports = async function handler(req, res) {
   try {
-    const { supabase } = await requireAdmin(req);
+    const { db } = await requireAdmin(req);
     if (req.method === "GET") {
-      const settings = await getPublicSettings(supabase);
-      const veno = await getVenoCredentials(supabase).catch(() => null);
-      const { data: coupons, error: couponError } = await supabase.from("coupons").select("*").order("created_at", { ascending: false });
-      if (couponError) throw couponError;
+      const settings = await getPublicSettings(db);
+      const veno = await getVenoCredentials(db).catch(() => null);
+      const [coupons] = await db.query("SELECT * FROM coupons ORDER BY created_at DESC");
+      coupons.forEach(coupon => { coupon.active = Boolean(coupon.active); coupon.valid_from = toIso(coupon.valid_from); coupon.valid_until = toIso(coupon.valid_until); coupon.created_at = toIso(coupon.created_at); coupon.updated_at = toIso(coupon.updated_at); });
       return res.status(200).json({ ...settings, coupons: coupons || [], venopag: { configured: Boolean(veno?.clientId && veno?.clientSecret && veno?.webhookSecret), clientId: veno?.clientId || "", clientSecret: veno?.clientSecret || "", webhookSecret: veno?.webhookSecret || "", updatedAt: veno?.updatedAt || null } });
     }
     if (req.method === "POST" && req.body?.action === "coupon") {
@@ -45,17 +47,18 @@ module.exports = async function handler(req, res) {
       const parsedValidUntil = req.body?.coupon?.validUntil ? new Date(req.body.coupon.validUntil) : null;
       const validUntil = parsedValidUntil && Number.isFinite(parsedValidUntil.getTime()) ? parsedValidUntil.toISOString() : null;
       if (code.length < 3 || !(value > 0) || (type === "percent" && value > 100)) return res.status(422).json({ error: "Revise o código e o desconto do cupom." });
-      const record = { code, type, value, max_uses: maxUses, valid_until: validUntil, active: req.body?.coupon?.active !== false, updated_at: new Date().toISOString() };
-      const query = id ? supabase.from("coupons").update(record).eq("id", id) : supabase.from("coupons").insert(record);
-      const { data, error } = await query.select("*").single();
-      if (error) throw error;
+      const active = req.body?.coupon?.active !== false ? 1 : 0;
+      const couponId = id || crypto.randomUUID();
+      if (id) await db.execute("UPDATE coupons SET code=?,type=?,value=?,max_uses=?,valid_until=?,active=?,updated_at=UTC_TIMESTAMP() WHERE id=?", [code, type, value, maxUses, validUntil ? new Date(validUntil) : null, active, id]);
+      else await db.execute("INSERT INTO coupons (id,code,type,value,max_uses,valid_until,active,created_at,updated_at) VALUES (?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())", [couponId, code, type, value, maxUses, validUntil ? new Date(validUntil) : null, active]);
+      const data = await one("SELECT * FROM coupons WHERE id=?", [couponId]);
+      data.active = Boolean(data.active);
       return res.status(id ? 200 : 201).json({ coupon: data });
     }
     if (req.method === "DELETE") {
       const id = String(req.query?.id || req.body?.id || "");
       if (!id) return res.status(422).json({ error: "Cupom não informado." });
-      const { error } = await supabase.from("coupons").delete().eq("id", id);
-      if (error) throw error;
+      await db.execute("DELETE FROM coupons WHERE id = ?", [id]);
       return res.status(200).json({ ok: true });
     }
     if (req.method !== "PUT") return res.status(405).json({ error: "Método não permitido." });
@@ -74,17 +77,15 @@ module.exports = async function handler(req, res) {
     if (!symbols.length) return res.status(422).json({ error: "Adicione ao menos um ativo terminado em USDT." });
     const market = { newsQuery: String(req.body?.market?.newsQuery || "").trim().slice(0, 240), symbols };
     for (const [key, value] of Object.entries({ pricing: { oldPrice: monthly.oldPrice, currentPrice: monthly.currentPrice }, plans, content, market })) {
-      const { error } = await supabase.from("app_settings").upsert({ key, value, updated_at: new Date().toISOString() });
-      if (error) throw error;
+      await db.execute("INSERT INTO app_settings (`key`,`value`,updated_at) VALUES (?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`),updated_at=UTC_TIMESTAMP()", [key, JSON.stringify(value)]);
     }
     const venoInput = req.body?.venopag || {};
     if (venoInput.clientId || venoInput.clientSecret || venoInput.webhookSecret) {
       if (!venoInput.clientId || !venoInput.clientSecret || !venoInput.webhookSecret) return res.status(422).json({ error: "Preencha as três credenciais da Venopag." });
       const value = encryptJson({ clientId: String(venoInput.clientId).trim(), clientSecret: String(venoInput.clientSecret).trim(), webhookSecret: String(venoInput.webhookSecret).trim() });
-      const { error } = await supabase.from("private_settings").upsert({ key: "venopag", value, updated_at: new Date().toISOString() });
-      if (error) throw error;
+      await db.execute("INSERT INTO private_settings (`key`,`value`,updated_at) VALUES ('venopag',?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`),updated_at=UTC_TIMESTAMP()", [value]);
     }
-    return res.status(200).json({ ok: true, settings: await getPublicSettings(supabase) });
+    return res.status(200).json({ ok: true, settings: await getPublicSettings(db) });
   } catch (error) {
     return sendError(res, error);
   }

@@ -1,4 +1,4 @@
-import { apiFetch, getAtlasClient } from "/modules/supabase-client.js";
+import { apiFetch, getAtlasClient } from "/modules/atlas-client.js";
 
 document.documentElement.classList.add("auth-checking");
 

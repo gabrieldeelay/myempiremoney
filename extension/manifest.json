@@ -13,7 +13,6 @@
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://app.hezilex.com/*",
-    "https://atlas-guard-trading.vercel.app/*",
     "https://nossoatlas.com/*",
     "https://www.nossoatlas.com/*"
   ],
@@ -23,7 +22,6 @@
   "content_scripts": [
     {
       "matches": [
-        "https://atlas-guard-trading.vercel.app/*",
         "https://nossoatlas.com/*",
         "https://www.nossoatlas.com/*"
       ],

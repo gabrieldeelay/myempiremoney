@@ -1,6 +1,0 @@
-.git/
-.vercel/
-work/
-site-package*.tar.gz
-preview-*.png
-.env*

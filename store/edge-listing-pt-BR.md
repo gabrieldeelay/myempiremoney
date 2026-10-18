@@ -33,20 +33,20 @@ análise técnica, gráfico, velas, timeframe, risco, assistente de mercado
 
 ## URLs
 
-- Site: https://atlas-guard-trading.vercel.app/
-- Privacidade: https://atlas-guard-trading.vercel.app/privacy
-- Suporte: https://atlas-guard-trading.vercel.app/support
+- Site: https://nossoatlas.com/
+- Privacidade: https://nossoatlas.com/privacy
+- Suporte: https://nossoatlas.com/support
 
 ## Justificativa das permissões
 
 - `storage`: guardar preferências e o último estado técnico somente no navegador.
 - `tabs`: localizar a aba oficial da Hezilex e encaminhar os macros solicitados pelo usuário.
 - `https://app.hezilex.com/*`: ler a interface necessária para análise e aplicar os macros de configuração.
-- `https://atlas-guard-trading.vercel.app/*`: conectar a extensão ao painel oficial Atlas.
+- `https://nossoatlas.com/*`: conectar a extensão ao painel oficial Atlas.
 
 ## Instruções para revisão
 
-1. Instale a extensão e abra https://atlas-guard-trading.vercel.app/ no Microsoft Edge.
+1. Instale a extensão e abra https://nossoatlas.com/ no Microsoft Edge.
 2. Abra a área pública de login ou uma conta de teste em https://app.hezilex.com/.
 3. O painel deve mostrar “Conectado” quando o script da extensão estiver ativo.
 4. Após entrar na traderoom, verifique a leitura de ativo, timeframe e expiração.

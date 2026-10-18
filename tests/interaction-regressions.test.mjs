@@ -84,7 +84,7 @@ assert.match(adminPage, /id="couponList"/, "o painel deve administrar cupons");
 assert.match(adminPage, /data-admin-tab="clients"/, "o painel administrativo deve separar clientes em uma aba");
 assert.match(adminPage, /id="userSearch"/, "o painel deve pesquisar clientes por texto");
 assert.match(adminPage, /id="userStatus"/, "o painel deve filtrar clientes por status");
-assert.match(adminModule, /params\.set\("q", search\)/, "a busca de clientes deve consultar a API do Supabase");
+assert.match(adminModule, /params\.set\("q", search\)/, "a busca de clientes deve consultar a API do Atlas");
 assert.match(checkoutPage, /checkout-offer-summary/, "o checkout deve usar o resumo compacto da oferta");
 assert.match(checkoutPage, /checkout\.css\?v=3\.4\.0/, "o checkout deve carregar o layout compacto");
 assert.doesNotMatch(checkoutPage, /Escolha o plano|Plano vitalício|Plano mensal/, "o checkout não deve expor modalidades de plano");

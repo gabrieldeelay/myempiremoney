@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
-const { getAdminClient } = require("../lib/supabase-admin");
+const { getDb, one } = require("../lib/db");
+const { activatePayment } = require("../lib/payments");
 const { getVenoCredentials } = require("../lib/settings");
 
 const REVOKED = new Set(["expired", "canceled", "contested", "chargedback", "refunded"]);
@@ -21,8 +22,8 @@ async function readRawBody(req) {
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
   try {
-    const supabase = getAdminClient();
-    const credentials = await getVenoCredentials(supabase);
+    const db = getDb();
+    const credentials = await getVenoCredentials(db);
     if (!credentials?.webhookSecret) return res.status(503).json({ error: "Webhook não configurado." });
     const rawBody = typeof req.body === "string"
       ? req.body
@@ -41,15 +42,13 @@ module.exports = async function handler(req, res) {
     const requestNumber = String(event.request_number || event.data?.request_number || "");
     const status = String(event.status || event.data?.status || "").toLowerCase();
     if (!requestNumber || !status) return res.status(422).json({ error: "Evento incompleto." });
-    const { data: payment } = await supabase.from("payments").select("id,user_id,status").eq("request_number", requestNumber).maybeSingle();
+    const payment = await one("SELECT id,user_id,status FROM payments WHERE request_number=? LIMIT 1", [requestNumber]);
     if (!payment) return res.status(200).json({ ok: true });
     if (status === "confirmed") {
-      await supabase.from("payments").update({ raw: event, updated_at: new Date().toISOString() }).eq("id", payment.id);
-      const { error } = await supabase.rpc("activate_atlas_payment", { p_payment_id: payment.id });
-      if (error) throw error;
+      await activatePayment(payment.id, event);
     } else {
-      if (payment.status !== status) await supabase.from("payments").update({ status, raw: event, updated_at: new Date().toISOString() }).eq("id", payment.id);
-      if (REVOKED.has(status)) await supabase.from("profiles").update({ access_granted: false, access_status: status, updated_at: new Date().toISOString() }).eq("id", payment.user_id);
+      if (payment.status !== status) await db.execute("UPDATE payments SET status=?,raw=?,updated_at=UTC_TIMESTAMP() WHERE id=?", [status, JSON.stringify(event), payment.id]);
+      if (REVOKED.has(status)) await db.execute("UPDATE users SET access_granted=0,access_status=?,updated_at=UTC_TIMESTAMP() WHERE id=?", [status, payment.user_id]);
     }
     return res.status(200).json({ ok: true });
   } catch (error) {
