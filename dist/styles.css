@@ -354,7 +354,8 @@ html.auth-checking body { visibility: hidden; }
 .news-meta { display: flex; justify-content: space-between; gap: 8px; color: #7390b8; font-size: 9px; }
 .news-meta em { font-style: normal; }
 .impact-stars { color: #78a8ff; letter-spacing: 1px; }
-.trend-row { flex: 0 0 230px; display: grid; grid-template-columns: 30px 1fr auto; gap: 9px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.025); scroll-snap-align: start; }
+.trend-row { flex: 0 0 230px; display: grid; grid-template-columns: 30px 1fr auto; gap: 9px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.025); color: inherit; font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; transition: .16s border-color, .16s background, .16s transform; }
+.trend-row:hover, .trend-row:focus-visible { border-color: #5797ff; background: rgba(87,151,255,.09); transform: translateY(-1px); outline: none; }
 .trend-rank { color: #5f7695; font-size: 10px; font-weight: 900; }
 .trend-row b, .trend-row small { display: block; }
 .trend-row b { font-size: 11px; }

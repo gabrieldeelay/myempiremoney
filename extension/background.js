@@ -1,5 +1,5 @@
 const DEFAULTS = {
-  allowedOrigins: [],
+  allowedOrigins: ["https://nossoatlas.com", "https://www.nossoatlas.com"],
   assets: {},
   updateState: null,
   lastUpdateCheckAt: 0
@@ -9,7 +9,8 @@ const UPDATE_INTERVAL = 4 * 60 * 60 * 1000;
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(Object.keys(DEFAULTS));
-  await chrome.storage.local.set({ ...DEFAULTS, ...current });
+  const allowedOrigins = [...new Set([...DEFAULTS.allowedOrigins, ...(current.allowedOrigins || [])])];
+  await chrome.storage.local.set({ ...DEFAULTS, ...current, allowedOrigins });
 });
 
 async function checkForUpdates(force = false) {
@@ -71,7 +72,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message?.type === "is_origin_allowed") {
       const { allowedOrigins = [] } = await chrome.storage.local.get("allowedOrigins");
-      return { allowed: allowedOrigins.includes(message.origin) };
+      return { allowed: originCanBeAuthorized(message.origin) || allowedOrigins.includes(message.origin) };
     }
     if (message?.type === "get_settings") {
       return chrome.storage.local.get(Object.keys(DEFAULTS));
@@ -86,7 +87,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "dashboard_command") {
       const origin = senderOrigin(sender);
       const { allowedOrigins = [] } = await chrome.storage.local.get("allowedOrigins");
-      if (!origin || !allowedOrigins.includes(origin)) throw new Error("Painel Atlas não autorizado");
+      if (!origin || (!originCanBeAuthorized(origin) && !allowedOrigins.includes(origin))) throw new Error("Painel Atlas não autorizado");
       if (!sender.tab?.id) throw new Error("Aba do Atlas não encontrada");
       try {
         const response = await chrome.tabs.sendMessage(sender.tab.id, {

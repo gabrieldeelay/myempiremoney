@@ -2,7 +2,7 @@
 
 Componente Manifest V3 executado silenciosamente no navegador para permitir que o painel Atlas leia o estado da Traderoom oficial, isolada por domínio.
 
-## Escopo da versão 2.5.2
+## Escopo da versão 2.5.3
 
 - Lê saldo visível, ativo, timeframe, expiração e velas oficiais.
 - Calcula a análise de 5 minutos e cria LTA, LTB e proteção somente pelas ferramentas nativas do gráfico da Hezilex.

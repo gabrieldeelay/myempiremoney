@@ -12,6 +12,9 @@ const quickSignup = await readFile(new URL("../dist/cadastro-rapido/index.html",
 const adminPage = await readFile(new URL("../dist/admin/index.html", import.meta.url), "utf8");
 const adminModule = await readFile(new URL("../dist/modules/admin.js", import.meta.url), "utf8");
 const checkoutPage = await readFile(new URL("../dist/checkout/index.html", import.meta.url), "utf8");
+const insights = await readFile(new URL("../dist/modules/insights.js", import.meta.url), "utf8");
+const newsApi = await readFile(new URL("../api/news.js", import.meta.url), "utf8");
+const extensionBackground = await readFile(new URL("../extension/background.js", import.meta.url), "utf8");
 
 assert.equal(normalizeAssetName("ETHUSDT"), "ETHEREUM");
 assert.equal(normalizeAssetName("sol/usdt"), "SOLANA");
@@ -45,6 +48,14 @@ assert.match(bridge, /lastHistoryCheckAt < 1500/, "a confirmação pelo históri
 assert.doesNotMatch(html, /id="setTimeframe"|id="setExpiration"|id="setRisk"|id="applyAll"/, "os macros devem ser removidos do painel");
 assert.match(html, /data-intel-tab="news"/, "a antiga área de macros deve exibir notícias");
 assert.match(html, /data-intel-tab="trends"/, "a antiga área de macros deve exibir tendências");
+assert.match(insights, /atlas:trends/, "as tendências devem ser entregues ao painel principal");
+assert.match(insights, /atlas:trend-selected/, "cada tendência deve poder ser aberta no painel principal");
+assert.match(app, /market-radar-5m/, "o painel deve exibir a direção do radar quando a leitura direta ainda estiver neutra");
+assert.match(app, /Radar 5M:/, "a origem do sinal alternativo precisa ficar clara para o usuário");
+assert.match(newsApi, /isLikelyPortuguese/, "notícias fora do português devem ser filtradas");
+assert.match(newsApi, /cointelegraph\.com\.br/, "o feed deve priorizar fontes publicadas em português");
+assert.match(extensionBackground, /DEFAULTS\.allowedOrigins/, "a atualização deve preservar a autorização automática do domínio oficial");
+assert.match(extensionBackground, /originCanBeAuthorized\(origin\)/, "o domínio oficial deve funcionar mesmo antes da primeira gravação local");
 assert.match(bridge, /openNativeDrawingChoice/, "LTA e LTB devem abrir a ferramenta nativa da Hezilex");
 assert.match(bridge, /linha de tend\[eê\]ncia\|trend line/, "o desenho deve selecionar explicitamente Linha de Tendência");
 assert.match(bridge, /return \{ type, x1, y1: clamp\(y1\), x2: x2Point, y2: clamp\(y2Point\) \}/, "a linha deve terminar no segundo pivô, não no espaço futuro do gráfico");

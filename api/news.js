@@ -19,9 +19,32 @@ function tag(xml, name) {
   return decodeXml(xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, "i"))?.[1] || "");
 }
 
+const PORTUGUESE_SOURCES = [
+  "infomoney.com.br", "valor.globo.com", "exame.com", "portaldobitcoin.uol.com.br",
+  "cointelegraph.com.br", "br.investing.com", "moneytimes.com.br", "cnnbrasil.com.br",
+  "economia.uol.com.br", "g1.globo.com"
+];
+
+function portugueseQuery(query = "") {
+  const translated = String(query)
+    .replace(/central bank/gi, "banco central")
+    .replace(/interest rates?/gi, "taxa de juros")
+    .replace(/inflation/gi, "inflação")
+    .replace(/markets?/gi, "mercado")
+    .replace(/crypto(?:currency|currencies)?/gi, "criptomoedas");
+  const sources = PORTUGUESE_SOURCES.map(domain => `site:${domain}`).join(" OR ");
+  return `${translated || "bitcoin OR ethereum OR mercado"} (${sources})`;
+}
+
+function isLikelyPortuguese(value = "") {
+  const text = ` ${String(value).toLocaleLowerCase("pt-BR")} `;
+  const tokens = text.match(/\b(?:de|do|da|dos|das|em|no|na|nos|nas|para|com|por|que|e|ao|aos|uma|um|mercado|preço|alta|queda|juros|inflação|brasil|ações|criptomoedas)\b/g) || [];
+  return /[ãõçáéíóúâêô]/i.test(text) || tokens.length >= 2;
+}
+
 async function googleNewsFallback(query) {
   const url = new URL("https://news.google.com/rss/search");
-  url.searchParams.set("q", query.replace(/[()\"]/g, ""));
+  url.searchParams.set("q", portugueseQuery(query).replace(/[()\"]/g, ""));
   url.searchParams.set("hl", "pt-BR");
   url.searchParams.set("gl", "BR");
   url.searchParams.set("ceid", "BR:pt-419");
@@ -32,7 +55,7 @@ async function googleNewsFallback(query) {
     const body = match[1];
     const article = { title: tag(body, "title"), url: tag(body, "link"), source: tag(body, "source") || "Google News", publishedAt: tag(body, "pubDate"), image: "", language: "pt" };
     return { ...article, impact: impactFor(article), impactLabel: "Impacto estimado pelo Atlas" };
-  }).filter(article => article.title && article.url);
+  }).filter(article => article.title && article.url && isLikelyPortuguese(article.title));
 }
 
 module.exports = async function handler(req, res) {
@@ -43,7 +66,7 @@ module.exports = async function handler(req, res) {
     const rssItems = await googleNewsFallback(settings.market.newsQuery).catch(() => []);
     if (rssItems.length) return res.status(200).json({ items: rssItems, source: "Google News RSS", updatedAt: new Date().toISOString() });
     const url = new URL("https://api.gdeltproject.org/api/v2/doc/doc");
-    url.searchParams.set("query", settings.market.newsQuery);
+    url.searchParams.set("query", portugueseQuery(settings.market.newsQuery));
     url.searchParams.set("mode", "artlist");
     url.searchParams.set("format", "json");
     url.searchParams.set("sort", "datedesc");
@@ -56,7 +79,10 @@ module.exports = async function handler(req, res) {
     }
     const payload = await response.json();
     const seen = new Set();
-    const items = (payload.articles || []).filter(article => article.url && article.title).filter(article => {
+    const items = (payload.articles || [])
+      .filter(article => article.url && article.title)
+      .filter(article => /portuguese|português|^pt(?:-|$)/i.test(article.language || "") || isLikelyPortuguese(article.title))
+      .filter(article => {
       const key = String(article.title).toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
@@ -67,7 +93,7 @@ module.exports = async function handler(req, res) {
       source: article.domain || "Fonte externa",
       image: article.socialimage || "",
       publishedAt: article.seendate || "",
-      language: article.language || "",
+      language: "pt-BR",
       impact: impactFor(article),
       impactLabel: "Impacto estimado pelo Atlas"
     }));

@@ -1,4 +1,4 @@
-import { normalizeAssetName } from "./asset-name.js?v=2.5.1-r7";
+import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -15,6 +15,8 @@ let iframeBridgeReady = false;
 let verificationInFlight = false;
 let toastTimer = null;
 let lastLoginState = null;
+let marketTrends = [];
+let selectedRadarAsset = null;
 let state = {
   version: null,
   asset: null,
@@ -42,6 +44,36 @@ function formatRobotMessage(value) {
 
 function marketReady() {
   return Boolean(state.asset || state.account?.id || state.account?.verified || (state.balance != null && state.balanceConfidence));
+}
+
+function trendForAsset(asset = state.asset || selectedRadarAsset) {
+  const normalized = normalizeAssetName(asset);
+  return normalized ? marketTrends.find(item => normalizeAssetName(item.asset) === normalized) || null : null;
+}
+
+function effectiveAnalysis() {
+  const live = state.analysis || {};
+  const trend = trendForAsset();
+  const liveDirection = String(live.direction || "WAIT").toUpperCase();
+  if (!trend || (liveDirection !== "WAIT" && Number(live.confidence) > 0)) return live;
+  return {
+    ...live,
+    ...trend,
+    direction: String(trend.direction || "WAIT").toUpperCase(),
+    reason: `Radar 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}`,
+    source: "market-radar-5m"
+  };
+}
+
+function renderSignal(analysis = effectiveAnalysis()) {
+  const direction = String(analysis?.direction || "WAIT").toUpperCase();
+  const card = $("signalCard");
+  card.classList.toggle("buy", direction === "BUY");
+  card.classList.toggle("sell", direction === "SELL");
+  $("analysisDirection").textContent = direction === "BUY" ? "COMPRA" : direction === "SELL" ? "VENDA" : "AGUARDAR";
+  $("signalIcon").textContent = direction === "BUY" ? "↗" : direction === "SELL" ? "↘" : "—";
+  $("confidenceBadge").textContent = `${Math.round(Number(analysis?.confidence) || 0)}%`;
+  $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
 }
 
 const robot = {
@@ -224,7 +256,7 @@ const robot = {
       return;
     }
     const picked = operation.direction;
-    const advised = operation.analysisDirection || state.analysis.direction;
+    const advised = operation.analysisDirection || effectiveAnalysis().direction;
     let context = "open";
     if (picked === "BUY" && advised === "BUY") context = "buyAligned";
     else if (picked === "SELL" && advised === "SELL") context = "sellAligned";
@@ -273,9 +305,10 @@ const robot = {
       this.sayText(replies[question] || replies.loginseen, this.currentContext, true);
       return;
     }
-    const direction = state.analysis.direction;
+    const analysis = effectiveAnalysis();
+    const direction = analysis.direction;
     const label = direction === "BUY" ? "uma compra" : direction === "SELL" ? "uma venda" : "ficar de fora";
-    const reason = String(state.analysis.reason || "os critérios ainda não fecharam").replace(/\.$/, "");
+    const reason = String(analysis.reason || "os critérios ainda não fecharam").replace(/\.$/, "");
     const shortReason = reason.length > 112 ? `${reason.slice(0, 109)}…` : reason;
     const baseAmount = formatMoney(state.risk.baseAmount);
     const protectionActive = Boolean(state.protection?.active);
@@ -285,7 +318,7 @@ const robot = {
         : `Olha, nesse caso aí, mano, o lado mais forte era ${label}, porque ${shortReason.toLowerCase()}.`,
       why: direction === "WAIT"
         ? `Eu não escolhi um lado: ${shortReason}. Sem confirmação, melhor não inventar.`
-        : `${label === "uma compra" ? "Compra" : "Venda"}, porque ${shortReason.toLowerCase()}. Confiança em ${Math.round(Number(state.analysis.confidence) || 0)}%.`,
+        : `${label === "uma compra" ? "Compra" : "Venda"}, porque ${shortReason.toLowerCase()}. Confiança em ${Math.round(Number(analysis.confidence) || 0)}%.`,
       risk: protectionActive
         ? state.protection?.ready
           ? `A proteção chegou ao ponto em ${state.protection.asset || state.asset}. A referência é ${formatMoney(state.protection.suggestedAmount)} no mesmo sentido da primeira entrada.`
@@ -295,7 +328,7 @@ const robot = {
       why5m: "Cinco minutos filtra parte do ruído e compara a análise com a mesma duração da operação. Menos bagunça, mais contexto.",
       seen: direction === "WAIT"
         ? `Estou vendo ${state.asset || "o ativo"}, mas ainda sem lado confiável: ${shortReason}.`
-        : `${state.asset || "O ativo"} favorece ${label}, com ${Math.round(Number(state.analysis.confidence) || 0)}%: ${shortReason}.`,
+        : `${state.asset || selectedRadarAsset || "O ativo"} favorece ${label}, com ${Math.round(Number(analysis.confidence) || 0)}%: ${shortReason}.`,
       missing: direction === "WAIT" ? `Falta confirmação: ${shortReason}. Quando fechar, eu mudo o sinal sozinho.` : `O sinal já apareceu para ${label}. Agora falta você decidir sem pressa.`
     };
     this.sayText(replies[question] || replies.seen, this.currentContext, true);
@@ -400,14 +433,7 @@ function renderState(next = {}) {
   $("agentExpiration").textContent = state.expiration || (state.defaults.expiration ? "5 min" : "—");
   $("riskAmount").textContent = formatMoney(state.risk.baseAmount);
 
-  const direction = state.analysis.direction;
-  const card = $("signalCard");
-  card.classList.toggle("buy", direction === "BUY");
-  card.classList.toggle("sell", direction === "SELL");
-  $("analysisDirection").textContent = direction === "BUY" ? "COMPRA" : direction === "SELL" ? "VENDA" : "AGUARDAR";
-  $("signalIcon").textContent = direction === "BUY" ? "↗" : direction === "SELL" ? "↘" : "—";
-  $("confidenceBadge").textContent = `${Math.round(Number(state.analysis.confidence) || 0)}%`;
-  $("analysisReason").textContent = state.analysis.reason || "Sem confirmação suficiente.";
+  renderSignal();
 
   const pulse = $("monitorPulse");
   const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;
@@ -590,6 +616,27 @@ $("robotQuestions").addEventListener("click", event => {
 });
 $("robotSoundToggle")?.addEventListener("change", event => robot.setSoundEnabled(event.currentTarget.checked));
 addEventListener("pointerdown", () => robot.unlockSound(), { capture: true, once: true });
+
+addEventListener("atlas:trends", event => {
+  marketTrends = Array.isArray(event.detail?.items) ? event.detail.items : [];
+  if (state.asset && trendForAsset(state.asset)) renderSignal();
+});
+
+addEventListener("atlas:trend-selected", event => {
+  const trend = event.detail;
+  if (!trend?.asset) return;
+  selectedRadarAsset = normalizeAssetName(trend.asset);
+  $("agentAsset").textContent = selectedRadarAsset;
+  $("agentTimeframe").textContent = trend.timeframe || "5m";
+  renderSignal({
+    ...trend,
+    reason: `Radar 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}`,
+    source: "market-radar-5m"
+  });
+  $("monitorPulse").classList.add("live");
+  $("monitorPulse").textContent = "Radar 5M selecionado";
+  showToast(`${selectedRadarAsset}: ${trend.direction === "BUY" ? "COMPRA" : trend.direction === "SELL" ? "VENDA" : "AGUARDAR"} no Radar 5M.`, "info", 5000);
+});
 
 let glowFrame = 0;
 let glowPoint = { x: innerWidth / 2, y: innerHeight * .32 };
