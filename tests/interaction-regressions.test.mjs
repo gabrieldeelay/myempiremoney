@@ -15,6 +15,7 @@ const checkoutPage = await readFile(new URL("../dist/checkout/index.html", impor
 const insights = await readFile(new URL("../dist/modules/insights.js", import.meta.url), "utf8");
 const newsApi = await readFile(new URL("../api/news.js", import.meta.url), "utf8");
 const extensionBackground = await readFile(new URL("../extension/background.js", import.meta.url), "utf8");
+const screenReader = await readFile(new URL("../dist/modules/screen-reader.js", import.meta.url), "utf8");
 
 assert.equal(normalizeAssetName("ETHUSDT"), "ETHEREUM");
 assert.equal(normalizeAssetName("sol/usdt"), "SOLANA");
@@ -81,6 +82,14 @@ assert.match(styles, /\.robot-head[^\n]+background:\s*linear-gradient\(145deg, #
 assert.match(styles, /\.cursor-glow/, "o fundo deve ter iluminação suave que acompanha o ponteiro");
 assert.match(html, /data-settings-trigger/, "a instalação deve ficar dentro de Configurações");
 assert.doesNotMatch(html, /Abrir em nova aba|app\.hezilex\.com<\/code>/, "o topo não deve exibir ações e endereço desnecessários");
+assert.match(html, /data-screen-reader-start/, "a leitura visual deve poder ser ativada sem extensão");
+assert.match(html, /id="screenReaderVideo"/, "a captura da aba deve permanecer interna e invisível");
+assert.doesNotMatch(html, /install-flow\.js/, "a extensão não pode continuar sendo requisito do painel");
+assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "as configurações não devem empurrar instalação de extensão");
+assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
+assert.match(screenReader, /source: "screen-capture"/, "o painel deve identificar sinais produzidos pela leitura visual");
+assert.match(screenReader, /Tesseract\.createWorker/, "o ativo visível deve ser identificado localmente por OCR");
+assert.match(app, /atlas:screen-state/, "o robô deve receber o estado produzido pela leitura visual");
 assert.match(landing, /Operar no escuro/, "a raiz deve apresentar a nova chamada do Atlas");
 assert.doesNotMatch(landing, /id="oldPrice"|id="currentPrice"/, "a landing não deve revelar preços");
 assert.match(landing, /id="landingDiscount"/, "a landing deve destacar o desconto real");

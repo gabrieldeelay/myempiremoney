@@ -83,10 +83,14 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .connection.ready i, .terminal-bar small.live { animation: live-pulse 1.8s ease-in-out infinite; }
 
 .top-actions { justify-self: end; display: flex; align-items: center; gap: 8px; }
-.icon-button, .settings-button { min-height: 36px; border: 1px solid var(--line); border-radius: 10px; background: rgba(11, 27, 49, .78); color: #aebfd5; cursor: pointer; transition: border-color .16s, background .16s, color .16s; }
+.icon-button, .settings-button, .screen-read-button { min-height: 36px; border: 1px solid var(--line); border-radius: 10px; background: rgba(11, 27, 49, .78); color: #aebfd5; cursor: pointer; transition: border-color .16s, background .16s, color .16s; }
 .icon-button { width: 34px; }
 .settings-button { display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; font-weight: 800; }
-.icon-button:hover, .settings-button:hover { border-color: var(--line-orange); background: #102744; color: #dceaff; }
+.screen-read-button { display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; border-color: rgba(87,151,255,.32); color: #d6e6ff; font-size: 11px; font-weight: 850; }
+.screen-read-button span { color: #76a9ff; text-shadow: 0 0 10px rgba(87,151,255,.75); }
+.screen-read-button.active { border-color: rgba(49,214,155,.35); color: #bff7e3; background: rgba(49,214,155,.08); }
+.screen-read-button:disabled { cursor: wait; opacity: .72; }
+.icon-button:hover, .settings-button:hover, .screen-read-button:hover { border-color: var(--line-orange); background: #102744; color: #dceaff; }
 
 .install-modal[hidden] { display: none; }
 .install-modal { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 18px; }
@@ -123,6 +127,15 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .settings-section-title span { color: #dfeaff; font-size: 12px; font-weight: 850; letter-spacing: .04em; }
 .settings-section-title em { padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: #8fa4bf; font-size: 10px; font-style: normal; }
 .settings-section-title em.connected { border-color: rgba(49,214,155,.26); color: var(--green); }
+.settings-section-title em.waiting { border-color: rgba(112,165,255,.28); color: #a9c8ff; }
+.settings-section-title em.error { border-color: rgba(255,82,99,.3); color: #ff9eaa; }
+.visual-reader-card { display: grid; grid-template-columns: 44px 1fr; gap: 13px; align-items: center; padding: 15px; border: 1px solid rgba(87,151,255,.22); border-radius: 14px; background: linear-gradient(135deg, rgba(87,151,255,.1), rgba(255,255,255,.018)); }
+.visual-reader-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid rgba(87,151,255,.35); border-radius: 13px; color: #8bb6ff; background: #0d2444; box-shadow: inset 0 0 18px rgba(87,151,255,.08); font-size: 25px; }
+.visual-reader-card b { color: #eef5ff; font-size: 14px; }
+.visual-reader-card p { margin: 4px 0 0; color: #8fa4bf; font-size: 11px; line-height: 1.5; }
+.visual-reader-steps { display: grid; gap: 9px; margin: 14px 0 0; padding: 0; list-style: none; }
+.visual-reader-steps li { display: flex; align-items: center; gap: 10px; color: #9dafc5; font-size: 11px; }
+.visual-reader-steps span { width: 25px; height: 25px; display: grid; place-items: center; flex: 0 0 25px; border-radius: 8px; background: #132e52; color: #9fc0f8; font-weight: 900; }
 .switch { position: relative; flex: 0 0 44px; width: 44px; height: 25px; cursor: pointer; }
 .switch input { position: absolute; opacity: 0; pointer-events: none; }
 .switch span { position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 999px; background: #10233d; transition: background .18s, border-color .18s; }
@@ -320,6 +333,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   .app-shell { height: auto; min-height: 100dvh; grid-template-rows: 54px auto; overflow: visible; }
   .topbar { grid-template-columns: 1fr auto; padding: 0 12px; }
   .connection { display: none; }
+  .screen-read-button { width: 36px; justify-content: center; padding: 0; font-size: 0; }
+  .screen-read-button span { font-size: 14px; }
   .settings-button span { display: none; }
   .settings-button { width: 36px; justify-content: center; padding: 0; }
   .install-dialog { padding: 24px 18px 20px; }

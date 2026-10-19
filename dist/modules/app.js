@@ -10,6 +10,7 @@ const frame = $("hezilexFrame");
 const pending = new Map();
 let sequence = 0;
 let extensionReady = false;
+let screenReaderReady = false;
 let directBridgeReady = false;
 let iframeBridgeReady = false;
 let verificationInFlight = false;
@@ -43,7 +44,11 @@ function formatRobotMessage(value) {
 }
 
 function marketReady() {
-  return Boolean(state.asset || state.account?.id || state.account?.verified || (state.balance != null && state.balanceConfidence));
+  return Boolean(state.asset || state.chartDetected || state.account?.id || state.account?.verified || (state.balance != null && state.balanceConfidence));
+}
+
+function dataReady() {
+  return extensionReady || screenReaderReady;
 }
 
 function trendForAsset(asset = state.asset || selectedRadarAsset) {
@@ -93,7 +98,7 @@ const robot = {
   soundReady: false,
   phrases: {
     waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
-    noaccess: ["Eu tô vendo que a tela abriu, mas este navegador não tá me entregando as velas. Sem dados, sem palpite fantasiado.", "O gráfico tá aí, bonitão, mas o Atlas ainda não recebeu os dados. Enquanto o topo disser ‘Aguardando conexão’, eu não vou inventar análise.", "Você tá mexendo na Hezilex, eu sei. Só que este navegador ainda não deixou eu ler o gráfico por dentro."],
+    noaccess: ["A Hezilex abriu. Agora ative a leitura visual para eu interpretar as velas sem extensão.", "O gráfico está na tela, mas a leitura visual ainda está desligada. Clique em ‘Ativar leitura’ e escolha esta aba.", "Sem extensão, eu leio a imagem da aba. Só falta você autorizar o compartilhamento da tela."],
     loggedout: ["Olha, eu tô vendo um moço fuçando o aplicativo, mas que ainda não fez login. Tá esperando convite?", "Rapaz, você abriu tudo, menos a conta. Sem login eu analiso o quê, a tela laranja?", "Você tá passeando pela Hezilex sem entrar. Bonito turismo financeiro.", "Eu aqui pronto pra analisar e você namorando a tela de login. Sensacional."],
     connect: ["Agora sim: gráfico falando, eu julgando.", "Dados ao vivo. Acabaram as desculpas criativas.", "Mercado localizado. A calma continua desaparecida.", "Tudo conectado. Respira antes de inventar moda."],
     asset: ["{asset} na tela. Novo ativo, velhos impulsos.", "Trocou para {asset}. Curiosidade ou plano? Vou fingir que é plano.", "Analisando {asset}. Ele não sabe que você chegou.", "{asset} selecionado. Deixa a vela terminar o raciocínio.", "Chegamos em {asset}. Primeiro eu leio, depois você inventa coragem.", "{asset} entrou no radar. Ainda não confunda movimento com oportunidade.", "Mudança registrada: agora é {asset}. O mercado não precisa saber da sua pressa.", "Abriu {asset}. Vou conferir o contexto antes que seu dedo dê opinião."],
@@ -161,7 +166,7 @@ const robot = {
   },
   contextStillValid(context) {
     if (context === "loggedout") return !marketReady();
-    if (context === "waiting" || context === "noaccess") return !extensionReady;
+    if (context === "waiting" || context === "noaccess") return !dataReady();
     if (["connect", "asset", "buy", "sell", "wait", "live", "timeframe", "expiration", "risk", "all"].includes(context)) {
       return marketReady();
     }
@@ -268,7 +273,7 @@ const robot = {
   },
   updateQuestions(context) {
     const buttons = [...$("robotQuestions").querySelectorAll("button")];
-    const noAccessContext = context === "noaccess" || (!extensionReady && context !== "waiting");
+    const noAccessContext = context === "noaccess" || (!dataReady() && context !== "waiting");
     const loggedOutContext = context === "loggedout" || !marketReady();
     const signalContext = ["buy", "sell", "open", "win", "loss", "draw", "buyAligned", "sellAligned", "buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal", "protectionReady", "protectionTaken", "protectionEarly"].includes(context);
     const setupContext = ["timeframe", "expiration", "risk", "all"].includes(context);
@@ -287,11 +292,11 @@ const robot = {
     });
   },
   answer(question) {
-    if (!extensionReady) {
+    if (!dataReady()) {
       const replies = {
-        cantread: "Porque este navegador abriu a Hezilex, mas não liberou os dados do gráfico pro Atlas. Eu não vou fingir que li.",
-        fixread: "Abra o endereço oficial no Chrome, Edge ou Brave onde a conexão local do Atlas já está ativa. Quando conectar, o topo muda sozinho.",
-        reallylive: "Agora, não. O topo ainda diz ‘Aguardando conexão’. Quando eu receber ativo e velas, aí sim começa a análise real."
+        cantread: "A leitura visual ainda está desligada. Sem a imagem das velas, eu não vou fingir que analisei.",
+        fixread: "Clique em ‘Ativar leitura’ no topo e escolha esta mesma aba. Não precisa instalar extensão.",
+        reallylive: "Agora, não. Quando a leitura visual estiver ativa, o topo vai mostrar ‘Leitura visual ao vivo’."
       };
       this.sayText(replies[question] || replies.cantread, this.currentContext, true);
       return;
@@ -404,12 +409,13 @@ function flashTrade(direction, severity = "normal") {
 }
 
 function renderConnection(connected) {
-  extensionReady = connected;
   $("connectionState").classList.toggle("ready", connected);
-  $("connectionText").textContent = connected ? (marketReady() ? "Análise ao vivo" : "Esperando login") : "Aguardando mercado";
+  $("connectionText").textContent = connected
+    ? screenReaderReady ? "Leitura visual ao vivo" : marketReady() ? "Análise ao vivo" : "Esperando login"
+    : "Ative a leitura visual";
 }
 
-function renderState(next = {}) {
+function renderState(next = {}, source = "extension") {
   const previousDirection = state.analysis.direction;
   const previousOperationKey = state.manualOperation?.key;
   const previousUiEventKey = state.uiEvent?.key;
@@ -426,7 +432,9 @@ function renderState(next = {}) {
     risk: { ...state.risk, ...(next.risk || {}) },
     defaults: { ...state.defaults, ...(next.defaults || {}) }
   };
-  renderConnection(true);
+  if (source === "screen") screenReaderReady = true;
+  else extensionReady = true;
+  renderConnection(dataReady());
 
   $("agentAsset").textContent = state.asset || "Localizando";
   $("agentTimeframe").textContent = state.timeframe || (state.defaults.timeframe ? "5m" : "—");
@@ -495,26 +503,27 @@ window.addEventListener("message", event => {
   if (fromIframe) iframeBridgeReady = true;
 
   if (event.data.type === "ready" || event.data.type === "state") {
-    renderState(event.data.state || {});
+    renderState(event.data.state || {}, "extension");
     return;
   }
   const request = pending.get(event.data.requestId);
   if (!request) return;
   clearTimeout(request.timer);
   pending.delete(event.data.requestId);
-  if (event.data.state) renderState(event.data.state);
+  if (event.data.state) renderState(event.data.state, "extension");
   if (event.data.type === "error") request.reject(new Error(event.data.error || "Não foi possível aplicar a configuração."));
   else request.resolve(event.data.result);
 });
 
 async function verifyExtension() {
+  if (screenReaderReady && !extensionReady) return;
   if (verificationInFlight) return;
   verificationInFlight = true;
   try {
     const result = await sendCommand("ping", {}, 1600);
-    renderState(result);
+    renderState(result, "extension");
   } catch {
-    if (!extensionReady) {
+    if (!dataReady()) {
       renderConnection(false);
       robot.speak("noaccess");
     }
@@ -638,6 +647,23 @@ addEventListener("atlas:trend-selected", event => {
   showToast(`${selectedRadarAsset}: ${trend.direction === "BUY" ? "COMPRA" : trend.direction === "SELL" ? "VENDA" : "AGUARDAR"} no Radar 5M.`, "info", 5000);
 });
 
+addEventListener("atlas:screen-started", () => {
+  screenReaderReady = true;
+  renderConnection(true);
+  robot.pruneQueue();
+});
+
+addEventListener("atlas:screen-state", event => {
+  screenReaderReady = true;
+  renderState(event.detail || {}, "screen");
+});
+
+addEventListener("atlas:screen-stopped", () => {
+  screenReaderReady = false;
+  renderConnection(extensionReady);
+  if (!extensionReady) $("monitorPulse").textContent = "Leitura visual desativada";
+});
+
 let glowFrame = 0;
 let glowPoint = { x: innerWidth / 2, y: innerHeight * .32 };
 addEventListener("pointermove", event => {
@@ -655,7 +681,7 @@ renderConnection(false);
 setInterval(verifyExtension, 2500);
 setInterval(() => {
   const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;
-  if (extensionReady && inspectedAt && Date.now() - inspectedAt > 12000) $("monitorPulse").textContent = "Aguardando atualização";
+  if (dataReady() && inspectedAt && Date.now() - inspectedAt > 12000) $("monitorPulse").textContent = "Aguardando atualização";
 }, 2000);
 addEventListener("resize", () => {
   keepRobotInViewport();
