@@ -60,7 +60,39 @@ function effectiveAnalysis() {
   const live = state.analysis || {};
   const trend = trendForAsset();
   const liveDirection = String(live.direction || "WAIT").toUpperCase();
-  if (!trend || (liveDirection !== "WAIT" && Number(live.confidence) > 0)) return live;
+  const trendDirection = String(trend?.direction || "WAIT").toUpperCase();
+  if (!trend) return live;
+  if (live.source === "screen-capture") {
+    if (liveDirection === "WAIT") {
+      return {
+        ...live,
+        ...trend,
+        direction: trendDirection,
+        confidence: Math.min(74, Math.round(Number(trend.confidence) || 0)),
+        reason: `Radar 5M confirma ${trendDirection === "BUY" ? "pressão compradora" : trendDirection === "SELL" ? "pressão vendedora" : "indecisão"}. ${trend.reason || ""}`.trim(),
+        source: "visual-radar"
+      };
+    }
+    if (trendDirection !== "WAIT" && trendDirection !== liveDirection) {
+      return {
+        ...live,
+        direction: "WAIT",
+        confidence: Math.max(48, Math.min(68, Math.round((Number(live.confidence) + Number(trend.confidence)) / 2) || 50)),
+        reason: `Divergência: as velas sugerem ${liveDirection === "BUY" ? "compra" : "venda"}, mas o Radar 5M indica ${trendDirection === "BUY" ? "compra" : "venda"}. Melhor aguardar confirmação.`,
+        source: "visual-radar"
+      };
+    }
+    if (trendDirection === liveDirection) {
+      return {
+        ...live,
+        confidence: Math.min(92, Math.round((Number(live.confidence) * .55) + (Number(trend.confidence) * .45))),
+        reason: `${live.reason} Radar 5M confirma o movimento.`,
+        source: "visual-radar"
+      };
+    }
+    return live;
+  }
+  if (liveDirection !== "WAIT" && Number(live.confidence) > 0) return live;
   return {
     ...live,
     ...trend,

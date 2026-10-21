@@ -1,0 +1,230 @@
+const ASSETS = [
+  "BITCOIN", "ETHEREUM", "SOLANA", "CARDANO", "LITECOIN", "AVAX", "DOGE", "SUI",
+  "XRP", "XPL", "STELLAR", "META", "TESLA", "MICROSOFT", "APPLE", "NETFLIX"
+];
+
+const FIAT = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "NZD", "CHF"];
+
+function pixelOffset(width, x, y) {
+  return (y * width + x) * 4;
+}
+
+function isActiveBlue(r, g, b) {
+  return b > 145 && g > 65 && b > r * 1.35 && b > g * 1.04;
+}
+
+function candleColor(r, g, b) {
+  if (g >= 95 && g - r >= 34 && g - b >= 18) return "BUY";
+  if (r >= 135 && r - g >= 38 && r - b >= 12) return "SELL";
+  return null;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function average(values) {
+  return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+}
+
+function editDistance(a, b) {
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= a.length; row += 1) {
+    const current = [row];
+    for (let column = 1; column <= b.length; column += 1) {
+      current[column] = Math.min(
+        current[column - 1] + 1,
+        previous[column] + 1,
+        previous[column - 1] + (a[row - 1] === b[column - 1] ? 0 : 1)
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[b.length];
+}
+
+export function fuzzyMatchAsset(value = "") {
+  const text = String(value).toUpperCase().replace(/[|]/g, "I");
+  const compact = text.replace(/[^A-Z]/g, "");
+  for (const asset of ASSETS) {
+    if (compact.includes(asset)) return asset;
+  }
+  for (const left of FIAT) {
+    for (const right of FIAT) {
+      if (left !== right && compact.includes(`${left}${right}`)) return `${left}/${right}`;
+    }
+  }
+
+  const tokens = text.split(/[^A-Z]+/).filter(token => token.length >= 3);
+  let best = null;
+  for (const token of tokens) {
+    for (const asset of ASSETS) {
+      const variants = [token];
+      if (token.length > asset.length) {
+        for (let start = 0; start <= token.length - Math.max(3, asset.length - 2); start += 1) {
+          for (let length = Math.max(3, asset.length - 2); length <= Math.min(token.length - start, asset.length + 2); length += 1) {
+            variants.push(token.slice(start, start + length));
+          }
+        }
+      }
+      for (const variant of variants) {
+        const distance = editDistance(variant, asset);
+        const similarity = 1 - distance / Math.max(variant.length, asset.length);
+        if (!best || similarity > best.similarity) best = { asset, similarity };
+      }
+    }
+  }
+  return best?.similarity >= .58 ? best.asset : null;
+}
+
+export function findActiveTabRect(data, width, height) {
+  if (!data?.length || !width || !height) return null;
+  const startX = Math.floor(width * .045);
+  const endX = Math.floor(width * .72);
+  const startY = Math.floor(height * .1);
+  const endY = Math.floor(height * .3);
+  const minRun = Math.max(18, Math.floor(width * .018));
+  const maxRun = Math.floor(width * .18);
+  let best = null;
+
+  for (let y = startY; y < endY; y += 1) {
+    let runStart = -1;
+    let lastMatch = -1;
+    for (let x = startX; x <= endX; x += 1) {
+      const offset = pixelOffset(width, x, y);
+      const matches = x < endX && isActiveBlue(data[offset], data[offset + 1], data[offset + 2]);
+      if (matches) {
+        if (runStart < 0) runStart = x;
+        lastMatch = x;
+      }
+      if (runStart >= 0 && (!matches && x - lastMatch > 3 || x === endX)) {
+        const runWidth = lastMatch - runStart + 1;
+        if (runWidth >= minRun && runWidth <= maxRun) {
+          const score = runWidth + y / height * 8;
+          if (!best || score > best.score) best = { x: runStart, y, width: runWidth, score };
+        }
+        runStart = -1;
+      }
+    }
+  }
+  if (!best) return null;
+  return { x: best.x, y: best.y, width: best.width, height: Math.max(34, Math.round(height * .075)) };
+}
+
+function collectBodiesForColor(data, width, bounds, direction) {
+  const chartHeight = bounds.bottom - bounds.top;
+  const minColumnPixels = Math.max(3, Math.floor(chartHeight * .007));
+  const activeColumns = [];
+  for (let x = bounds.left; x < bounds.right; x += 1) {
+    let count = 0;
+    for (let y = bounds.top; y < bounds.bottom; y += 1) {
+      const offset = pixelOffset(width, x, y);
+      if (candleColor(data[offset], data[offset + 1], data[offset + 2]) === direction) count += 1;
+    }
+    if (count >= minColumnPixels) activeColumns.push(x);
+  }
+
+  const groups = [];
+  let start = null;
+  let previous = null;
+  for (const x of activeColumns) {
+    if (start == null) start = x;
+    else if (x - previous > 2) {
+      groups.push([start, previous]);
+      start = x;
+    }
+    previous = x;
+  }
+  if (start != null) groups.push([start, previous]);
+
+  return groups.map(([x0, x1]) => {
+    let y0 = bounds.bottom;
+    let y1 = bounds.top;
+    let pixels = 0;
+    for (let x = x0; x <= x1; x += 1) {
+      for (let y = bounds.top; y < bounds.bottom; y += 1) {
+        const offset = pixelOffset(width, x, y);
+        if (candleColor(data[offset], data[offset + 1], data[offset + 2]) !== direction) continue;
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+        pixels += 1;
+      }
+    }
+    const bodyWidth = x1 - x0 + 1;
+    const bodyHeight = y1 - y0 + 1;
+    const density = pixels / Math.max(1, bodyWidth * bodyHeight);
+    return { direction, x0, x1, y0, y1, width: bodyWidth, height: bodyHeight, density, centerX: (x0 + x1) / 2 };
+  }).filter(body => body.width >= 3
+    && body.width <= Math.max(48, width * .055)
+    && body.height >= 5
+    && body.density >= .14);
+}
+
+export function extractCandleBodies(data, width, height) {
+  if (!data?.length || !width || !height) return [];
+  const bounds = {
+    left: Math.floor(width * .075),
+    right: Math.floor(width * .78),
+    top: Math.floor(height * .235),
+    bottom: Math.floor(height * .79)
+  };
+  const bodies = [
+    ...collectBodiesForColor(data, width, bounds, "BUY"),
+    ...collectBodiesForColor(data, width, bounds, "SELL")
+  ].sort((a, b) => a.centerX - b.centerX);
+
+  const merged = [];
+  for (const body of bodies) {
+    const previous = merged.at(-1);
+    if (previous && previous.direction === body.direction && body.x0 <= previous.x1 + 2) {
+      previous.x1 = Math.max(previous.x1, body.x1);
+      previous.y0 = Math.min(previous.y0, body.y0);
+      previous.y1 = Math.max(previous.y1, body.y1);
+      previous.width = previous.x1 - previous.x0 + 1;
+      previous.height = previous.y1 - previous.y0 + 1;
+      previous.centerX = (previous.x0 + previous.x1) / 2;
+    } else merged.push({ ...body });
+  }
+  const minimumBodyHeight = Math.max(6, Math.floor(height * .014));
+  return merged.filter(body => body.centerX > width * .18
+    && body.centerX < width * .755
+    && body.height >= minimumBodyHeight).slice(-12);
+}
+
+export function classifyCandleSequence(bodies = []) {
+  const recent = bodies.slice(-10);
+  if (recent.length < 3) {
+    return { direction: "WAIT", confidence: 0, chartDetected: recent.length > 0, score: 0, candleCount: recent.length, reason: "Leitura visual ativa, aguardando mais velas reconhecíveis." };
+  }
+
+  const closes = recent.map(body => body.direction === "BUY" ? body.y0 : body.y1);
+  const heights = recent.map(body => Math.max(5, body.height));
+  const split = Math.max(1, Math.floor(recent.length / 2));
+  const oldClose = average(closes.slice(0, split));
+  const newClose = average(closes.slice(split));
+  const normalizedMove = clamp((oldClose - newClose) / Math.max(8, average(heights)), -1, 1);
+  let voteTotal = 0;
+  let voteWeight = 0;
+  recent.forEach((body, index) => {
+    const weight = .55 + .45 * ((index + 1) / recent.length);
+    voteTotal += (body.direction === "BUY" ? 1 : -1) * weight;
+    voteWeight += weight;
+  });
+  const colorVote = voteTotal / voteWeight;
+  const score = clamp(normalizedMove * .68 + colorVote * .32, -1, 1);
+  const direction = score >= .16 ? "BUY" : score <= -.16 ? "SELL" : "WAIT";
+  const confidence = direction === "WAIT"
+    ? Math.round(42 + Math.abs(score) * 35)
+    : Math.round(clamp(57 + Math.abs(score) * 34 + Math.min(8, recent.length), 0, 91));
+  const reason = direction === "BUY"
+    ? `Leitura visual: ${recent.length} velas recentes mostram fechamentos e pressão para cima.`
+    : direction === "SELL"
+      ? `Leitura visual: ${recent.length} velas recentes mostram fechamentos e pressão para baixo.`
+      : `Leitura visual: as ${recent.length} velas recentes ainda estão sem direção confirmada.`;
+  return { direction, confidence, chartDetected: true, score, candleCount: recent.length, reason };
+}
+
+export function analyzeChartPixels(data, width, height) {
+  const bodies = extractCandleBodies(data, width, height);
+  return { ...classifyCandleSequence(bodies), source: "screen-capture", bodies };
+}

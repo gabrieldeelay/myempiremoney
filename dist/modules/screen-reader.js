@@ -1,4 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
+import { analyzeChartPixels, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.2.0";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
 const statusLabels = [...document.querySelectorAll("[data-screen-reader-status]")];
@@ -16,12 +17,8 @@ let ocrBusy = false;
 let analysisTimer = null;
 let lastAsset = null;
 let lastOcrAt = 0;
-
-const ASSETS = [
-  "BITCOIN", "ETHEREUM", "SOLANA", "CARDANO", "LITECOIN", "AVAX", "DOGE", "SUI",
-  "XRP", "XPL", "STELLAR", "META", "TESLA", "MICROSOFT", "APPLE", "NETFLIX"
-];
-const FIAT = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "NZD", "CHF"];
+let lastTabCenter = null;
+let missedAssetReads = 0;
 
 function setStatus(label, kind = "") {
   statusLabels.forEach(element => {
@@ -38,26 +35,8 @@ function setButtons(label, disabled = false) {
   });
 }
 
-function normalizeText(value = "") {
-  return String(value).toUpperCase().replace(/[|]/g, "I").replace(/\s+/g, " ").trim();
-}
-
-function assetFromText(value) {
-  const text = normalizeText(value);
-  const compact = text.replace(/[^A-Z]/g, "");
-  for (const asset of ASSETS) {
-    if (compact.includes(asset.replace(/[^A-Z]/g, ""))) return asset;
-  }
-  for (const left of FIAT) {
-    for (const right of FIAT) {
-      if (left !== right && compact.includes(`${left}${right}`)) return `${left}/${right}`;
-    }
-  }
-  return null;
-}
-
 function balanceFromText(value) {
-  const match = normalizeText(value).match(/R\$\s*([\d.]+(?:,\d{1,2})?)/);
+  const match = String(value).toUpperCase().match(/R\$\s*([\d.]+(?:,\d{1,2})?)/);
   if (!match) return null;
   const parsed = Number(match[1].replaceAll(".", "").replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
@@ -65,45 +44,18 @@ function balanceFromText(value) {
 
 function analyzeCandles() {
   if (!context || !canvas.width || !canvas.height) return null;
-  const left = Math.floor(canvas.width * .12);
-  const right = Math.floor(canvas.width * .76);
-  const top = Math.floor(canvas.height * .16);
-  const bottom = Math.floor(canvas.height * .76);
-  const width = right - left;
-  const height = bottom - top;
-  const pixels = context.getImageData(left, top, width, height).data;
-  let green = 0;
-  let red = 0;
-  let greenWeight = 0;
-  let redWeight = 0;
-  for (let y = 0; y < height; y += 2) {
-    for (let x = 0; x < width; x += 2) {
-      const offset = (y * width + x) * 4;
-      const r = pixels[offset];
-      const g = pixels[offset + 1];
-      const b = pixels[offset + 2];
-      const recentWeight = .55 + (x / width) * .9;
-      if (g > 105 && g > r * 1.28 && g > b * 1.12) {
-        green += 1;
-        greenWeight += recentWeight;
-      } else if (r > 145 && r > g * 1.3 && r > b * 1.08) {
-        red += 1;
-        redWeight += recentWeight;
-      }
-    }
-  }
-  const colored = green + red;
-  if (colored < 85) return { direction: "WAIT", confidence: 0, chartDetected: false, reason: "Leitura visual ativa, aguardando o gráfico aparecer por completo." };
-  const totalWeight = greenWeight + redWeight || 1;
-  const pressure = (greenWeight - redWeight) / totalWeight;
-  const direction = pressure > .085 ? "BUY" : pressure < -.085 ? "SELL" : "WAIT";
-  const confidence = direction === "WAIT" ? Math.round(45 + Math.abs(pressure) * 35) : Math.round(Math.min(89, 56 + Math.abs(pressure) * 42));
-  const reason = direction === "BUY"
-    ? "Leitura visual: as velas recentes mostram pressão compradora."
-    : direction === "SELL"
-      ? "Leitura visual: as velas recentes mostram pressão vendedora."
-      : "Leitura visual: compradores e vendedores ainda estão equilibrados.";
-  return { direction, confidence, chartDetected: true, reason, source: "screen-capture", greenPixels: green, redPixels: red };
+  const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+  return analyzeChartPixels(frame.data, canvas.width, canvas.height);
+}
+
+function prepareOcrCrop(tab) {
+  const cropTop = Math.max(0, Math.round(tab.y - tab.height * .82));
+  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * .17));
+  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * .9));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .68));
+  ocrCanvas.width = cropWidth;
+  ocrCanvas.height = cropHeight;
+  ocrContext.drawImage(canvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
 }
 
 async function ensureOcrWorker() {
@@ -126,17 +78,36 @@ async function ensureOcrWorker() {
 }
 
 async function readVisibleText() {
-  if (ocrBusy || Date.now() - lastOcrAt < 4500 || !canvas.width) return {};
+  if (ocrBusy || Date.now() - lastOcrAt < 3200 || !canvas.width) return {};
   ocrBusy = true;
   lastOcrAt = Date.now();
   try {
     const reader = await ensureOcrWorker();
-    ocrCanvas.width = canvas.width;
-    ocrCanvas.height = Math.max(120, Math.floor(canvas.height * .34));
-    ocrContext.drawImage(canvas, 0, 0, canvas.width, ocrCanvas.height, 0, 0, ocrCanvas.width, ocrCanvas.height);
+    const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+    const activeTab = findActiveTabRect(frame.data, canvas.width, canvas.height);
+    if (!activeTab) return {};
+    const tabCenter = activeTab.x + activeTab.width / 2;
+    const tabMoved = lastTabCenter != null && Math.abs(tabCenter - lastTabCenter) > Math.max(18, canvas.width * .025);
+    lastTabCenter = tabCenter;
+    if (tabMoved) {
+      lastAsset = null;
+      missedAssetReads = 0;
+    }
+    prepareOcrCrop(activeTab);
+    await reader.setParameters({
+      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/"
+    });
     const result = await reader.recognize(ocrCanvas);
     const text = result?.data?.text || "";
-    return { asset: assetFromText(text), balance: balanceFromText(text), timeframe: /\b5\s*M(?:IN)?\b/i.test(text) ? "5m" : null };
+    const asset = fuzzyMatchAsset(text);
+    missedAssetReads = asset ? 0 : missedAssetReads + 1;
+    return {
+      asset: asset || (missedAssetReads >= 2 ? null : lastAsset),
+      balance: balanceFromText(text),
+      timeframe: "5m",
+      activeTabDetected: true
+    };
   } catch (error) {
     console.warn("Atlas screen OCR", error);
     return {};
@@ -149,7 +120,7 @@ async function inspectFrame() {
   if (!stream || processing || !video.videoWidth || !context) return;
   processing = true;
   try {
-    const targetWidth = Math.min(960, video.videoWidth);
+    const targetWidth = Math.min(1920, video.videoWidth);
     const targetHeight = Math.round(video.videoHeight * (targetWidth / video.videoWidth));
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
       canvas.width = targetWidth;
@@ -158,7 +129,7 @@ async function inspectFrame() {
     context.drawImage(video, 0, 0, targetWidth, targetHeight);
     const analysis = analyzeCandles();
     const visible = await readVisibleText();
-    lastAsset = visible.asset || lastAsset;
+    if ("asset" in visible) lastAsset = visible.asset;
     window.dispatchEvent(new CustomEvent("atlas:screen-state", {
       detail: {
         version: "visual-1.0",
