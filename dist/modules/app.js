@@ -1,6 +1,6 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.5.0";
-import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.6.0";
+import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.6.1";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -174,7 +174,8 @@ function renderSignal(analysis = effectiveAnalysis()) {
 function renderSetupWarnings(force = false) {
   const host = $("setupWarnings");
   if (!host) return;
-  const issues = setupWarningTracker.update(state);
+  const setupReady = state.bridge !== "screen-capture" || state.setupChecked === true;
+  const issues = setupReady ? setupWarningTracker.update(state) : [];
   const renderKey = `${state.asset || ""}|${issues.map(issue => `${issue.id}:${issue.detail}`).join("|")}`;
   if (!force && renderKey === setupWarningRenderKey) return;
   setupWarningRenderKey = renderKey;

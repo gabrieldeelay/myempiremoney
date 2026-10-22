@@ -103,7 +103,9 @@ assert.match(screenReader, /setInterval\(inspectFrame, 850\)/, "a troca da aba a
 assert.match(screenReader, /readVisibleText\(activeTab, tabMoved \|\| !lastAsset\)/, "mudar a aba deve forçar uma leitura imediata do novo ativo");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");
+assert.match(screenReader, /setupChecked:\s*Boolean\(setup\.timeframe && setup\.expiration\)/, "os avisos devem esperar a leitura conjunta do gráfico e da expiração");
 assert.match(html, /id="setupWarnings"/, "o painel deve reservar uma área própria para os avisos de 5 minutos");
+assert.match(app, /state\.setupChecked === true/, "o painel deve decidir em conjunto se exibe um ou dois avisos");
 assert.match(app, /setupWarningTracker\.dismiss/, "o botão Vou mudar deve silenciar o aviso na visita atual ao ativo");
 assert.match(app, /atlas:screen-state/, "o robô deve receber o estado produzido pela leitura visual");
 assert.match(landing, /Operar no escuro/, "a raiz deve apresentar a nova chamada do Atlas");

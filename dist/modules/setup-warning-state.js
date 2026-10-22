@@ -9,6 +9,46 @@ export function minuteFromOcr(value) {
   return match ? Number(match[1]) : null;
 }
 
+export function createMinuteReadingStabilizer(options = {}) {
+  const requiredHits = options.requiredHits ?? 2;
+  const staleAfterMs = options.staleAfterMs ?? 4000;
+  const now = typeof options.now === "function" ? options.now : () => Date.now();
+  let stable = null;
+  let candidate = null;
+  let candidateHits = 0;
+  let lastValidAt = 0;
+
+  function update(value) {
+    const timestamp = now();
+    if (![1, 5].includes(value)) {
+      candidate = null;
+      candidateHits = 0;
+      if (stable != null && timestamp - lastValidAt >= staleAfterMs) stable = null;
+      return stable;
+    }
+    lastValidAt = timestamp;
+    if (value === stable) {
+      candidate = null;
+      candidateHits = 0;
+      return stable;
+    }
+    if (value !== candidate) {
+      candidate = value;
+      candidateHits = 1;
+      return stable;
+    }
+    candidateHits += 1;
+    if (candidateHits >= requiredHits) {
+      stable = candidate;
+      candidate = null;
+      candidateHits = 0;
+    }
+    return stable;
+  }
+
+  return { update };
+}
+
 export function createSetupWarningTracker() {
   let currentAsset = "";
   const dismissed = new Set();

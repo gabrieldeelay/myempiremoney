@@ -1,6 +1,6 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
 import { analyzeChartPixels, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.4.0";
-import { minuteFromOcr } from "./setup-warning-state.js?v=3.6.0";
+import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.6.1";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
 const statusLabels = [...document.querySelectorAll("[data-screen-reader-status]")];
@@ -23,6 +23,8 @@ let missedAssetReads = 0;
 let lastSetupOcrAt = 0;
 let lastTimeframe = null;
 let lastExpiration = null;
+const timeframeReading = createMinuteReadingStabilizer();
+const expirationReading = createMinuteReadingStabilizer();
 
 function setStatus(label, kind = "") {
   statusLabels.forEach(element => {
@@ -101,15 +103,15 @@ function frameBounds() {
   };
 }
 
-function prepareSetupCrop(kind) {
+function prepareSetupCrop(kind, activeTab) {
   const frame = frameBounds();
   const region = kind === "timeframe"
-    ? { left: .035, top: .07, width: .34, height: .34 }
-    : { left: .57, top: .07, width: .32, height: .4 };
+    ? { left: .055, width: .17 }
+    : { left: .67, width: .22 };
   const cropLeft = Math.max(0, Math.round(frame.x + frame.width * region.left));
-  const cropTop = Math.max(0, Math.round(frame.y + frame.height * region.top));
+  const cropTop = Math.max(0, Math.round(activeTab?.y ? activeTab.y + 4 : frame.y + frame.height * .18));
   const cropWidth = Math.min(canvas.width - cropLeft, Math.round(frame.width * region.width));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * region.height));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * .18));
   const scale = 3;
   ocrCanvas.width = Math.max(1, cropWidth * scale);
   ocrCanvas.height = Math.max(1, cropHeight * scale);
@@ -117,19 +119,9 @@ function prepareSetupCrop(kind) {
   ocrContext.fillStyle = "#fff";
   ocrContext.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
   ocrContext.drawImage(canvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, ocrCanvas.width, ocrCanvas.height);
-  const pixels = ocrContext.getImageData(0, 0, ocrCanvas.width, ocrCanvas.height);
-  for (let index = 0; index < pixels.data.length; index += 4) {
-    const max = Math.max(pixels.data[index], pixels.data[index + 1], pixels.data[index + 2]);
-    const ink = max > 105;
-    pixels.data[index] = ink ? 0 : 255;
-    pixels.data[index + 1] = ink ? 0 : 255;
-    pixels.data[index + 2] = ink ? 0 : 255;
-    pixels.data[index + 3] = 255;
-  }
-  ocrContext.putImageData(pixels, 0, 0);
 }
 
-async function readSetupValues() {
+async function readSetupValues(activeTab) {
   if (ocrBusy || Date.now() - lastSetupOcrAt < 700 || !canvas.width) {
     return { timeframe: lastTimeframe, expiration: lastExpiration };
   }
@@ -141,17 +133,21 @@ async function readSetupValues() {
       tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
       tessedit_char_whitelist: "015mMINin :"
     });
-    prepareSetupCrop("timeframe");
+    prepareSetupCrop("timeframe", activeTab);
     const timeframeResult = await reader.recognize(ocrCanvas);
-    prepareSetupCrop("expiration");
+    prepareSetupCrop("expiration", activeTab);
     const expirationResult = await reader.recognize(ocrCanvas);
-    const timeframeMinutes = minuteFromOcr(timeframeResult?.data?.text);
-    const expirationMinutes = minuteFromOcr(expirationResult?.data?.text);
-    if (timeframeMinutes != null) lastTimeframe = `${timeframeMinutes}m`;
-    if (expirationMinutes != null) lastExpiration = `${expirationMinutes} min`;
+    const timeframeMinutes = timeframeReading.update(minuteFromOcr(timeframeResult?.data?.text));
+    const expirationMinutes = expirationReading.update(minuteFromOcr(expirationResult?.data?.text));
+    lastTimeframe = timeframeMinutes == null ? null : `${timeframeMinutes}m`;
+    lastExpiration = expirationMinutes == null ? null : `${expirationMinutes} min`;
     return { timeframe: lastTimeframe, expiration: lastExpiration };
   } catch (error) {
     console.warn("Atlas setup OCR", error);
+    const timeframeMinutes = timeframeReading.update(null);
+    const expirationMinutes = expirationReading.update(null);
+    lastTimeframe = timeframeMinutes == null ? null : `${timeframeMinutes}m`;
+    lastExpiration = expirationMinutes == null ? null : `${expirationMinutes} min`;
     return { timeframe: lastTimeframe, expiration: lastExpiration };
   } finally {
     ocrBusy = false;
@@ -227,7 +223,7 @@ async function inspectFrame() {
       lastAsset = null;
       missedAssetReads = 0;
     }
-    const setup = await readSetupValues();
+    const setup = await readSetupValues(activeTab);
     const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
     if ("asset" in visible) lastAsset = visible.asset;
     window.dispatchEvent(new CustomEvent("atlas:screen-state", {
@@ -238,6 +234,7 @@ async function inspectFrame() {
         asset: lastAsset,
         timeframe: setup.timeframe,
         expiration: setup.expiration,
+        setupChecked: Boolean(setup.timeframe && setup.expiration),
         balance: visible.balance,
         balanceConfidence: visible.balance != null ? "visual" : null,
         chartDetected: Boolean(analysis?.chartDetected),
