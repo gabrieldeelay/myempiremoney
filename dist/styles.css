@@ -285,6 +285,29 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   font-weight: 850;
 }
 .robot-toggle:hover { border-color: var(--line-orange); color: var(--orange); }
+.robot-voice-toggle {
+  position: absolute;
+  z-index: 3;
+  top: -8px;
+  right: 20px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 50%;
+  background: #f4f8ff;
+  color: #18304f;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, .24);
+  transition: border-color .18s ease, color .18s ease, background .18s ease, transform .18s ease;
+}
+.robot-voice-toggle:hover { border-color: #66a3ff; color: #185bb8; transform: translateY(-1px); }
+.robot-voice-toggle[aria-pressed="true"] { border-color: rgba(255, 93, 101, .45); background: #fff0f1; color: #c53340; }
+.robot-overlay.voice-muted .robot-antenna i { box-shadow: none; opacity: .62; }
 .robot-bubble {
   position: relative;
   min-width: 0;
@@ -338,6 +361,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .robot-overlay.minimized { width: 74px; grid-template-columns: 74px; }
 .robot-overlay.minimized .robot-bubble { display: none; }
 .robot-overlay.minimized .robot-toggle { top: -5px; right: 47px; background: #f4f8ff; color: #18304f; }
+.robot-overlay.minimized .robot-voice-toggle { top: -5px; right: 12px; }
 .robot-overlay.minimized .robot-character { cursor: pointer; }
 @keyframes robot-idle { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-4px) rotate(1deg); } }
 @keyframes robot-blink { 0%, 45%, 49%, 100% { transform: scaleY(1); } 47% { transform: scaleY(.08); } }

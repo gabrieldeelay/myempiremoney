@@ -83,6 +83,12 @@ assert.match(app, /characterBefore\.left - characterAfter\.left/, "minimizar dev
 assert.match(styles, /max-height:\s*calc\(100dvh - 24px\)/, "o balão deve permanecer dentro da altura visível");
 assert.match(app, /robotLine"\)\.innerHTML = formatRobotMessage/, "o balão deve aceitar ênfase segura em negrito e itálico");
 assert.match(app, /createOscillator\(\)/, "o robô deve emitir um som local suave");
+assert.match(html, /id="robotVoiceToggle"/, "o robô deve oferecer um controle de voz direto no personagem");
+assert.match(app, /new SpeechSynthesisUtterance\(spokenText\)/, "as mensagens do robô devem ser narradas em português");
+assert.match(app, /utterance\.pitch = \.82/, "a narração deve usar um timbre masculino");
+assert.match(app, /if \(this\.voiceSpeaking\) this\.voiceQueue = \[spokenText\]/, "a fala atual não pode ser cortada e a fila deve conservar apenas a mensagem mais recente");
+assert.match(app, /atlas-robot-audio-enabled/, "a preferência de mudo deve permanecer salva no navegador");
+assert.match(app, /window\.speechSynthesis\?\.cancel\(\)/, "silenciar deve interromper e limpar a voz imediatamente");
 assert.doesNotMatch(app, /42000/, "o robô não deve falar periodicamente sem motivo");
 assert.doesNotMatch(app, /state\.asset && state\.asset !== previousAsset\) robot\.speak/, "trocar de ativo não deve gerar narração automática");
 assert.match(styles, /--bg:\s*#030a16/, "o painel deve usar o novo tema azul-escuro");

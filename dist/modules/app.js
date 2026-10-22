@@ -49,6 +49,17 @@ function formatRobotMessage(value) {
     .replace(/_(.+?)_/g, "<em>$1</em>");
 }
 
+function formatRobotSpeech(value) {
+  return String(value || "")
+    .replace(/\[\[(?:good|bad):(.+?)\]\]/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
+    .replace(/\b5M\b/gi, "cinco minutos")
+    .replace(/\b1%\b/g, "um por cento")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function marketReady() {
   return Boolean(state.asset || state.chartDetected || state.account?.id || state.account?.verified || (state.balance != null && state.balanceConfidence));
 }
@@ -231,9 +242,17 @@ const robot = {
   holdMs: 8000,
   lastAutomaticAt: 0,
   automaticCooldownMs: 90000,
-  soundEnabled: localStorage.getItem("atlas-robot-sound") !== "0",
+  soundEnabled: (() => {
+    const saved = localStorage.getItem("atlas-robot-audio-enabled");
+    if (saved != null) return saved !== "0";
+    return localStorage.getItem("atlas-robot-sound") !== "0";
+  })(),
   audioContext: null,
   soundReady: false,
+  voiceQueue: [],
+  voiceSpeaking: false,
+  activeVoiceText: "",
+  narratorVoice: null,
   phrases: {
     waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
     noaccess: ["A Hezilex abriu. Agora ative a leitura visual para eu interpretar as velas sem extensão.", "O gráfico está na tela, mas a leitura visual ainda está desligada. Clique em ‘Ativar leitura’ e escolha esta aba.", "Sem extensão, eu leio a imagem da aba. Só falta você autorizar o compartilhamento da tela."],
@@ -276,7 +295,32 @@ const robot = {
   setSoundEnabled(enabled) {
     this.soundEnabled = Boolean(enabled);
     localStorage.setItem("atlas-robot-sound", this.soundEnabled ? "1" : "0");
-    if (this.soundEnabled) this.unlockSound();
+    localStorage.setItem("atlas-robot-audio-enabled", this.soundEnabled ? "1" : "0");
+    this.syncAudioControls();
+    if (this.soundEnabled) {
+      this.unlockSound();
+      this.drainNarration();
+      return;
+    }
+    this.voiceQueue = [];
+    this.voiceSpeaking = false;
+    this.activeVoiceText = "";
+    window.speechSynthesis?.cancel();
+    clearTimeout(this.speechTimer);
+    $("robotOverlay").classList.remove("talking");
+  },
+  syncAudioControls() {
+    const muted = !this.soundEnabled;
+    const settingsToggle = $("robotSoundToggle");
+    const voiceToggle = $("robotVoiceToggle");
+    if (settingsToggle) settingsToggle.checked = this.soundEnabled;
+    if (voiceToggle) {
+      voiceToggle.textContent = muted ? "🔇" : "🔊";
+      voiceToggle.setAttribute("aria-pressed", String(muted));
+      voiceToggle.setAttribute("aria-label", muted ? "Ativar voz do Atlas" : "Silenciar voz do Atlas");
+      voiceToggle.title = muted ? "Ativar voz do Atlas" : "Silenciar voz do Atlas";
+    }
+    $("robotOverlay")?.classList.toggle("voice-muted", muted);
   },
   unlockSound() {
     if (!this.soundEnabled) return;
@@ -285,6 +329,57 @@ const robot = {
     this.audioContext ||= new AudioContextClass();
     this.audioContext.resume?.();
     this.soundReady = true;
+  },
+  selectNarratorVoice() {
+    if (!("speechSynthesis" in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    const maleNames = /antonio|antônio|daniel|felipe|ricardo|thiago|paulo|joão|joao|rafael|luciano|male|masculin/i;
+    const scored = voices.map(voice => {
+      const language = String(voice.lang || "").toLowerCase();
+      const label = `${voice.name} ${voice.voiceURI}`;
+      let score = language === "pt-br" ? 120 : language.startsWith("pt") ? 80 : 0;
+      if (maleNames.test(label)) score += 65;
+      if (/natural|neural|online/i.test(label)) score += 18;
+      if (/microsoft|google/i.test(label)) score += 8;
+      return { voice, score };
+    }).filter(item => item.score >= 80).sort((a, b) => b.score - a.score);
+    this.narratorVoice = scored[0]?.voice || null;
+    return this.narratorVoice;
+  },
+  canNarrate() {
+    return this.soundEnabled && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+  },
+  enqueueNarration(line) {
+    if (!this.canNarrate()) return false;
+    const spokenText = formatRobotSpeech(line);
+    if (!spokenText || spokenText === this.activeVoiceText || spokenText === this.voiceQueue.at(-1)) return true;
+    if (this.voiceSpeaking) this.voiceQueue = [spokenText];
+    else this.voiceQueue.push(spokenText);
+    this.drainNarration();
+    return true;
+  },
+  drainNarration() {
+    if (!this.canNarrate() || this.voiceSpeaking || !this.voiceQueue.length) return;
+    const spokenText = this.voiceQueue.shift();
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    const voice = this.narratorVoice || this.selectNarratorVoice();
+    if (voice) utterance.voice = voice;
+    utterance.lang = "pt-BR";
+    utterance.rate = .96;
+    utterance.pitch = .82;
+    utterance.volume = .92;
+    this.voiceSpeaking = true;
+    this.activeVoiceText = spokenText;
+    $("robotOverlay").classList.add("talking");
+    const finish = () => {
+      this.voiceSpeaking = false;
+      this.activeVoiceText = "";
+      if (this.soundEnabled && this.voiceQueue.length) this.drainNarration();
+      else $("robotOverlay").classList.remove("talking");
+    };
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    window.speechSynthesis.speak(utterance);
   },
   playSound(context) {
     if (!this.soundEnabled || !this.soundReady || !this.audioContext) return;
@@ -356,9 +451,10 @@ const robot = {
     $("robotLine").innerHTML = formatRobotMessage(line);
     $("robotOverlay").classList.add("talking");
     this.playSound(context);
+    const narrating = this.enqueueNarration(line);
     this.visibleUntil = now + this.holdMs;
     clearTimeout(this.speechTimer);
-    this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
+    if (!narrating) this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
     this.scheduleQueue();
     requestAnimationFrame(keepRobotInViewport);
   },
@@ -492,8 +588,8 @@ const robot = {
     $("robotOverlay").classList.toggle("minimized", minimized);
     $("robotToggle").textContent = minimized ? "+" : "−";
     $("robotToggle").setAttribute("aria-expanded", String(!minimized));
-    const soundToggle = $("robotSoundToggle");
-    if (soundToggle) soundToggle.checked = this.soundEnabled;
+    this.syncAudioControls();
+    this.selectNarratorVoice();
     restoreRobotPosition();
     this.speak("waiting", {}, true);
   },
@@ -682,6 +778,7 @@ $("reloadFrame").addEventListener("click", () => {
   frame.src = "https://app.hezilex.com/";
 });
 $("robotToggle").addEventListener("click", () => robot.toggle());
+$("robotVoiceToggle")?.addEventListener("click", () => robot.setSoundEnabled(!robot.soundEnabled));
 let suppressRobotClickUntil = 0;
 const robotDrag = { active: false, moved: false, pointerId: null, startX: 0, startY: 0, left: 0, top: 0 };
 
@@ -764,7 +861,13 @@ $("robotQuestions").addEventListener("click", event => {
   if (button) robot.answer(button.dataset.question);
 });
 $("robotSoundToggle")?.addEventListener("change", event => robot.setSoundEnabled(event.currentTarget.checked));
-addEventListener("pointerdown", () => robot.unlockSound(), { capture: true, once: true });
+addEventListener("pointerdown", () => {
+  robot.unlockSound();
+  robot.drainNarration();
+}, { capture: true, once: true });
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.addEventListener?.("voiceschanged", () => robot.selectNarratorVoice());
+}
 
 $("setupWarnings")?.addEventListener("click", event => {
   const button = event.target.closest("[data-setup-warning-dismiss]");
