@@ -1,5 +1,6 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
 import { analyzeChartPixels, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.4.0";
+import { minuteFromOcr } from "./setup-warning-state.js?v=3.6.0";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
 const statusLabels = [...document.querySelectorAll("[data-screen-reader-status]")];
@@ -19,6 +20,9 @@ let lastAsset = null;
 let lastOcrAt = 0;
 let lastTabCenter = null;
 let missedAssetReads = 0;
+let lastSetupOcrAt = 0;
+let lastTimeframe = null;
+let lastExpiration = null;
 
 function setStatus(label, kind = "") {
   statusLabels.forEach(element => {
@@ -81,6 +85,79 @@ function prepareOcrCrop(tab) {
   ocrContext.drawImage(source, 0, 0, ocrCanvas.width, ocrCanvas.height);
 }
 
+function frameBounds() {
+  const frame = document.getElementById("hezilexFrame");
+  const rect = frame?.getBoundingClientRect();
+  if (!rect?.width || !rect?.height || !window.innerWidth || !window.innerHeight) {
+    return { x: 0, y: 0, width: canvas.width, height: canvas.height };
+  }
+  const scaleX = canvas.width / window.innerWidth;
+  const scaleY = canvas.height / window.innerHeight;
+  return {
+    x: Math.max(0, Math.round(rect.left * scaleX)),
+    y: Math.max(0, Math.round(rect.top * scaleY)),
+    width: Math.min(canvas.width, Math.round(rect.width * scaleX)),
+    height: Math.min(canvas.height, Math.round(rect.height * scaleY))
+  };
+}
+
+function prepareSetupCrop(kind) {
+  const frame = frameBounds();
+  const region = kind === "timeframe"
+    ? { left: .035, top: .07, width: .34, height: .34 }
+    : { left: .57, top: .07, width: .32, height: .4 };
+  const cropLeft = Math.max(0, Math.round(frame.x + frame.width * region.left));
+  const cropTop = Math.max(0, Math.round(frame.y + frame.height * region.top));
+  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(frame.width * region.width));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * region.height));
+  const scale = 3;
+  ocrCanvas.width = Math.max(1, cropWidth * scale);
+  ocrCanvas.height = Math.max(1, cropHeight * scale);
+  ocrContext.imageSmoothingEnabled = false;
+  ocrContext.fillStyle = "#fff";
+  ocrContext.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
+  ocrContext.drawImage(canvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, ocrCanvas.width, ocrCanvas.height);
+  const pixels = ocrContext.getImageData(0, 0, ocrCanvas.width, ocrCanvas.height);
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const max = Math.max(pixels.data[index], pixels.data[index + 1], pixels.data[index + 2]);
+    const ink = max > 105;
+    pixels.data[index] = ink ? 0 : 255;
+    pixels.data[index + 1] = ink ? 0 : 255;
+    pixels.data[index + 2] = ink ? 0 : 255;
+    pixels.data[index + 3] = 255;
+  }
+  ocrContext.putImageData(pixels, 0, 0);
+}
+
+async function readSetupValues() {
+  if (ocrBusy || Date.now() - lastSetupOcrAt < 700 || !canvas.width) {
+    return { timeframe: lastTimeframe, expiration: lastExpiration };
+  }
+  ocrBusy = true;
+  lastSetupOcrAt = Date.now();
+  try {
+    const reader = await ensureOcrWorker();
+    await reader.setParameters({
+      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+      tessedit_char_whitelist: "015mMINin :"
+    });
+    prepareSetupCrop("timeframe");
+    const timeframeResult = await reader.recognize(ocrCanvas);
+    prepareSetupCrop("expiration");
+    const expirationResult = await reader.recognize(ocrCanvas);
+    const timeframeMinutes = minuteFromOcr(timeframeResult?.data?.text);
+    const expirationMinutes = minuteFromOcr(expirationResult?.data?.text);
+    if (timeframeMinutes != null) lastTimeframe = `${timeframeMinutes}m`;
+    if (expirationMinutes != null) lastExpiration = `${expirationMinutes} min`;
+    return { timeframe: lastTimeframe, expiration: lastExpiration };
+  } catch (error) {
+    console.warn("Atlas setup OCR", error);
+    return { timeframe: lastTimeframe, expiration: lastExpiration };
+  } finally {
+    ocrBusy = false;
+  }
+}
+
 async function ensureOcrWorker() {
   if (worker) return worker;
   setStatus("Preparando leitura de texto…", "waiting");
@@ -118,7 +195,6 @@ async function readVisibleText(activeTab, force = false) {
     return {
       asset: asset || (missedAssetReads >= 2 ? null : lastAsset),
       balance: balanceFromText(text),
-      timeframe: "5m",
       activeTabDetected: true
     };
   } catch (error) {
@@ -151,6 +227,7 @@ async function inspectFrame() {
       lastAsset = null;
       missedAssetReads = 0;
     }
+    const setup = await readSetupValues();
     const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
     if ("asset" in visible) lastAsset = visible.asset;
     window.dispatchEvent(new CustomEvent("atlas:screen-state", {
@@ -159,7 +236,8 @@ async function inspectFrame() {
         bridge: "screen-capture",
         monitoring: true,
         asset: lastAsset,
-        timeframe: visible.timeframe || "5m",
+        timeframe: setup.timeframe,
+        expiration: setup.expiration,
         balance: visible.balance,
         balanceConfidence: visible.balance != null ? "visual" : null,
         chartDetected: Boolean(analysis?.chartDetected),

@@ -1,5 +1,6 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.5.0";
+import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.6.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -20,7 +21,9 @@ let lastLoginState = null;
 let marketTrends = [];
 let selectedRadarAsset = null;
 const signalStabilizer = createSignalStabilizer();
+const setupWarningTracker = createSetupWarningTracker();
 let displayedAnalysis = null;
+let setupWarningRenderKey = "";
 let state = {
   version: null,
   asset: null,
@@ -165,6 +168,53 @@ function renderSignal(analysis = effectiveAnalysis()) {
     const entry = document.createElement("li");
     entry.textContent = item;
     return entry;
+  }));
+}
+
+function renderSetupWarnings(force = false) {
+  const host = $("setupWarnings");
+  if (!host) return;
+  const issues = setupWarningTracker.update(state);
+  const renderKey = `${state.asset || ""}|${issues.map(issue => `${issue.id}:${issue.detail}`).join("|")}`;
+  if (!force && renderKey === setupWarningRenderKey) return;
+  setupWarningRenderKey = renderKey;
+  host.hidden = issues.length === 0;
+  host.replaceChildren(...issues.map(issue => {
+    const card = document.createElement("section");
+    card.className = "setup-warning";
+    card.dataset.setupWarning = issue.id;
+
+    const icon = document.createElement("span");
+    icon.className = "setup-warning-icon";
+    icon.textContent = "!";
+
+    const copy = document.createElement("div");
+    copy.className = "setup-warning-copy";
+    const title = document.createElement("strong");
+    title.textContent = issue.title;
+    const message = document.createElement("p");
+    message.textContent = issue.message;
+    const detail = document.createElement("small");
+    detail.textContent = issue.detail;
+    copy.append(title, message, detail);
+
+    const actions = document.createElement("div");
+    actions.className = "setup-warning-actions";
+    const accept = document.createElement("button");
+    accept.type = "button";
+    accept.className = "setup-warning-accept";
+    accept.dataset.setupWarningDismiss = issue.id;
+    accept.textContent = "Vou mudar";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "setup-warning-close";
+    close.dataset.setupWarningDismiss = issue.id;
+    close.setAttribute("aria-label", `Fechar aviso: ${issue.message}`);
+    close.textContent = "×";
+    actions.append(accept, close);
+
+    card.append(icon, copy, actions);
+    return card;
   }));
 }
 
@@ -527,6 +577,7 @@ function renderState(next = {}, source = "extension") {
   $("agentTimeframe").textContent = state.timeframe || (state.defaults.timeframe ? "5m" : "—");
   $("agentExpiration").textContent = state.expiration || (state.defaults.expiration ? "5 min" : "—");
   $("riskAmount").textContent = formatMoney(state.risk.baseAmount);
+  renderSetupWarnings();
 
   displayedAnalysis = signalStabilizer.update(effectiveAnalysis(), state.asset);
   renderSignal(displayedAnalysis);
@@ -713,6 +764,14 @@ $("robotQuestions").addEventListener("click", event => {
 });
 $("robotSoundToggle")?.addEventListener("change", event => robot.setSoundEnabled(event.currentTarget.checked));
 addEventListener("pointerdown", () => robot.unlockSound(), { capture: true, once: true });
+
+$("setupWarnings")?.addEventListener("click", event => {
+  const button = event.target.closest("[data-setup-warning-dismiss]");
+  if (!button) return;
+  setupWarningTracker.dismiss(button.dataset.setupWarningDismiss, state.asset);
+  setupWarningRenderKey = "";
+  renderSetupWarnings(true);
+});
 
 addEventListener("atlas:trends", event => {
   marketTrends = Array.isArray(event.detail?.items) ? event.detail.items : [];
