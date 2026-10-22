@@ -1,0 +1,77 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createSignalStabilizer } from "../dist/modules/signal-stability.js";
+
+test("confirma o primeiro sinal antes de publicá-lo", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 1000, initialHits: 3 });
+  const input = { direction: "SELL", confidence: 82, reason: "pressão vendedora" };
+
+  assert.equal(filter.update(input, "BITCOIN").direction, "WAIT");
+  clock = 500;
+  assert.equal(filter.update(input, "BITCOIN").direction, "WAIT");
+  clock = 1100;
+  const confirmed = filter.update(input, "BITCOIN");
+  assert.equal(confirmed.direction, "SELL");
+  assert.equal(confirmed.stability, "stable");
+});
+
+test("não troca o sinal por oscilações rápidas da vela aberta", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({
+    now: () => clock,
+    initialConfirmMs: 0,
+    initialHits: 1,
+    minHoldMs: 5000,
+    switchConfirmMs: 2000,
+    switchHits: 3
+  });
+  const sell = { direction: "SELL", confidence: 84, reason: "venda" };
+  const buy = { direction: "BUY", confidence: 81, reason: "compra" };
+
+  assert.equal(filter.update(sell, "SOLANA").direction, "SELL");
+  clock = 1000;
+  assert.equal(filter.update(buy, "SOLANA").direction, "SELL");
+  clock = 1800;
+  assert.equal(filter.update(sell, "SOLANA").direction, "SELL");
+  clock = 2600;
+  const noisy = filter.update(buy, "SOLANA");
+  assert.equal(noisy.direction, "SELL");
+  assert.equal(noisy.stability, "checking");
+});
+
+test("aceita a direção contrária somente depois de persistência e tempo mínimo", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({
+    now: () => clock,
+    initialConfirmMs: 0,
+    initialHits: 1,
+    minHoldMs: 3000,
+    switchConfirmMs: 2000,
+    switchHits: 3
+  });
+  const sell = { direction: "SELL", confidence: 84 };
+  const buy = { direction: "BUY", confidence: 79 };
+
+  filter.update(sell, "CARDANO");
+  clock = 1000;
+  assert.equal(filter.update(buy, "CARDANO").direction, "SELL");
+  clock = 2000;
+  assert.equal(filter.update(buy, "CARDANO").direction, "SELL");
+  clock = 3100;
+  const switched = filter.update(buy, "CARDANO");
+  assert.equal(switched.direction, "BUY");
+  assert.equal(switched.stability, "stable");
+});
+
+test("reinicia a confirmação quando o ativo muda", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 1000, initialHits: 2 });
+  const buy = { direction: "BUY", confidence: 80 };
+
+  filter.update(buy, "BITCOIN");
+  clock = 1200;
+  assert.equal(filter.update(buy, "BITCOIN").direction, "BUY");
+  clock = 1300;
+  assert.equal(filter.update(buy, "ETHEREUM").direction, "WAIT");
+});

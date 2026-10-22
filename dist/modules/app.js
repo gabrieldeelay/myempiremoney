@@ -1,4 +1,5 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
+import { createSignalStabilizer } from "./signal-stability.js?v=3.5.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -18,6 +19,8 @@ let toastTimer = null;
 let lastLoginState = null;
 let marketTrends = [];
 let selectedRadarAsset = null;
+const signalStabilizer = createSignalStabilizer();
+let displayedAnalysis = null;
 let state = {
   version: null,
   asset: null,
@@ -114,6 +117,10 @@ function effectiveAnalysis() {
   };
 }
 
+function currentAnalysis() {
+  return displayedAnalysis || effectiveAnalysis();
+}
+
 function renderSignal(analysis = effectiveAnalysis()) {
   const direction = String(analysis?.direction || "WAIT").toUpperCase();
   const confidence = Math.round(Number(analysis?.confidence) || 0);
@@ -136,13 +143,24 @@ function renderSignal(analysis = effectiveAnalysis()) {
   $("entryTiming").textContent = timing;
   $("galeBadge").textContent = gale;
   $("galeBadge").className = `gale-badge gale-${gale === "SEM GALE" ? "none" : gale.includes("1") ? "one" : gale.includes("2") ? "two" : "wait"}`;
+  const stability = $("signalStability");
+  if (stability) {
+    const checking = analysis?.stability === "checking";
+    const initializing = analysis?.stability === "initializing";
+    stability.textContent = checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
+    stability.className = `signal-stability ${checking || initializing ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
+  }
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
   const details = Array.isArray(analysis?.factors) && analysis.factors.length
     ? analysis.factors
     : [analysis?.reason || "Ainda não há fatores suficientes para justificar uma entrada."];
-  const explained = actionable
-    ? [...details, "O limite de gale representa exposição máxima sugerida pela leitura visual, não garantia de resultado."]
-    : details;
+  const transitionDetail = analysis?.transition
+    ? `${analysis.transition.direction === "BUY" ? "Compra" : analysis.transition.direction === "SELL" ? "Venda" : "Indecisão"} foi observada, mas ainda não persistiu o suficiente para substituir o sinal atual.`
+    : null;
+  const explained = [...details];
+  if (transitionDetail) explained.unshift(transitionDetail);
+  if (actionable) explained.push("O limite de gale representa exposição máxima sugerida pela leitura visual, não garantia de resultado.");
+  explained.push("A direção só muda após permanecer consistente em várias leituras e respeitar o tempo mínimo do sinal atual.");
   $("analysisDetails").replaceChildren(...explained.map(item => {
     const entry = document.createElement("li");
     entry.textContent = item;
@@ -330,7 +348,7 @@ const robot = {
       return;
     }
     const picked = operation.direction;
-    const advised = operation.analysisDirection || effectiveAnalysis().direction;
+    const advised = currentAnalysis().direction;
     let context = "open";
     if (picked === "BUY" && advised === "BUY") context = "buyAligned";
     else if (picked === "SELL" && advised === "SELL") context = "sellAligned";
@@ -379,7 +397,7 @@ const robot = {
       this.sayText(replies[question] || replies.loginseen, this.currentContext, true);
       return;
     }
-    const analysis = effectiveAnalysis();
+    const analysis = currentAnalysis();
     const direction = analysis.direction;
     const label = direction === "BUY" ? "uma compra" : direction === "SELL" ? "uma venda" : "ficar de fora";
     const reason = String(analysis.reason || "os critérios ainda não fecharam").replace(/\.$/, "");
@@ -485,7 +503,7 @@ function renderConnection(connected) {
 }
 
 function renderState(next = {}, source = "extension") {
-  const previousDirection = state.analysis.direction;
+  const previousDirection = displayedAnalysis?.direction || "WAIT";
   const previousOperationKey = state.manualOperation?.key;
   const previousUiEventKey = state.uiEvent?.key;
   const normalizedAsset = "asset" in next ? normalizeAssetName(next.asset) : state.asset;
@@ -510,7 +528,8 @@ function renderState(next = {}, source = "extension") {
   $("agentExpiration").textContent = state.expiration || (state.defaults.expiration ? "5 min" : "—");
   $("riskAmount").textContent = formatMoney(state.risk.baseAmount);
 
-  renderSignal();
+  displayedAnalysis = signalStabilizer.update(effectiveAnalysis(), state.asset);
+  renderSignal(displayedAnalysis);
 
   const pulse = $("monitorPulse");
   const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;
@@ -542,11 +561,11 @@ function renderState(next = {}, source = "extension") {
   }
   else if (newOperation) robot.commentOnOperation(state.manualOperation);
   else if (justLoggedIn) return;
-  else if (state.analysis.direction !== previousDirection
-    && state.analysis.direction !== "WAIT"
-    && Number(state.analysis.confidence) >= 70
+  else if (displayedAnalysis.direction !== previousDirection
+    && displayedAnalysis.direction !== "WAIT"
+    && Number(displayedAnalysis.confidence) >= 70
     && robot.canSpeakAutomatically()) {
-    robot.speak(state.analysis.direction === "BUY" ? "buy" : state.analysis.direction === "SELL" ? "sell" : "wait", { confidence: state.analysis.confidence }, true, true);
+    robot.speak(displayedAnalysis.direction === "BUY" ? "buy" : displayedAnalysis.direction === "SELL" ? "sell" : "wait", { confidence: displayedAnalysis.confidence }, true, true);
   }
 }
 
@@ -697,13 +716,18 @@ addEventListener("pointerdown", () => robot.unlockSound(), { capture: true, once
 
 addEventListener("atlas:trends", event => {
   marketTrends = Array.isArray(event.detail?.items) ? event.detail.items : [];
-  if (state.asset && trendForAsset(state.asset)) renderSignal();
+  if (state.asset && trendForAsset(state.asset)) {
+    displayedAnalysis = signalStabilizer.update(effectiveAnalysis(), state.asset);
+    renderSignal(displayedAnalysis);
+  }
 });
 
 addEventListener("atlas:trend-selected", event => {
   const trend = event.detail;
   if (!trend?.asset) return;
   selectedRadarAsset = normalizeAssetName(trend.asset);
+  signalStabilizer.reset(selectedRadarAsset);
+  displayedAnalysis = null;
   $("agentAsset").textContent = selectedRadarAsset;
   $("agentTimeframe").textContent = trend.timeframe || "5m";
   renderSignal({
