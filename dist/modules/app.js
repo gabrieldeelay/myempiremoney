@@ -74,6 +74,18 @@ function effectiveAnalysis() {
       };
     }
     if (trendDirection !== "WAIT" && trendDirection !== liveDirection) {
+      if (live.setup === "EXHAUSTION_REVERSAL") {
+        return {
+          ...live,
+          confidence: Math.max(62, Number(live.confidence || 0) - 8),
+          reason: `${live.reason} O Radar 5M segue no lado oposto, então esta é uma leitura de correção curta.`,
+          factors: [
+            ...(live.factors || []),
+            `O Radar 5M aponta ${trendDirection === "BUY" ? "compra" : "venda"}; por isso a correção recebe confiança menor.`
+          ],
+          source: "visual-radar"
+        };
+      }
       return {
         ...live,
         direction: "WAIT",
@@ -104,13 +116,38 @@ function effectiveAnalysis() {
 
 function renderSignal(analysis = effectiveAnalysis()) {
   const direction = String(analysis?.direction || "WAIT").toUpperCase();
+  const confidence = Math.round(Number(analysis?.confidence) || 0);
+  const actionable = ["BUY", "SELL"].includes(direction) && confidence >= 62;
+  const probable = actionable && confidence < 75;
+  const finalDirection = actionable ? direction : "WAIT";
+  const gale = confidence >= 87 ? "SEM GALE" : confidence >= 75 ? "ATÉ GALE 1" : confidence >= 62 ? "ATÉ GALE 2" : "NÃO ENTRAR";
+  const timing = finalDirection === "WAIT"
+    ? "AGUARDE CONFIRMAÇÃO"
+    : analysis?.entryTiming === "CURRENT_CANDLE" ? "VELA ATUAL" : "PRÓXIMA VELA";
   const card = $("signalCard");
-  card.classList.toggle("buy", direction === "BUY");
-  card.classList.toggle("sell", direction === "SELL");
-  $("analysisDirection").textContent = direction === "BUY" ? "COMPRA" : direction === "SELL" ? "VENDA" : "AGUARDAR";
-  $("signalIcon").textContent = direction === "BUY" ? "↗" : direction === "SELL" ? "↘" : "—";
-  $("confidenceBadge").textContent = `${Math.round(Number(analysis?.confidence) || 0)}%`;
+  card.classList.toggle("buy", finalDirection === "BUY");
+  card.classList.toggle("sell", finalDirection === "SELL");
+  card.classList.toggle("probable", probable);
+  $("analysisDirection").textContent = finalDirection === "BUY"
+    ? `${probable ? "PROVÁVEL " : ""}COMPRA`
+    : finalDirection === "SELL" ? `${probable ? "PROVÁVEL " : ""}VENDA` : "AGUARDAR";
+  $("signalIcon").textContent = finalDirection === "BUY" ? "↗" : finalDirection === "SELL" ? "↘" : "—";
+  $("confidenceBadge").textContent = `${confidence}% CONFIANÇA`;
+  $("entryTiming").textContent = timing;
+  $("galeBadge").textContent = gale;
+  $("galeBadge").className = `gale-badge gale-${gale === "SEM GALE" ? "none" : gale.includes("1") ? "one" : gale.includes("2") ? "two" : "wait"}`;
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
+  const details = Array.isArray(analysis?.factors) && analysis.factors.length
+    ? analysis.factors
+    : [analysis?.reason || "Ainda não há fatores suficientes para justificar uma entrada."];
+  const explained = actionable
+    ? [...details, "O limite de gale representa exposição máxima sugerida pela leitura visual, não garantia de resultado."]
+    : details;
+  $("analysisDetails").replaceChildren(...explained.map(item => {
+    const entry = document.createElement("li");
+    entry.textContent = item;
+    return entry;
+  }));
 }
 
 const robot = {

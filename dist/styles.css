@@ -13,6 +13,7 @@
   --green: #31d69b;
   --red: #ff5d65;
   --amber: #a9c8ff;
+  --probable: #c7a2ff;
 }
 
 * { box-sizing: border-box; }
@@ -171,6 +172,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 
 .copilot {
   position: relative;
+  z-index: 6;
+  overflow: visible;
   display: grid;
   grid-template-columns: minmax(300px, 1.15fr) minmax(320px, .9fr) minmax(420px, 1.5fr);
   align-items: stretch;
@@ -178,20 +181,34 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   background: linear-gradient(120deg, rgba(75, 143, 255, .055), transparent 44%), var(--surface);
 }
 
-.signal-card { display: flex; align-items: center; gap: 14px; padding: 18px; border-right: 1px solid var(--line); }
+.signal-card { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-right: 1px solid var(--line); }
 .signal-icon { flex: 0 0 46px; width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid var(--line-orange); border-radius: 14px; background: rgba(87,151,255,.09); color: var(--orange); font-size: 22px; font-weight: 900; }
-.signal-copy { min-width: 0; }
+.signal-copy { min-width: 0; width: 100%; }
 .signal-copy small, .market-facts small { color: #8195ae; font-size: 11px; font-weight: 800; letter-spacing: .1em; }
 .signal-line { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
 .signal-line h1 { margin: 0; color: var(--amber); font-size: 28px; line-height: 1; letter-spacing: -.025em; }
-.signal-line span { padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; color: #a5b6ca; font-size: 11px; }
-.signal-copy p { max-width: 480px; margin: 8px 0 0; overflow: hidden; color: #9aacc1; font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.signal-line span { padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; color: #a5b6ca; font-size: 10px; font-weight: 850; letter-spacing: .04em; }
+.signal-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.signal-meta > span { padding: 3px 7px; border: 1px solid rgba(115,160,225,.16); border-radius: 6px; background: rgba(87,151,255,.05); color: #91a8c5; font-size: 9px; font-weight: 900; letter-spacing: .06em; }
+.signal-meta .gale-none { border-color: rgba(49,214,155,.24); background: rgba(49,214,155,.08); color: #75e8bf; }
+.signal-meta .gale-one { border-color: rgba(87,151,255,.28); background: rgba(87,151,255,.09); color: #9dc0ff; }
+.signal-meta .gale-two { border-color: rgba(199,162,255,.3); background: rgba(199,162,255,.1); color: var(--probable); }
+.signal-meta .gale-wait { border-color: rgba(255,179,71,.2); background: rgba(255,179,71,.06); color: #d8b878; }
+.signal-copy p { max-width: 480px; margin: 6px 0 0; overflow: hidden; color: #9aacc1; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.signal-more { position: relative; z-index: 4; margin-top: 5px; padding: 0; border: 0; background: transparent; color: #79a9f6; cursor: help; font-size: 10px; font-weight: 850; text-decoration: underline; text-decoration-color: rgba(121,169,246,.42); text-underline-offset: 3px; }
+.signal-tooltip { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 9px); width: min(390px, calc(100vw - 42px)); padding: 13px 14px; border: 1px solid rgba(105,160,245,.3); border-radius: 12px; background: rgba(5,17,34,.98); color: #b9c9dc; box-shadow: 0 18px 48px rgba(0,0,0,.52); text-align: left; opacity: 0; visibility: hidden; transform: translateY(5px); transition: .16s opacity, .16s transform, .16s visibility; pointer-events: none; }
+.signal-more:hover .signal-tooltip, .signal-more:focus-visible .signal-tooltip { opacity: 1; visibility: visible; transform: translateY(0); }
+.signal-tooltip strong { display: block; margin-bottom: 7px; color: #eef5ff; font-size: 11px; }
+.signal-tooltip ul { display: grid; gap: 5px; margin: 0; padding-left: 16px; }
+.signal-tooltip li { color: #9fb2c9; font-size: 10px; font-weight: 560; line-height: 1.4; }
 .signal-card.buy .signal-icon { border-color: rgba(49,214,155,.28); background: rgba(49,214,155,.08); color: var(--green); }
 .signal-card.buy h1 { color: var(--green); }
 .signal-card.sell .signal-icon { border-color: rgba(255,93,101,.28); background: rgba(255,93,101,.08); color: var(--red); }
 .signal-card.sell h1 { color: var(--red); }
 .signal-card.buy .signal-icon { animation: buy-glow 1.9s ease-in-out infinite; }
 .signal-card.sell .signal-icon { animation: sell-glow 1.9s ease-in-out infinite; }
+.signal-card.probable .signal-icon { border-color: rgba(199,162,255,.34); background: rgba(199,162,255,.1); color: var(--probable); animation: probable-glow 2.1s ease-in-out infinite; }
+.signal-card.probable h1 { color: var(--probable); font-size: 22px; }
 
 .market-facts { display: grid; grid-template-columns: repeat(2, 1fr); align-content: center; padding: 12px 18px; border-right: 1px solid var(--line); }
 .market-facts > div { min-width: 0; padding: 9px 12px; }
@@ -311,6 +328,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 @keyframes terminal-scan { 0% { transform: translateX(-100%); opacity: 0; } 10%, 80% { opacity: .5; } 100% { transform: translateX(100%); opacity: 0; } }
 @keyframes buy-glow { 0%, 100% { box-shadow: 0 0 0 rgba(49,214,155,0); } 50% { box-shadow: 0 0 24px rgba(49,214,155,.18); } }
 @keyframes sell-glow { 0%, 100% { box-shadow: 0 0 0 rgba(255,93,101,0); } 50% { box-shadow: 0 0 24px rgba(255,93,101,.18); } }
+@keyframes probable-glow { 0%, 100% { box-shadow: 0 0 0 rgba(199,162,255,0); } 50% { box-shadow: 0 0 25px rgba(199,162,255,.2); } }
 @keyframes button-shine { 0%, 52% { transform: translateX(-260%) rotate(18deg); } 75%, 100% { transform: translateX(650%) rotate(18deg); } }
 @keyframes robot-aura { 0% { opacity: .5; transform: scale(.9); } 75%, 100% { opacity: 0; transform: scale(1.18); } }
 @keyframes trade-buy-flash { 0% { opacity: .95; background: radial-gradient(circle at 50% 55%, rgba(42, 235, 146, .14), transparent 58%); box-shadow: inset 0 0 120px 18px rgba(42, 235, 146, .55), inset 0 0 0 2px rgba(88, 255, 177, .75); } 100% { opacity: 0; background: transparent; box-shadow: inset 0 0 8px rgba(42, 235, 146, 0); } }

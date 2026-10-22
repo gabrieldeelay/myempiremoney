@@ -194,11 +194,53 @@ export function extractCandleBodies(data, width, height) {
 export function classifyCandleSequence(bodies = []) {
   const recent = bodies.slice(-10);
   if (recent.length < 3) {
-    return { direction: "WAIT", confidence: 0, chartDetected: recent.length > 0, score: 0, candleCount: recent.length, reason: "Leitura visual ativa, aguardando mais velas reconhecíveis." };
+    return {
+      direction: "WAIT",
+      confidence: 0,
+      chartDetected: recent.length > 0,
+      score: 0,
+      candleCount: recent.length,
+      entryTiming: "WAIT_CONFIRMATION",
+      factors: ["Ainda não há velas reconhecíveis suficientes para comparar direção, força e exaustão."],
+      reason: "Leitura visual ativa, aguardando mais velas reconhecíveis."
+    };
   }
 
   const closes = recent.map(body => body.direction === "BUY" ? body.y0 : body.y1);
   const heights = recent.map(body => Math.max(5, body.height));
+  const last = recent.at(-1);
+  const previous = recent.slice(0, -1);
+  const previousHeights = previous.map(body => Math.max(5, body.height));
+  const previousCloses = previous.map(body => body.direction === "BUY" ? body.y0 : body.y1);
+  const averagePreviousHeight = Math.max(5, average(previousHeights));
+  const spikeRatio = last.height / averagePreviousHeight;
+  const lastClose = last.direction === "BUY" ? last.y0 : last.y1;
+  const closeStretch = last.direction === "BUY"
+    ? (average(previousCloses) - lastClose) / averagePreviousHeight
+    : (lastClose - average(previousCloses)) / averagePreviousHeight;
+  const exhaustionReversal = spikeRatio >= 1.55 && closeStretch >= .7;
+  if (exhaustionReversal) {
+    const direction = last.direction === "BUY" ? "SELL" : "BUY";
+    const confidence = Math.round(clamp(73 + (spikeRatio - 1.55) * 9 + (closeStretch - .7) * 5, 0, 89));
+    const stretchedSide = last.direction === "BUY" ? "compradora" : "vendedora";
+    const correctionSide = direction === "BUY" ? "compra" : "venda";
+    return {
+      direction,
+      confidence,
+      chartDetected: true,
+      score: direction === "BUY" ? .52 : -.52,
+      candleCount: recent.length,
+      setup: "EXHAUSTION_REVERSAL",
+      entryTiming: "NEXT_CANDLE",
+      factors: [
+        `A última vela é ${spikeRatio.toFixed(1)}x maior que a média recente.`,
+        `O fechamento ficou ${closeStretch.toFixed(1)} corpos médios além dos fechamentos anteriores.`,
+        `A pressão ${stretchedSide} está esticada; a leitura busca correção curta para ${correctionSide}.`,
+        "A entrada é somente na próxima vela, depois do fechamento da vela atual."
+      ],
+      reason: `Exaustão ${stretchedSide}: impulso esticado favorece ${correctionSide} na próxima vela.`
+    };
+  }
   const split = Math.max(1, Math.floor(recent.length / 2));
   const oldClose = average(closes.slice(0, split));
   const newClose = average(closes.slice(split));
@@ -221,7 +263,24 @@ export function classifyCandleSequence(bodies = []) {
     : direction === "SELL"
       ? `Leitura visual: ${recent.length} velas recentes mostram fechamentos e pressão para baixo.`
       : `Leitura visual: as ${recent.length} velas recentes ainda estão sem direção confirmada.`;
-  return { direction, confidence, chartDetected: true, score, candleCount: recent.length, reason };
+  const buyerShare = recent.filter(body => body.direction === "BUY").length / recent.length;
+  const factors = [
+    `Deslocamento dos fechamentos: ${normalizedMove >= 0 ? "para cima" : "para baixo"} (${Math.round(Math.abs(normalizedMove) * 100)}%).`,
+    `Distribuição das velas: ${Math.round(buyerShare * 100)}% compradoras e ${Math.round((1 - buyerShare) * 100)}% vendedoras.`,
+    `Força combinada de deslocamento e sequência: ${Math.round(Math.abs(score) * 100)}%.`,
+    direction === "WAIT" ? "A entrada deve esperar uma nova confirmação." : "A leitura vale para a próxima vela, após o fechamento da atual."
+  ];
+  return {
+    direction,
+    confidence,
+    chartDetected: true,
+    score,
+    candleCount: recent.length,
+    setup: "TREND_CONTINUATION",
+    entryTiming: direction === "WAIT" ? "WAIT_CONFIRMATION" : "NEXT_CANDLE",
+    factors,
+    reason
+  };
 }
 
 export function analyzeChartPixels(data, width, height) {

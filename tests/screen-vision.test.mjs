@@ -53,6 +53,19 @@ test("sequência ascendente resulta em compra", () => {
   assert.equal(result.direction, "BUY");
 });
 
+test("vela compradora esticada indica correção de venda na próxima vela", () => {
+  const image = frame(320, 200);
+  paint(image, 90, 112, 100, 128, [13, 199, 144]);
+  paint(image, 115, 102, 125, 119, [13, 199, 144]);
+  paint(image, 140, 94, 150, 111, [238, 78, 82]);
+  paint(image, 165, 51, 175, 101, [13, 199, 144]);
+  const result = analyzeChartPixels(image.data, image.width, image.height);
+  assert.equal(result.direction, "SELL");
+  assert.equal(result.setup, "EXHAUSTION_REVERSAL");
+  assert.equal(result.entryTiming, "NEXT_CANDLE");
+  assert.ok(result.factors.some(item => item.includes("maior que a média")));
+});
+
 test("linha horizontal colorida não vira vela nem sinal", () => {
   const image = frame(320, 200);
   paint(image, 30, 100, 245, 101, [13, 199, 144]);

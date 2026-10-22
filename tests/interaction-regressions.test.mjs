@@ -68,6 +68,14 @@ assert.match(bridge, /singleRiskPercent >= 10 \|\| cumulativeRiskPercent >= 20/,
 assert.match(app, /exposureCritical/, "o robô deve interromper o silêncio quando a mão passar do limite");
 assert.match(app, /flashTrade\(state\.manualOperation\.direction/, "cada operação manual deve disparar o efeito visual correspondente");
 assert.match(html, /id="tradeFlash"/, "o painel precisa ter uma camada de glow sobre a tela inteira");
+assert.match(html, /id="entryTiming"/, "a leitura deve dizer se a entrada é para a vela atual ou para a próxima");
+assert.match(html, /id="galeBadge"/, "a leitura deve exibir o limite de gale calculado");
+assert.match(html, /id="analysisDetails"/, "o painel deve explicar os fatores que fomentam a leitura");
+assert.match(app, /confidence >= 87 \? "SEM GALE"/, "confiança muito alta deve ser apresentada sem gale");
+assert.match(app, /confidence >= 62 \? "ATÉ GALE 2"/, "leitura duvidosa deve limitar a exposição ao gale 2");
+assert.match(app, /probable \? "PROVÁVEL " : ""/, "leituras de menor confiança devem ser marcadas como prováveis");
+assert.match(styles, /--probable:\s*#c7a2ff/, "leituras prováveis devem usar uma cor própria");
+assert.match(styles, /\.signal-more:hover \.signal-tooltip/, "os fundamentos devem aparecer ao passar o mouse em Ler mais");
 assert.match(styles, /@keyframes trade-buy-flash/, "compras devem produzir glow verde");
 assert.match(styles, /@keyframes trade-sell-flash/, "vendas devem produzir glow vermelho");
 assert.match(app, /new ResizeObserver\(\(\) => requestAnimationFrame\(keepRobotInViewport\)\)/, "o robô deve ser reposicionado quando o balão mudar de tamanho");
