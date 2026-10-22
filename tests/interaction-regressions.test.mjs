@@ -89,6 +89,10 @@ assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
 assert.match(screenReader, /source: "screen-capture"/, "o painel deve identificar sinais produzidos pela leitura visual");
 assert.match(screenReader, /Tesseract\.createWorker/, "o ativo visível deve ser identificado localmente por OCR");
+assert.match(screenReader, /const scale = 4/, "o rótulo pequeno do ativo deve ser ampliado antes do OCR");
+assert.match(screenReader, /max - min < 70/, "o OCR deve remover as cores do ícone e preservar o texto claro da aba");
+assert.match(screenReader, /setInterval\(inspectFrame, 850\)/, "a troca da aba ativa deve ser percebida em menos de um segundo");
+assert.match(screenReader, /readVisibleText\(activeTab, tabMoved \|\| !lastAsset\)/, "mudar a aba deve forçar uma leitura imediata do novo ativo");
 assert.match(app, /atlas:screen-state/, "o robô deve receber o estado produzido pela leitura visual");
 assert.match(landing, /Operar no escuro/, "a raiz deve apresentar a nova chamada do Atlas");
 assert.doesNotMatch(landing, /id="oldPrice"|id="currentPrice"/, "a landing não deve revelar preços");

@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.2.0";
+import { analyzeChartPixels, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.3.0";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
 const statusLabels = [...document.querySelectorAll("[data-screen-reader-status]")];
@@ -50,12 +50,35 @@ function analyzeCandles() {
 
 function prepareOcrCrop(tab) {
   const cropTop = Math.max(0, Math.round(tab.y - tab.height * .82));
-  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * .17));
-  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * .9));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .68));
-  ocrCanvas.width = cropWidth;
-  ocrCanvas.height = cropHeight;
-  ocrContext.drawImage(canvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * .3));
+  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * .76));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .72));
+  const scale = 4;
+  const source = document.createElement("canvas");
+  source.width = cropWidth;
+  source.height = cropHeight;
+  const sourceContext = source.getContext("2d", { willReadFrequently: true });
+  sourceContext.drawImage(canvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  const pixels = sourceContext.getImageData(0, 0, cropWidth, cropHeight);
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const r = pixels.data[index];
+    const g = pixels.data[index + 1];
+    const b = pixels.data[index + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const ink = max > 135 && max - min < 70;
+    pixels.data[index] = ink ? 0 : 255;
+    pixels.data[index + 1] = ink ? 0 : 255;
+    pixels.data[index + 2] = ink ? 0 : 255;
+    pixels.data[index + 3] = 255;
+  }
+  sourceContext.putImageData(pixels, 0, 0);
+  ocrCanvas.width = cropWidth * scale;
+  ocrCanvas.height = cropHeight * scale;
+  ocrContext.imageSmoothingEnabled = false;
+  ocrContext.fillStyle = "#fff";
+  ocrContext.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
+  ocrContext.drawImage(source, 0, 0, ocrCanvas.width, ocrCanvas.height);
 }
 
 async function ensureOcrWorker() {
@@ -77,22 +100,12 @@ async function ensureOcrWorker() {
   return worker;
 }
 
-async function readVisibleText() {
-  if (ocrBusy || Date.now() - lastOcrAt < 3200 || !canvas.width) return {};
+async function readVisibleText(activeTab, force = false) {
+  if (!activeTab || ocrBusy || (!force && Date.now() - lastOcrAt < 5000) || !canvas.width) return {};
   ocrBusy = true;
   lastOcrAt = Date.now();
   try {
     const reader = await ensureOcrWorker();
-    const frame = context.getImageData(0, 0, canvas.width, canvas.height);
-    const activeTab = findActiveTabRect(frame.data, canvas.width, canvas.height);
-    if (!activeTab) return {};
-    const tabCenter = activeTab.x + activeTab.width / 2;
-    const tabMoved = lastTabCenter != null && Math.abs(tabCenter - lastTabCenter) > Math.max(18, canvas.width * .025);
-    lastTabCenter = tabCenter;
-    if (tabMoved) {
-      lastAsset = null;
-      missedAssetReads = 0;
-    }
     prepareOcrCrop(activeTab);
     await reader.setParameters({
       tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
@@ -128,7 +141,17 @@ async function inspectFrame() {
     }
     context.drawImage(video, 0, 0, targetWidth, targetHeight);
     const analysis = analyzeCandles();
-    const visible = await readVisibleText();
+    const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+    const activeTab = findActiveTabRect(frame.data, canvas.width, canvas.height);
+    const tabCenter = activeTab ? activeTab.x + activeTab.width / 2 : null;
+    const tabMoved = tabCenter != null && lastTabCenter != null
+      && Math.abs(tabCenter - lastTabCenter) > Math.max(18, canvas.width * .025);
+    if (tabCenter != null) lastTabCenter = tabCenter;
+    if (tabMoved) {
+      lastAsset = null;
+      missedAssetReads = 0;
+    }
+    const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
     if ("asset" in visible) lastAsset = visible.asset;
     window.dispatchEvent(new CustomEvent("atlas:screen-state", {
       detail: {
@@ -187,7 +210,7 @@ async function startReading() {
     setStatus("Iniciando leitura visual…", "waiting");
     window.dispatchEvent(new CustomEvent("atlas:screen-started"));
     await inspectFrame();
-    analysisTimer = setInterval(inspectFrame, 2400);
+    analysisTimer = setInterval(inspectFrame, 850);
   } catch (error) {
     stream = null;
     const denied = error?.name === "NotAllowedError";
