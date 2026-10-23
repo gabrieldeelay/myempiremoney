@@ -1,7 +1,6 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.5.0";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.6.1";
-import { getAccessToken } from "./atlas-client.js?v=3.2.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -256,7 +255,9 @@ const robot = {
   narratorVoice: null,
   voiceAudio: null,
   voiceObjectUrl: "",
-  voiceRequestController: null,
+  localNarrator: null,
+  localNarratorPromise: null,
+  localNarratorRetryAfter: 0,
   phrases: {
     waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
     noaccess: ["A Hezilex abriu. Agora ative a leitura visual para eu interpretar as velas sem extensão.", "O gráfico está na tela, mas a leitura visual ainda está desligada. Clique em ‘Ativar leitura’ e escolha esta aba.", "Sem extensão, eu leio a imagem da aba. Só falta você autorizar o compartilhamento da tela."],
@@ -309,8 +310,6 @@ const robot = {
     this.voiceQueue = [];
     this.voiceSpeaking = false;
     this.activeVoiceText = "";
-    this.voiceRequestController?.abort();
-    this.voiceRequestController = null;
     if (this.voiceAudio) {
       this.voiceAudio.pause();
       this.voiceAudio.removeAttribute("src");
@@ -342,6 +341,7 @@ const robot = {
     this.audioContext ||= new AudioContextClass();
     this.audioContext.resume?.();
     this.soundReady = true;
+    this.prepareLocalNarrator().catch(() => {});
   },
   selectNarratorVoice() {
     if (!("speechSynthesis" in window)) return null;
@@ -387,23 +387,31 @@ const robot = {
     utterance.onerror = finish;
     window.speechSynthesis.speak(utterance);
   },
+  async prepareLocalNarrator() {
+    if (this.localNarrator) return this.localNarrator;
+    if (this.localNarratorPromise) return this.localNarratorPromise;
+    if (Date.now() < this.localNarratorRetryAfter) throw new Error("Voz local temporariamente indisponível");
+    this.localNarratorPromise = import("./vozz-piper.js?v=3.7.3")
+      .then(({ Piper }) => Piper.carregar({
+        dispositivo: "wasm",
+        cdn: "https://cdn.jsdelivr.net/gh/Pedro21062014/vozz@178ff1640f950426790ea3b7257b15a1aa1238ea"
+      }))
+      .then(narrator => {
+        this.localNarrator = narrator;
+        return narrator;
+      })
+      .catch(error => {
+        this.localNarratorRetryAfter = Date.now() + 60000;
+        throw error;
+      })
+      .finally(() => { this.localNarratorPromise = null; });
+    return this.localNarratorPromise;
+  },
   async playNaturalNarration(spokenText, finish) {
     try {
-      const token = await getAccessToken();
-      const controller = new AbortController();
-      this.voiceRequestController = controller;
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: {
-          Accept: "audio/mpeg",
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ text: spokenText }),
-        signal: controller.signal
-      });
-      if (!response.ok) throw new Error("Voz neural indisponível");
-      const blob = await response.blob();
+      const narrator = await this.prepareLocalNarrator();
+      const generated = await narrator.falar(spokenText, { velocidade: .98, maxFonemas: 200 });
+      const blob = generated.paraBlob();
       if (!blob.size || !this.soundEnabled) return finish();
       this.voiceObjectUrl = URL.createObjectURL(blob);
       const audio = new Audio(this.voiceObjectUrl);
@@ -419,10 +427,8 @@ const robot = {
       };
       await audio.play();
     } catch (error) {
-      if (error?.name === "AbortError" || !this.soundEnabled) finish();
+      if (!this.soundEnabled) finish();
       else this.playBrowserNarration(spokenText, finish);
-    } finally {
-      this.voiceRequestController = null;
     }
   },
   drainNarration() {

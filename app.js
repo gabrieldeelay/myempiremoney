@@ -29,8 +29,7 @@ const apiHandlers = {
   "/api/payment-status": require("./api/payment-status"),
   "/api/profile": require("./api/profile"),
   "/api/public-config": require("./api/public-config"),
-  "/api/trends": require("./api/trends"),
-  "/api/tts": require("./api/tts")
+  "/api/trends": require("./api/trends")
 };
 
 app.post(
