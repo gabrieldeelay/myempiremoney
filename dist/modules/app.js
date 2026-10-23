@@ -1,6 +1,6 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.9.5";
-import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.9.3";
+import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.9.8";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -122,6 +122,15 @@ function effectiveAnalysis() {
     }
     return live;
   }
+  if (liveDirection !== "WAIT" && Number(live.confidence) > 0) return live;
+  return {
+    ...live,
+    ...trend,
+    direction: String(trend.direction || "WAIT").toUpperCase(),
+    reason: `Radar 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}`,
+    source: "market-radar-5m"
+  };
+}
 
 function analysisForIdentifiedAsset() {
   if (state.asset) return effectiveAnalysis();
@@ -131,15 +140,6 @@ function analysisForIdentifiedAsset() {
     reason: "Identificando o ativo selecionado antes de iniciar a nova leitura.",
     factors: ["A indicação anterior foi removida para não misturar análises de ativos diferentes."],
     source: "asset-identification"
-  };
-}
-  if (liveDirection !== "WAIT" && Number(live.confidence) > 0) return live;
-  return {
-    ...live,
-    ...trend,
-    direction: String(trend.direction || "WAIT").toUpperCase(),
-    reason: `Radar 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}`,
-    source: "market-radar-5m"
   };
 }
 
@@ -188,13 +188,16 @@ function renderSignal(analysis = effectiveAnalysis()) {
         : "Nesta vela: aguarde um repique curto e a venda voltar a ganhar força antes de entrar."
     : timingCode === "NEXT_CANDLE"
       ? "Não entre agora. Aguarde a vela atual fechar; o sinal é para a próxima."
-      : "Não entre agora. Aguarde uma leitura confirmada.";
+      : dataReady()
+        ? "Análise ao vivo. Ainda não há vantagem técnica confirmada para uma entrada."
+        : "Não entre agora. Aguarde uma leitura confirmada.";
   const card = $("signalCard");
   card.classList.toggle("buy", finalDirection === "BUY");
   card.classList.toggle("sell", finalDirection === "SELL");
   card.classList.toggle("probable", probable);
   card.classList.toggle("expired", entryBlocked);
   card.classList.toggle("observing", watchingReversal);
+  card.classList.toggle("scanning", finalDirection === "WAIT" && dataReady());
   $("analysisDirection").textContent = entryBlocked
     ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
     : watchingReversal
@@ -217,7 +220,7 @@ function renderSignal(analysis = effectiveAnalysis()) {
     const initializing = analysis?.stability === "initializing";
     const reversal = analysis?.setup === "INTRACANDLE_REVERSAL";
     const stretched = analysis?.setup === "STRETCHED_CANDLE";
-    stability.textContent = reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "NÃO ENTRE AGORA" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
+    stability.textContent = reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "NÃO ENTRE AGORA" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
     stability.className = `signal-stability ${checking || initializing || stretched ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
   }
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
@@ -1058,6 +1061,9 @@ addEventListener("atlas:trend-selected", event => {
 addEventListener("atlas:screen-started", () => {
   screenReaderReady = true;
   renderConnection(true);
+  $("monitorPulse").classList.add("live");
+  $("monitorPulse").textContent = "Iniciando leitura do gráfico…";
+  $("analysisReason").textContent = "Leitura ativada. Localizando o ativo e reunindo as primeiras velas.";
   robot.pruneQueue();
 });
 
@@ -1087,10 +1093,29 @@ addEventListener("pointermove", event => {
 robot.init();
 renderConnection(false);
 setInterval(verifyExtension, 2500);
-setInterval(() => {
+function refreshReadingFeedback() {
   const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;
-  if (dataReady() && inspectedAt && Date.now() - inspectedAt > 12000) $("monitorPulse").textContent = "Aguardando atualização";
-}, 2000);
+  if (!dataReady()) return;
+  const ageSeconds = inspectedAt ? Math.max(0, Math.floor((Date.now() - inspectedAt) / 1000)) : null;
+  const pulse = $("monitorPulse");
+  if (ageSeconds == null) {
+    pulse.classList.add("live");
+    pulse.textContent = "Preparando a primeira leitura…";
+    return;
+  }
+  if (ageSeconds > 12) {
+    pulse.classList.remove("live");
+    pulse.textContent = `Sem nova imagem há ${ageSeconds}s`;
+    return;
+  }
+  pulse.classList.add("live");
+  const asset = state.asset || "o ativo";
+  const direction = String(currentAnalysis()?.direction || "WAIT").toUpperCase();
+  pulse.textContent = direction === "WAIT"
+    ? `Analisando ${asset} · leitura há ${ageSeconds}s`
+    : `${direction === "BUY" ? "Compra" : "Venda"} mantida · leitura há ${ageSeconds}s`;
+}
+setInterval(refreshReadingFeedback, 1000);
 addEventListener("resize", () => {
   keepRobotInViewport();
 }, { passive: true });

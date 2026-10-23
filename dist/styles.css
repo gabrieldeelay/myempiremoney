@@ -194,6 +194,9 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 }
 
 .signal-card { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-right: 1px solid var(--line); }
+.signal-card.scanning::after { position: absolute; right: 18px; bottom: 7px; left: 18px; height: 2px; overflow: hidden; border-radius: 999px; background: rgba(87,151,255,.1); content: ""; }
+.signal-card.scanning::before { position: absolute; z-index: 1; bottom: 7px; left: 18px; width: 24%; height: 2px; border-radius: 999px; background: linear-gradient(90deg, transparent, #5797ff, #8a74ff, transparent); content: ""; animation: atlasScanning 1.6s ease-in-out infinite; }
+@keyframes atlasScanning { from { transform: translateX(-100%); } to { transform: translateX(420%); } }
 .signal-icon { flex: 0 0 46px; width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid var(--line-orange); border-radius: 14px; background: rgba(87,151,255,.09); color: var(--orange); font-size: 22px; font-weight: 900; }
 .signal-copy { min-width: 0; width: 100%; }
 .signal-copy small, .market-facts small { color: #8195ae; font-size: 11px; font-weight: 800; letter-spacing: .1em; }

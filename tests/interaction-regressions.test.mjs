@@ -142,7 +142,7 @@ assert.match(screenReader, /screen-vision\.js\?v=3\.9\.7/, "a leitura deve carre
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.9\.5/, "o painel deve carregar a direção travada sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
-assert.match(screenReader, /setup-warning-state\.js\?v=3\.9\.3/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
+assert.match(screenReader, /setup-warning-state\.js\?v=3\.9\.8/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
 assert.match(screenReader, /left: \.78, width: \.21/, "a leitura da expiração deve mirar o controle à direita, não o centro do gráfico");
 assert.match(screenReader, /asset: asset \|\| lastAsset/, "uma falha momentânea do OCR não pode apagar o ativo e o sinal atuais");
 assert.match(app, /finalDirection === "BUY" \? "COMPRA" : "VENDA"/, "a direção confirmada deve continuar visível mesmo depois que o ponto daquela vela passar");
@@ -163,8 +163,13 @@ assert.match(screenReader, /setInterval\(inspectFrame, 850\)/, "a troca da aba a
 assert.match(styles, /@keyframes screenReaderPromptPulse/, "o aviso de ativação deve chamar atenção sem cobrir o gráfico inteiro");
 assert.match(screenReader, /if \(tabMoved \|\| !lastAsset\) visible = await readVisibleText\(activeTab, true\)/, "mudar a aba deve priorizar uma leitura imediata do novo ativo");
 assert.match(screenReader, /Tesseract\.PSM\.SPARSE_TEXT/, "uma segunda passagem deve recuperar rótulos Forex pequenos que falharam na primeira leitura");
+assert.match(screenReader, /resetSetupReadings\(\)/, "trocar de ativo deve obrigar uma nova leitura do gráfico e da expiração");
+assert.match(screenReader, /recognizedAssetChanged/, "uma mudança reconhecida pelo OCR deve invalidar a configuração do ativo anterior");
 assert.match(app, /analysisForIdentifiedAsset\(\)/, "o painel deve remover a leitura anterior enquanto identifica o novo ativo");
 assert.match(app, /A indicação anterior foi removida para não misturar análises de ativos diferentes\./, "o painel não pode manter um sinal sem saber a qual ativo ele pertence");
+assert.match(app, /source: "market-radar-5m"\s*\n\s*};\s*\n}\s*\n\s*function analysisForIdentifiedAsset/, "a análise do ativo deve existir fora do radar e continuar acessível ao painel");
+assert.match(app, /Analisando \$\{asset\} · leitura há \$\{ageSeconds\}s/, "a tela deve mostrar atividade e idade da última leitura enquanto ainda não há sinal");
+assert.match(styles, /\.signal-card\.scanning::before/, "a análise em andamento deve ter feedback visual contínuo");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");
 assert.match(screenReader, /setupChecked:\s*Boolean\(setup\.timeframe && setup\.expiration\)/, "os avisos devem esperar a leitura conjunta do gráfico e da expiração");

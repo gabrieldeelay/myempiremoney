@@ -20,6 +20,13 @@ export function createMinuteReadingStabilizer(options = {}) {
   let candidateHits = 0;
   let lastValidAt = 0;
 
+  function reset() {
+    stable = null;
+    candidate = null;
+    candidateHits = 0;
+    lastValidAt = 0;
+  }
+
   function update(value) {
     const timestamp = now();
     if (![1, 5].includes(value)) {
@@ -49,7 +56,7 @@ export function createMinuteReadingStabilizer(options = {}) {
     return stable;
   }
 
-  return { update };
+  return { update, reset };
 }
 
 export function createSetupWarningTracker() {

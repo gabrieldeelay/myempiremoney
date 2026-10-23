@@ -1,6 +1,6 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
 import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.9.7";
-import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.9.3";
+import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.9.8";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
 const statusLabels = [...document.querySelectorAll("[data-screen-reader-status]")];
@@ -27,6 +27,13 @@ let lastExpiration = null;
 const timeframeReading = createMinuteReadingStabilizer();
 const expirationReading = createMinuteReadingStabilizer();
 const reversalTracker = createIntracandleReversalTracker();
+
+function resetSetupReadings() {
+  timeframeReading.reset();
+  expirationReading.reset();
+  lastTimeframe = null;
+  lastExpiration = null;
+}
 
 function setStatus(label, kind = "") {
   statusLabels.forEach(element => {
@@ -239,9 +246,15 @@ async function inspectFrame() {
       lastAsset = null;
       missedAssetReads = 0;
       reversalTracker.reset();
+      resetSetupReadings();
     }
     let visible = {};
     if (tabMoved || !lastAsset) visible = await readVisibleText(activeTab, true);
+    const recognizedAssetChanged = Boolean(visible.asset && lastAsset && visible.asset !== lastAsset);
+    if (recognizedAssetChanged) {
+      reversalTracker.reset();
+      resetSetupReadings();
+    }
     const setup = await readSetupValues(activeTab);
     if (!tabMoved && lastAsset) visible = await readVisibleText(activeTab, false);
     if ("asset" in visible) lastAsset = visible.asset;

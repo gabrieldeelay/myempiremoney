@@ -39,6 +39,15 @@ test("um 5m confirmado não vira aviso por ruídos isolados de 1m", () => {
   assert.equal(reading.update(1), 1);
 });
 
+test("trocar de ativo descarta o 5m confirmado do ativo anterior", () => {
+  const reading = createMinuteReadingStabilizer({ requiredHits: 2, warningHits: 6 });
+  assert.equal(reading.update(5), null);
+  assert.equal(reading.update(5), 5);
+  reading.reset();
+  assert.equal(reading.update(1), null);
+  assert.equal(reading.update(1), 1);
+});
+
 test("avisa quando gráfico e expiração não estão em cinco minutos", () => {
   const tracker = createSetupWarningTracker();
   const issues = tracker.update({ asset: "BITCOIN", timeframe: "1m", expiration: "1 min" });
