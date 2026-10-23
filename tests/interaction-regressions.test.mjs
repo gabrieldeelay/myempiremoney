@@ -72,6 +72,7 @@ assert.match(app, /flashTrade\(state\.manualOperation\.direction/, "cada operaç
 assert.match(html, /id="tradeFlash"/, "o painel precisa ter uma camada de glow sobre a tela inteira");
 assert.match(html, /id="entryTiming"/, "a leitura deve dizer se a entrada é para a vela atual ou para a próxima");
 assert.match(html, /id="entryAdvice"/, "a indicação deve aconselhar o usuário sem alongar o selo principal");
+assert.match(html, /id="entryGuidance"[^>]*role="status"[^>]*aria-live="polite"/, "a orientação de entrada deve ter destaque acessível e anunciar suas mudanças");
 assert.match(html, /id="galeBadge"/, "a leitura deve exibir o limite de gale calculado");
 assert.match(html, /id="analysisDetails"/, "o painel deve explicar os fatores que fomentam a leitura");
 assert.match(app, /confidence >= 87 \? "SEM GALE"/, "confiança muito alta deve ser apresentada sem gale");
@@ -104,6 +105,9 @@ assert.match(app, /Nesta vela: espere a alta perder força e o preço reagir par
 assert.match(app, /Não entre agora\. Aguarde a vela atual fechar; o sinal é para a próxima\./, "a orientação da próxima vela deve impedir uma entrada antecipada");
 assert.doesNotMatch(app, /Espere o melhor momento/, "a orientação não deve usar uma instrução vaga");
 assert.match(styles, /@keyframes entryTimingPulse/, "a indicação do momento da entrada deve pulsar suavemente");
+assert.match(styles, /@keyframes entryGuidancePulse/, "a orientação principal deve pulsar suavemente para permanecer visível");
+assert.match(styles, /\.signal-card\.buy \.entry-guidance/, "o aviso destacado deve acompanhar a cor de compra");
+assert.match(styles, /\.signal-card\.sell \.entry-guidance/, "o aviso destacado deve acompanhar a cor de venda");
 assert.match(app, /NÃO ENTRE AGORA/, "uma vela esticada deve impedir que o sinal antigo incentive uma entrada atrasada");
 assert.match(app, /REVERSÃO TÉCNICA/, "uma rejeição confirmada deve ficar claramente identificada");
 assert.match(app, /Possível reversão para \$\{side\} nesta vela/, "uma reversão intravela deve gerar um alerta adicional");

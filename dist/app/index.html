@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#061326" />
   <title>Atlas | Assistente de operações</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=3.7.4" />
+  <link rel="stylesheet" href="/styles.css?v=3.8.1" />
 </head>
 <body>
   <div class="app-shell">
@@ -64,7 +64,14 @@
               <span class="gale-badge gale-wait" id="galeBadge">NÃO ENTRAR</span>
               <span class="signal-stability waiting" id="signalStability">SEM SINAL CONFIRMADO</span>
             </div>
-            <p class="analysis-summary"><strong id="entryAdvice">Não entre agora. Aguarde uma leitura confirmada.</strong> <span id="analysisReason">Entre na Hezilex para iniciar a análise em tempo real.</span></p>
+            <div class="entry-guidance" id="entryGuidance" role="status" aria-live="polite">
+              <span class="entry-guidance-icon" aria-hidden="true">!</span>
+              <div>
+                <small>ORIENTAÇÃO DE ENTRADA</small>
+                <strong id="entryAdvice">Não entre agora. Aguarde uma leitura confirmada.</strong>
+              </div>
+            </div>
+            <p class="analysis-summary"><span id="analysisReason">Entre na Hezilex para iniciar a análise em tempo real.</span></p>
             <button class="signal-more" type="button" aria-describedby="analysisTooltip">
               Ler mais
               <span class="signal-tooltip" id="analysisTooltip" role="tooltip">

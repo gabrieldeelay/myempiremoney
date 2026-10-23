@@ -218,11 +218,23 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .setup-warning-actions button:hover { filter: brightness(1.12); }
 @keyframes setupWarningIn { from { opacity: 0; transform: translateY(-12px) scale(.98); } }
 @media (max-width: 620px) { .setup-warning { grid-template-columns: 32px minmax(0, 1fr); } .setup-warning-actions { grid-column: 2; justify-content: flex-start; } }
+.entry-guidance { --guidance-glow: rgba(255,179,71,.24); display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; margin-top: 9px; padding: 8px 10px; border: 1px solid rgba(255,179,71,.38); border-radius: 10px; background: linear-gradient(135deg, rgba(255,179,71,.14), rgba(255,179,71,.05)); box-shadow: inset 3px 0 0 #ffb347; animation: entryGuidancePulse 2s ease-in-out infinite; }
+.entry-guidance-icon { display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid rgba(255,209,138,.45); border-radius: 8px; background: rgba(255,179,71,.13); color: #ffd18a; font-size: 15px; font-weight: 950; }
+.entry-guidance div { min-width: 0; }
+.entry-guidance small { display: block; color: #ffd18a; font-size: 8px; font-weight: 950; letter-spacing: .11em; }
+.entry-guidance strong { display: block; margin-top: 2px; color: #f8fbff; font-size: 11px; font-weight: 900; line-height: 1.3; }
+.signal-card.buy .entry-guidance { --guidance-glow: rgba(49,214,155,.24); border-color: rgba(49,214,155,.38); background: linear-gradient(135deg, rgba(49,214,155,.14), rgba(49,214,155,.04)); box-shadow: inset 3px 0 0 var(--green); }
+.signal-card.buy .entry-guidance-icon { border-color: rgba(49,214,155,.42); background: rgba(49,214,155,.12); color: #8cebc9; }
+.signal-card.buy .entry-guidance small { color: #75e8bf; }
+.signal-card.sell .entry-guidance { --guidance-glow: rgba(255,93,101,.24); border-color: rgba(255,93,101,.38); background: linear-gradient(135deg, rgba(255,93,101,.14), rgba(255,93,101,.04)); box-shadow: inset 3px 0 0 var(--red); }
+.signal-card.sell .entry-guidance-icon { border-color: rgba(255,93,101,.42); background: rgba(255,93,101,.12); color: #ff9ea4; }
+.signal-card.sell .entry-guidance small { color: #ff9ea4; }
+.signal-card.probable .entry-guidance { --guidance-glow: rgba(199,162,255,.25); border-color: rgba(199,162,255,.4); background: linear-gradient(135deg, rgba(199,162,255,.15), rgba(199,162,255,.04)); box-shadow: inset 3px 0 0 var(--probable); }
+.signal-card.probable .entry-guidance-icon { border-color: rgba(199,162,255,.45); background: rgba(199,162,255,.12); color: #dcc7ff; }
+.signal-card.probable .entry-guidance small { color: #d6bfff; }
+@keyframes entryGuidancePulse { 0%, 100% { outline: 0 solid transparent; } 50% { outline: 3px solid var(--guidance-glow); } }
+@media (prefers-reduced-motion: reduce) { .entry-guidance { animation: none; } }
 .signal-copy p { max-width: 480px; margin: 6px 0 0; overflow: hidden; color: #9aacc1; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.analysis-summary strong { color: #dce8ff; font-weight: 850; }
-.signal-card.buy .analysis-summary strong { color: #8cebc9; }
-.signal-card.sell .analysis-summary strong { color: #ff9ea4; }
-.signal-card.probable .analysis-summary strong { color: #d6bfff; }
 .signal-more { position: relative; z-index: 4; margin-top: 5px; padding: 0; border: 0; background: transparent; color: #79a9f6; cursor: help; font-size: 10px; font-weight: 850; text-decoration: underline; text-decoration-color: rgba(121,169,246,.42); text-underline-offset: 3px; }
 .signal-tooltip { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 9px); width: min(390px, calc(100vw - 42px)); padding: 13px 14px; border: 1px solid rgba(105,160,245,.3); border-radius: 12px; background: rgba(5,17,34,.98); color: #b9c9dc; box-shadow: 0 18px 48px rgba(0,0,0,.52); text-align: left; opacity: 0; visibility: hidden; transform: translateY(5px); transition: .16s opacity, .16s transform, .16s visibility; pointer-events: none; }
 .signal-more:hover .signal-tooltip, .signal-more:focus-visible .signal-tooltip { opacity: 1; visibility: visible; transform: translateY(0); }
