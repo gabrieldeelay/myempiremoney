@@ -74,8 +74,8 @@ function fill(settings) {
   $("#venoWebhookSecret").value = settings.venopag.webhookSecret || "";
   $("#venoUpdatedAt").textContent = settings.venopag.updatedAt ? `Última configuração: ${dateTimeLabel(settings.venopag.updatedAt)}` : "Nenhuma configuração salva.";
   $("#webhookUrl").textContent = `${location.origin}/api/venopag-webhook`;
-  $("#speechState").textContent = settings.speech.configured ? "Voz neural masculina ativa." : "Ainda não configurada. O Atlas está usando a voz de reserva do navegador.";
-  $("#speechRegion").value = settings.speech.region || "brazilsouth";
+  $("#speechState").textContent = settings.speech.configured ? "Google Chirp 3 HD ativo." : "Ainda não configurada. O Atlas está usando a voz de reserva do navegador.";
+  $("#speechVoice").value = settings.speech.voice || "pt-BR-Chirp3-HD-Fenrir";
   $("#speechApiKey").value = settings.speech.apiKey || "";
   $("#speechUpdatedAt").textContent = settings.speech.updatedAt ? `Última configuração: ${dateTimeLabel(settings.speech.updatedAt)}` : "Nenhuma configuração salva.";
   renderCoupons(settings.coupons || []);
@@ -196,8 +196,8 @@ $("#adminForm").addEventListener("submit", async event => {
   try {
     const venopag = { clientId: $("#venoClientId").value, clientSecret: $("#venoClientSecret").value, webhookSecret: $("#venoWebhookSecret").value };
     const credentialsChanged = ["clientId", "clientSecret", "webhookSecret"].some(key => venopag[key] !== (settingsCache.venopag?.[key] || ""));
-    const speech = { apiKey: $("#speechApiKey").value, region: $("#speechRegion").value };
-    const speechChanged = ["apiKey", "region"].some(key => speech[key] !== (settingsCache.speech?.[key] || ""));
+    const speech = { apiKey: $("#speechApiKey").value, voice: $("#speechVoice").value };
+    const speechChanged = ["apiKey", "voice"].some(key => speech[key] !== (settingsCache.speech?.[key] || ""));
     await apiFetch("/api/admin-settings", { method: "PUT", body: JSON.stringify({ plans: { monthly: readPlan("monthly", "monthly") }, content: { eyebrow: $("#eyebrow").value, headline: $("#headline").value, subheadline: $("#subheadline").value }, market: { newsQuery: $("#newsQuery").value, symbols: $("#symbols").value.split(/\s+/) }, venopag: credentialsChanged ? venopag : {}, speech: speechChanged ? speech : {} }) });
     setStatus("Configurações salvas e publicadas.", "success"); await loadSettings();
   } catch (error) { setStatus(error.message, "error"); } finally { submit.disabled = false; }

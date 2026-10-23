@@ -94,12 +94,15 @@ assert.match(app, /fetch\("\/api\/tts"/, "o robô deve priorizar a narração ne
 assert.match(app, /this\.voiceQueue = \[spokenText\]/, "uma nova mensagem não pode interromper a fala atual");
 assert.match(app, /if \(moves % 5 === 0\)/, "o robô só deve reclamar no quinto movimento e em seus múltiplos");
 assert.match(app, /\{ count: moves \}/, "a reclamação deve informar quantas vezes o robô foi movido");
-assert.match(ttsApi, /pt-BR-AntonioNeural/, "a voz principal deve ser masculina e natural em português brasileiro");
-assert.match(ttsApi, /Ocp-Apim-Subscription-Key/, "o servidor deve chamar o Azure Speech sem expor a chave ao navegador");
+assert.match(ttsApi, /pt-BR-Chirp3-HD-Fenrir/, "a voz principal deve usar o Google Chirp 3 HD masculino em português brasileiro");
+assert.match(ttsApi, /texttospeech\.googleapis\.com\/v1\/text:synthesize/, "o servidor deve chamar o Google Cloud Text-to-Speech");
+assert.match(ttsApi, /X-Goog-Api-Key/, "a chave do Google deve permanecer somente no servidor");
+assert.doesNotMatch(ttsApi, /microsoft|azure|AntonioNeural/i, "a integração antiga do Azure deve ser removida por completo");
 assert.match(ttsApi, /requireUser\(req\)/, "a geração de voz deve exigir uma sessão válida");
 assert.match(server, /"\/api\/tts": require\("\.\/api\/tts"\)/, "a rota da voz neural deve estar publicada");
 assert.match(adminPage, /id="speechApiKey"/, "o administrador deve poder configurar a chave da voz neural");
-assert.match(adminPage, /id="speechRegion"/, "o administrador deve poder configurar a região da voz neural");
+assert.match(adminPage, /id="speechVoice"/, "o administrador deve poder escolher a voz masculina do Google");
+assert.doesNotMatch(adminPage, /Azure|Antonio|Antônio/i, "o painel não deve conservar referências à integração removida");
 assert.match(adminModule, /speechChanged \? speech : \{\}/, "o painel deve salvar a configuração da voz neural");
 assert.match(app, /utterance\.pitch = \.82/, "a narração deve usar um timbre masculino");
 assert.match(app, /if \(this\.voiceSpeaking\) this\.voiceQueue = \[spokenText\]/, "a fala atual não pode ser cortada e a fila deve conservar apenas a mensagem mais recente");

@@ -1,13 +1,16 @@
 const crypto = require("node:crypto");
 const { requireUser, sendError } = require("../lib/auth");
-const { getSpeechCredentials } = require("../lib/settings");
+const { getGoogleTtsCredentials } = require("../lib/settings");
+
+const ALLOWED_VOICES = new Set([
+  "pt-BR-Chirp3-HD-Fenrir",
+  "pt-BR-Chirp3-HD-Charon",
+  "pt-BR-Chirp3-HD-Orus",
+  "pt-BR-Chirp3-HD-Puck"
+]);
 
 const audioCache = new Map();
 const requestWindows = new Map();
-
-function escapeXml(value) {
-  return String(value).replace(/[<>&"']/g, character => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[character]);
-}
 
 function allowRequest(userId) {
   const now = Date.now();
@@ -33,24 +36,23 @@ module.exports = async function handler(req, res) {
     const text = String(req.body?.text || "").replace(/\s+/g, " ").trim().slice(0, 480);
     if (!text) return res.status(422).json({ error: "Mensagem vazia." });
 
-    const credentials = await getSpeechCredentials(db);
-    if (!credentials?.apiKey || !credentials?.region) return res.status(503).json({ error: "Voz neural ainda não configurada." });
-    const region = String(credentials.region).toLowerCase().replace(/[^a-z0-9-]/g, "");
-    if (!region) return res.status(503).json({ error: "Região da voz neural inválida." });
-    const voice = "pt-BR-AntonioNeural";
+    const credentials = await getGoogleTtsCredentials(db);
+    if (!credentials?.apiKey) return res.status(503).json({ error: "Voz natural ainda não configurada." });
+    const voice = ALLOWED_VOICES.has(credentials.voice) ? credentials.voice : "pt-BR-Chirp3-HD-Fenrir";
     const cacheKey = crypto.createHash("sha256").update(`${voice}:${text}`).digest("hex");
     if (audioCache.has(cacheKey)) return sendAudio(res, audioCache.get(cacheKey));
 
-    const ssml = `<speak version="1.0" xml:lang="pt-BR"><voice name="${voice}"><prosody rate="-3%" pitch="-2Hz">${escapeXml(text)}</prosody></voice></speak>`;
-    const response = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+    const response = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
       method: "POST",
       headers: {
-        "Ocp-Apim-Subscription-Key": credentials.apiKey,
-        "Content-Type": "application/ssml+xml",
-        "X-Microsoft-OutputFormat": "audio-24khz-96kbitrate-mono-mp3",
-        "User-Agent": "AtlasMarketAssistant"
+        "X-Goog-Api-Key": credentials.apiKey,
+        "Content-Type": "application/json; charset=utf-8"
       },
-      body: ssml,
+      body: JSON.stringify({
+        input: { text },
+        voice: { languageCode: "pt-BR", name: voice },
+        audioConfig: { audioEncoding: "MP3" }
+      }),
       signal: AbortSignal.timeout(15000)
     });
     if (!response.ok) {
@@ -58,7 +60,8 @@ module.exports = async function handler(req, res) {
       error.status = 502;
       throw error;
     }
-    const audio = Buffer.from(await response.arrayBuffer());
+    const payload = await response.json().catch(() => ({}));
+    const audio = payload.audioContent ? Buffer.from(payload.audioContent, "base64") : Buffer.alloc(0);
     if (!audio.length) {
       const error = new Error("A voz neural retornou um áudio vazio.");
       error.status = 502;

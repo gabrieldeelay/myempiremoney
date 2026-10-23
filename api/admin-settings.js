@@ -2,7 +2,9 @@ const crypto = require("node:crypto");
 const { requireAdmin, sendError } = require("../lib/auth");
 const { one, toIso } = require("../lib/db");
 const { encryptJson } = require("../lib/crypto-store");
-const { getPublicSettings, getSpeechCredentials, getVenoCredentials } = require("../lib/settings");
+const { getGoogleTtsCredentials, getPublicSettings, getVenoCredentials } = require("../lib/settings");
+
+const GOOGLE_TTS_VOICES = new Set(["pt-BR-Chirp3-HD-Fenrir", "pt-BR-Chirp3-HD-Charon", "pt-BR-Chirp3-HD-Orus", "pt-BR-Chirp3-HD-Puck"]);
 
 function cleanSymbols(values) {
   return [...new Set((Array.isArray(values) ? values : []).map(value => String(value).toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(value => value.endsWith("USDT")))].slice(0, 20);
@@ -33,10 +35,10 @@ module.exports = async function handler(req, res) {
     if (req.method === "GET") {
       const settings = await getPublicSettings(db);
       const veno = await getVenoCredentials(db).catch(() => null);
-      const speech = await getSpeechCredentials(db).catch(() => null);
+      const speech = await getGoogleTtsCredentials(db).catch(() => null);
       const [coupons] = await db.query("SELECT * FROM coupons ORDER BY created_at DESC");
       coupons.forEach(coupon => { coupon.active = Boolean(coupon.active); coupon.valid_from = toIso(coupon.valid_from); coupon.valid_until = toIso(coupon.valid_until); coupon.created_at = toIso(coupon.created_at); coupon.updated_at = toIso(coupon.updated_at); });
-      return res.status(200).json({ ...settings, coupons: coupons || [], venopag: { configured: Boolean(veno?.clientId && veno?.clientSecret && veno?.webhookSecret), clientId: veno?.clientId || "", clientSecret: veno?.clientSecret || "", webhookSecret: veno?.webhookSecret || "", updatedAt: veno?.updatedAt || null }, speech: { configured: Boolean(speech?.apiKey && speech?.region), apiKey: speech?.apiKey || "", region: speech?.region || "brazilsouth", voice: "pt-BR-AntonioNeural", updatedAt: speech?.updatedAt || null } });
+      return res.status(200).json({ ...settings, coupons: coupons || [], venopag: { configured: Boolean(veno?.clientId && veno?.clientSecret && veno?.webhookSecret), clientId: veno?.clientId || "", clientSecret: veno?.clientSecret || "", webhookSecret: veno?.webhookSecret || "", updatedAt: veno?.updatedAt || null }, speech: { configured: Boolean(speech?.apiKey), apiKey: speech?.apiKey || "", voice: GOOGLE_TTS_VOICES.has(speech?.voice) ? speech.voice : "pt-BR-Chirp3-HD-Fenrir", updatedAt: speech?.updatedAt || null } });
     }
     if (req.method === "POST" && req.body?.action === "coupon") {
       const id = String(req.body?.coupon?.id || "").trim();
@@ -87,11 +89,12 @@ module.exports = async function handler(req, res) {
       await db.execute("INSERT INTO private_settings (`key`,`value`,updated_at) VALUES ('venopag',?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`),updated_at=UTC_TIMESTAMP()", [value]);
     }
     const speechInput = req.body?.speech || {};
-    if (speechInput.apiKey || speechInput.region) {
-      if (!speechInput.apiKey || !speechInput.region) return res.status(422).json({ error: "Preencha a chave e a região do Azure Speech." });
-      const region = String(speechInput.region).trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
-      const value = encryptJson({ apiKey: String(speechInput.apiKey).trim(), region });
-      await db.execute("INSERT INTO private_settings (`key`,`value`,updated_at) VALUES ('speech',?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`),updated_at=UTC_TIMESTAMP()", [value]);
+    if (speechInput.apiKey || speechInput.voice) {
+      if (!speechInput.apiKey) return res.status(422).json({ error: "Preencha a chave da API Google Cloud Text-to-Speech." });
+      const voice = GOOGLE_TTS_VOICES.has(speechInput.voice) ? speechInput.voice : "pt-BR-Chirp3-HD-Fenrir";
+      const value = encryptJson({ apiKey: String(speechInput.apiKey).trim(), voice });
+      await db.execute("INSERT INTO private_settings (`key`,`value`,updated_at) VALUES ('google_tts',?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`),updated_at=UTC_TIMESTAMP()", [value]);
+      await db.execute("DELETE FROM private_settings WHERE `key` = 'speech'");
     }
     return res.status(200).json({ ok: true, settings: await getPublicSettings(db) });
   } catch (error) {
