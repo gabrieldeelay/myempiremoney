@@ -66,5 +66,8 @@ app.use((error, _req, res, _next) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, "0.0.0.0", () => console.log(`Atlas ativo na porta ${port}`));
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Atlas ativo na porta ${port}`);
+  require("./lib/market-radar").startMarketRadar();
+});
 

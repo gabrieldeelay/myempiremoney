@@ -37,7 +37,7 @@ async function loadTrends() {
     const payload = await response.json();
     if (!response.ok || !payload.items?.length) throw new Error(payload.error || "Sem tendências no momento.");
     feed.innerHTML = payload.items.map((item, index) => `<button type="button" class="trend-row ${item.direction.toLowerCase()}" data-trend-asset="${item.asset}" aria-label="Ver leitura de ${item.asset}"><span class="trend-rank">0${index + 1}</span><span><b>${item.asset}</b><small>RSI ${item.rsi} · ${item.timeframe}</small></span><strong>${item.direction === "BUY" ? "COMPRA" : item.direction === "SELL" ? "VENDA" : "AGUARDAR"}<small>${item.confidence}%</small></strong></button>`).join("");
-    window.dispatchEvent(new CustomEvent("atlas:trends", { detail: { items: payload.items, source: payload.source, updatedAt: payload.updatedAt } }));
+    window.dispatchEvent(new CustomEvent("atlas:trends", { detail: { items: payload.signals || payload.items, source: payload.source, updatedAt: payload.updatedAt } }));
     feed.querySelectorAll("[data-trend-asset]").forEach(button => button.addEventListener("click", () => {
       const item = payload.items.find(trend => trend.asset === button.dataset.trendAsset);
       if (item) window.dispatchEvent(new CustomEvent("atlas:trend-selected", { detail: item }));
@@ -56,4 +56,4 @@ tabs.forEach(tab => tab.addEventListener("click", () => {
 loadNews();
 loadTrends();
 setInterval(loadNews, 180000);
-setInterval(loadTrends, 45000);
+setInterval(loadTrends, 20000);

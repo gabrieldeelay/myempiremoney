@@ -170,6 +170,8 @@ assert.match(app, /A indicação anterior foi removida para não misturar análi
 assert.match(app, /source: "market-radar-5m"\s*\n\s*};\s*\n}\s*\n\s*function analysisForIdentifiedAsset/, "a análise do ativo deve existir fora do radar e continuar acessível ao painel");
 assert.match(app, /Analisando \$\{asset\} · leitura há \$\{ageSeconds\}s/, "a tela deve mostrar atividade e idade da última leitura enquanto ainda não há sinal");
 assert.match(styles, /\.signal-card\.scanning::before/, "a análise em andamento deve ter feedback visual contínuo");
+assert.match(insights, /payload\.signals \|\| payload\.items/, "o painel deve receber do servidor a leitura de todos os ativos monitorados");
+assert.match(insights, /setInterval\(loadTrends, 20000\)/, "o radar do servidor deve atualizar o painel em intervalos curtos");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");
 assert.match(screenReader, /setupChecked:\s*Boolean\(setup\.timeframe && setup\.expiration\)/, "os avisos devem esperar a leitura conjunta do gráfico e da expiração");
