@@ -147,11 +147,18 @@ function renderSignal(analysis = effectiveAnalysis()) {
     ? "WAIT_CONFIRMATION"
     : analysis?.entryTiming === "CURRENT_CANDLE" ? "CURRENT_CANDLE" : "NEXT_CANDLE";
   const timing = timingCode === "CURRENT_CANDLE" ? "NESTA VELA" : timingCode === "NEXT_CANDLE" ? "PRÓXIMA VELA" : "AGUARDE CONFIRMAÇÃO";
+  const reversalSetup = analysis?.setup === "INTRACANDLE_REVERSAL";
   const entryAdvice = timingCode === "CURRENT_CANDLE"
-    ? "Espere o melhor momento para entrar nesta vela."
+    ? finalDirection === "BUY"
+      ? reversalSetup
+        ? "Nesta vela: espere a queda perder força e o preço reagir para cima antes de entrar."
+        : "Nesta vela: aguarde um recuo curto e a compra voltar a ganhar força antes de entrar."
+      : reversalSetup
+        ? "Nesta vela: espere a alta perder força e o preço reagir para baixo antes de entrar."
+        : "Nesta vela: aguarde um repique curto e a venda voltar a ganhar força antes de entrar."
     : timingCode === "NEXT_CANDLE"
-      ? "Aguarde a vela atual fechar antes de entrar."
-      : "Espere uma leitura estável.";
+      ? "Não entre agora. Aguarde a vela atual fechar; o sinal é para a próxima."
+      : "Não entre agora. Aguarde uma leitura confirmada.";
   const card = $("signalCard");
   card.classList.toggle("buy", finalDirection === "BUY");
   card.classList.toggle("sell", finalDirection === "SELL");

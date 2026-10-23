@@ -99,7 +99,10 @@ assert.match(app, /this\.voiceQueue = \[spokenText\]/, "uma nova mensagem não p
 assert.match(app, /if \(moves % 3 === 0\)/, "o robô deve reclamar a cada terceira movimentação");
 assert.doesNotMatch(app, /robot\.speak\("dragged", \{ count: moves \}/, "a reclamação não deve dizer quantas vezes o robô foi movido");
 assert.match(app, /"NESTA VELA"/, "a indicação da vela atual deve permanecer curta no design");
-assert.match(app, /Espere o melhor momento para entrar nesta vela\./, "a orientação da vela atual deve aparecer separada do selo");
+assert.match(app, /Nesta vela: espere a queda perder força e o preço reagir para cima antes de entrar\./, "a compra por reversão deve explicar qual reação esperar");
+assert.match(app, /Nesta vela: espere a alta perder força e o preço reagir para baixo antes de entrar\./, "a venda por reversão deve explicar qual reação esperar");
+assert.match(app, /Não entre agora\. Aguarde a vela atual fechar; o sinal é para a próxima\./, "a orientação da próxima vela deve impedir uma entrada antecipada");
+assert.doesNotMatch(app, /Espere o melhor momento/, "a orientação não deve usar uma instrução vaga");
 assert.match(styles, /@keyframes entryTimingPulse/, "a indicação do momento da entrada deve pulsar suavemente");
 assert.match(app, /NÃO ENTRE AGORA/, "uma vela esticada deve impedir que o sinal antigo incentive uma entrada atrasada");
 assert.match(app, /REVERSÃO TÉCNICA/, "uma rejeição confirmada deve ficar claramente identificada");
