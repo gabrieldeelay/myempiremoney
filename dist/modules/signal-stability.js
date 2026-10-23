@@ -30,12 +30,12 @@ function waitingAnalysis(candidate = null) {
 export function createSignalStabilizer(options = {}) {
   const now = typeof options.now === "function" ? options.now : () => Date.now();
   const initialConfirmMs = options.initialConfirmMs ?? 3000;
-  const switchConfirmMs = options.switchConfirmMs ?? 8000;
-  const waitConfirmMs = options.waitConfirmMs ?? 12000;
-  const minHoldMs = options.minHoldMs ?? 20000;
+  const switchConfirmMs = options.switchConfirmMs ?? 12000;
+  const waitConfirmMs = options.waitConfirmMs ?? 20000;
+  const minHoldMs = options.minHoldMs ?? 35000;
   const initialHits = options.initialHits ?? 3;
-  const switchHits = options.switchHits ?? 6;
-  const waitHits = options.waitHits ?? 8;
+  const switchHits = options.switchHits ?? 7;
+  const waitHits = options.waitHits ?? 10;
 
   let asset = "";
   let stable = null;
@@ -77,8 +77,21 @@ export function createSignalStabilizer(options = {}) {
     };
 
     if (analysis.setup === "STRETCHED_CANDLE") {
-      stable = null;
       candidate = null;
+      if (stable && analysis.blockedDirection === stable.direction) {
+        return {
+          ...stable,
+          ...analysis,
+          direction: stable.direction,
+          confidence: Math.min(stable.confidence, analysis.confidence || stable.confidence),
+          entryBlocked: true,
+          expiredDirection: stable.direction,
+          since: stable.since,
+          stability: "checking",
+          transition: null
+        };
+      }
+      stable = null;
       return { ...analysis, direction: "WAIT", stability: "checking", transition: null };
     }
 

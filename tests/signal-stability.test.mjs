@@ -76,7 +76,7 @@ test("reinicia a confirmação quando o ativo muda", () => {
   assert.equal(filter.update(buy, "ETHEREUM").direction, "WAIT");
 });
 
-test("cancela imediatamente um sinal que ficou atrasado em uma vela esticada", () => {
+test("encerra a entrada sem apagar imediatamente a direção que havia sido confirmada", () => {
   let clock = 0;
   const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
   assert.equal(filter.update({ direction: "SELL", confidence: 82 }, "LITECOIN").direction, "SELL");
@@ -88,8 +88,10 @@ test("cancela imediatamente um sinal que ficou atrasado em uma vela esticada", (
     blockedDirection: "SELL",
     reason: "queda esticada"
   }, "LITECOIN");
-  assert.equal(blocked.direction, "WAIT");
+  assert.equal(blocked.direction, "SELL");
   assert.equal(blocked.setup, "STRETCHED_CANDLE");
+  assert.equal(blocked.entryBlocked, true);
+  assert.equal(blocked.stability, "checking");
 });
 
 test("confirma reversão intravela rapidamente sem publicar um único quadro isolado", () => {

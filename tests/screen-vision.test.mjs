@@ -21,6 +21,7 @@ test("reconhece o ativo mesmo com erro comum do OCR", () => {
   assert.equal(fuzzyMatchAsset("PSARDANG"), "CARDANO");
   assert.equal(fuzzyMatchAsset("ETHEREUM"), "ETHEREUM");
   assert.equal(fuzzyMatchAsset("CAD JPY"), "CAD/JPY");
+  assert.equal(fuzzyMatchAsset("AUD/JPY"), "AUD/JPY");
 });
 
 test("localiza a linha azul da aba ativa", () => {

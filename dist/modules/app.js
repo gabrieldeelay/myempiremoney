@@ -1,5 +1,5 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
-import { createSignalStabilizer } from "./signal-stability.js?v=3.8.0";
+import { createSignalStabilizer } from "./signal-stability.js?v=3.9.1";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.6.1";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
@@ -139,16 +139,35 @@ function currentAnalysis() {
 function renderSignal(analysis = effectiveAnalysis()) {
   const direction = String(analysis?.direction || "WAIT").toUpperCase();
   const confidence = Math.round(Number(analysis?.confidence) || 0);
-  const actionable = ["BUY", "SELL"].includes(direction) && confidence >= 62;
+  const entryBlocked = analysis?.entryBlocked === true;
+  const directional = ["BUY", "SELL"].includes(direction);
+  const watchingReversal = !entryBlocked
+    && analysis?.setup === "STRETCHED_CANDLE"
+    && ["BUY", "SELL"].includes(analysis?.reversalDirection);
+  const actionable = directional && confidence >= 62 && !entryBlocked;
   const probable = actionable && confidence < 75;
-  const finalDirection = actionable ? direction : "WAIT";
+  const finalDirection = entryBlocked && directional
+    ? direction
+    : actionable
+      ? direction
+      : watchingReversal
+        ? analysis.reversalDirection
+        : "WAIT";
   const gale = !actionable ? "NÃO ENTRAR" : confidence >= 87 ? "SEM GALE" : confidence >= 75 ? "ATÉ GALE 1" : "ATÉ GALE 2";
-  const timingCode = finalDirection === "WAIT"
+  const timingCode = entryBlocked || watchingReversal || finalDirection === "WAIT"
     ? "WAIT_CONFIRMATION"
     : analysis?.entryTiming === "CURRENT_CANDLE" ? "CURRENT_CANDLE" : "NEXT_CANDLE";
   const timing = timingCode === "CURRENT_CANDLE" ? "NESTA VELA" : timingCode === "NEXT_CANDLE" ? "PRÓXIMA VELA" : "AGUARDE CONFIRMAÇÃO";
   const reversalSetup = analysis?.setup === "INTRACANDLE_REVERSAL";
-  const entryAdvice = timingCode === "CURRENT_CANDLE"
+  const entryAdvice = entryBlocked
+    ? finalDirection === "BUY"
+      ? "A compra perdeu o ponto seguro. Não entre atrasado; aguarde uma nova confirmação."
+      : "A venda perdeu o ponto seguro. Não entre atrasado; aguarde uma nova confirmação."
+    : watchingReversal
+      ? finalDirection === "BUY"
+        ? "Queda forte detectada. Espere a vela reagir para cima antes de considerar compra."
+        : "Alta forte detectada. Espere a vela reagir para baixo antes de considerar venda."
+    : timingCode === "CURRENT_CANDLE"
     ? finalDirection === "BUY"
       ? reversalSetup
         ? "Nesta vela: espere a queda perder força e o preço reagir para cima antes de entrar."
@@ -163,7 +182,13 @@ function renderSignal(analysis = effectiveAnalysis()) {
   card.classList.toggle("buy", finalDirection === "BUY");
   card.classList.toggle("sell", finalDirection === "SELL");
   card.classList.toggle("probable", probable);
-  $("analysisDirection").textContent = finalDirection === "BUY"
+  card.classList.toggle("expired", entryBlocked);
+  card.classList.toggle("observing", watchingReversal);
+  $("analysisDirection").textContent = entryBlocked
+    ? `${finalDirection === "BUY" ? "COMPRA" : "VENDA"} ENCERRADA`
+    : watchingReversal
+      ? `${finalDirection === "BUY" ? "COMPRA" : "VENDA"} EM OBSERVAÇÃO`
+    : finalDirection === "BUY"
     ? `${probable ? "PROVÁVEL " : ""}COMPRA`
     : finalDirection === "SELL" ? `${probable ? "PROVÁVEL " : ""}VENDA` : "AGUARDAR";
   $("signalIcon").textContent = finalDirection === "BUY" ? "↗" : finalDirection === "SELL" ? "↘" : "—";

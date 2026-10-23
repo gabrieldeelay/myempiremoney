@@ -244,6 +244,12 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .signal-card.probable .entry-guidance { --guidance-glow: rgba(199,162,255,.25); border-color: rgba(199,162,255,.4); background: linear-gradient(135deg, rgba(199,162,255,.15), rgba(199,162,255,.04)); box-shadow: inset 3px 0 0 var(--probable); }
 .signal-card.probable .entry-guidance-icon { border-color: rgba(199,162,255,.45); background: rgba(199,162,255,.12); color: #dcc7ff; }
 .signal-card.probable .entry-guidance small { color: #d6bfff; }
+.signal-card.expired .entry-guidance { --guidance-glow: rgba(255,179,71,.24); border-color: rgba(255,179,71,.42); background: linear-gradient(135deg, rgba(255,179,71,.15), rgba(255,179,71,.04)); box-shadow: inset 3px 0 0 var(--amber); }
+.signal-card.expired .entry-guidance-icon { border-color: rgba(255,179,71,.45); background: rgba(255,179,71,.12); color: #ffd18a; }
+.signal-card.expired .entry-guidance small { color: #ffd18a; }
+.signal-card.observing .entry-guidance { --guidance-glow: rgba(255,179,71,.24); border-color: rgba(255,179,71,.42); background: linear-gradient(135deg, rgba(255,179,71,.15), rgba(255,179,71,.04)); box-shadow: inset 3px 0 0 var(--amber); }
+.signal-card.observing .entry-guidance-icon { border-color: rgba(255,179,71,.45); background: rgba(255,179,71,.12); color: #ffd18a; }
+.signal-card.observing .entry-guidance small { color: #ffd18a; }
 @keyframes entryGuidancePulse { 0%, 100% { outline: 0 solid transparent; } 50% { outline: 3px solid var(--guidance-glow); } }
 @media (prefers-reduced-motion: reduce) { .entry-guidance { animation: none; } }
 .signal-copy p { max-width: 480px; margin: 6px 0 0; overflow: hidden; color: #9aacc1; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
@@ -261,6 +267,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .signal-card.sell .signal-icon { animation: sell-glow 1.9s ease-in-out infinite; }
 .signal-card.probable .signal-icon { border-color: rgba(199,162,255,.34); background: rgba(199,162,255,.1); color: var(--probable); animation: probable-glow 2.1s ease-in-out infinite; }
 .signal-card.probable h1 { color: var(--probable); font-size: 22px; }
+.signal-card.expired .signal-icon { border-color: rgba(255,179,71,.38); background: rgba(255,179,71,.1); color: #ffd18a; animation: stabilityPulse 1.8s ease-in-out infinite; }
+.signal-card.expired h1 { color: #ffd18a; font-size: 20px; }
+.signal-card.observing .signal-icon { border-color: rgba(255,179,71,.38); background: rgba(255,179,71,.1); color: #ffd18a; animation: stabilityPulse 1.8s ease-in-out infinite; }
+.signal-card.observing h1 { color: #ffd18a; font-size: 18px; }
 
 .market-facts { display: grid; grid-template-columns: repeat(2, 1fr); align-content: center; padding: 12px 18px; border-right: 1px solid var(--line); }
 .market-facts > div { min-width: 0; padding: 9px 12px; }

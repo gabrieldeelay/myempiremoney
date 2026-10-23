@@ -61,10 +61,10 @@ function analyzeCandles() {
 }
 
 function prepareOcrCrop(tab) {
-  const cropTop = Math.max(0, Math.round(tab.y - tab.height * .82));
-  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * .3));
-  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * .76));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .72));
+  const cropTop = Math.max(0, Math.round(tab.y - tab.height * .86));
+  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * .08));
+  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * .84));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .58));
   const scale = 4;
   const source = document.createElement("canvas");
   source.width = cropWidth;
@@ -195,7 +195,7 @@ async function readVisibleText(activeTab, force = false) {
     const asset = fuzzyMatchAsset(text);
     missedAssetReads = asset ? 0 : missedAssetReads + 1;
     return {
-      asset: asset || (missedAssetReads >= 2 ? null : lastAsset),
+      asset: asset || lastAsset,
       balance: balanceFromText(text),
       activeTabDetected: true
     };
