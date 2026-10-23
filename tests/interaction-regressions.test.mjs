@@ -138,7 +138,7 @@ assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
 assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desaparecer automaticamente quando a leitura começar");
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
-assert.match(screenReader, /screen-vision\.js\?v=3\.8\.0/, "a leitura deve carregar a nova lógica de reversão sem usar cache antigo");
+assert.match(screenReader, /screen-vision\.js\?v=3\.9\.6/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.9\.5/, "o painel deve carregar a direção travada sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
@@ -156,12 +156,14 @@ assert.match(styles, /\.signal-card\.observing/, "uma possível reversão ainda 
 assert.match(screenReader, /source: "screen-capture"/, "o painel deve identificar sinais produzidos pela leitura visual");
 assert.match(screenReader, /Tesseract\.createWorker/, "o ativo visível deve ser identificado localmente por OCR");
 assert.match(screenReader, /const scale = 4/, "o rótulo pequeno do ativo deve ser ampliado antes do OCR");
-assert.match(screenReader, /tab\.x \+ tab\.width \* \.08/, "a leitura do ativo deve incluir o começo de nomes como AUD\/JPY e EUR\/USD");
-assert.match(screenReader, /tab\.width \* \.84/, "a leitura do ativo deve capturar o nome completo sem depender do centro da aba");
+assert.match(screenReader, /tab\.x \+ tab\.width \* \.04/, "a leitura do ativo deve incluir o começo de nomes como AUD\/JPY e EUR\/USD");
+assert.match(screenReader, /tab\.width \* \.92/, "a leitura do ativo deve capturar o nome completo sem depender do centro da aba");
 assert.match(screenReader, /max - min < 70/, "o OCR deve remover as cores do ícone e preservar o texto claro da aba");
 assert.match(screenReader, /setInterval\(inspectFrame, 850\)/, "a troca da aba ativa deve ser percebida em menos de um segundo");
 assert.match(styles, /@keyframes screenReaderPromptPulse/, "o aviso de ativação deve chamar atenção sem cobrir o gráfico inteiro");
 assert.match(screenReader, /readVisibleText\(activeTab, tabMoved \|\| !lastAsset\)/, "mudar a aba deve forçar uma leitura imediata do novo ativo");
+assert.match(app, /analysisForIdentifiedAsset\(\)/, "o painel deve remover a leitura anterior enquanto identifica o novo ativo");
+assert.match(app, /A indicação anterior foi removida para não misturar análises de ativos diferentes\./, "o painel não pode manter um sinal sem saber a qual ativo ele pertence");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");
 assert.match(screenReader, /setupChecked:\s*Boolean\(setup\.timeframe && setup\.expiration\)/, "os avisos devem esperar a leitura conjunta do gráfico e da expiração");

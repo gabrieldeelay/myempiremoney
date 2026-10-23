@@ -24,6 +24,11 @@ test("reconhece o ativo mesmo com erro comum do OCR", () => {
   assert.equal(fuzzyMatchAsset("AUD/JPY"), "AUD/JPY");
 });
 
+test("reconhece pares de moedas mesmo com uma letra confundida pelo OCR", () => {
+  assert.equal(fuzzyMatchAsset("EUR/USO"), "EUR/USD");
+  assert.equal(fuzzyMatchAsset("AUD/JRY"), "AUD/JPY");
+});
+
 test("localiza a linha azul da aba ativa", () => {
   const image = frame();
   paint(image, 55, 25, 89, 27, [0, 138, 255]);

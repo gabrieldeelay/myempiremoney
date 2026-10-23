@@ -55,6 +55,22 @@ export function fuzzyMatchAsset(value = "") {
     }
   }
 
+  let bestFiat = null;
+  for (let start = 0; start <= Math.max(0, compact.length - 6); start += 1) {
+    const candidate = compact.slice(start, start + 6);
+    if (candidate.length !== 6) continue;
+    for (const left of FIAT) {
+      for (const right of FIAT) {
+        if (left === right) continue;
+        const pair = `${left}${right}`;
+        const distance = editDistance(candidate, pair);
+        const similarity = 1 - distance / 6;
+        if (!bestFiat || similarity > bestFiat.similarity) bestFiat = { asset: `${left}/${right}`, similarity };
+      }
+    }
+  }
+  if (bestFiat?.similarity >= .83) return bestFiat.asset;
+
   const tokens = text.split(/[^A-Z]+/).filter(token => token.length >= 3);
   let best = null;
   for (const token of tokens) {

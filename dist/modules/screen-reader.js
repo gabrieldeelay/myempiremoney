@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.8.0";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.9.6";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.9.3";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
@@ -61,10 +61,10 @@ function analyzeCandles() {
 }
 
 function prepareOcrCrop(tab) {
-  const cropTop = Math.max(0, Math.round(tab.y - tab.height * .86));
-  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * .08));
-  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * .84));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .58));
+  const cropTop = Math.max(0, Math.round(tab.y - tab.height * .92));
+  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * .04));
+  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * .92));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .68));
   const scale = 4;
   const source = document.createElement("canvas");
   source.width = cropWidth;

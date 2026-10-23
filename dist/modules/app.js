@@ -122,6 +122,17 @@ function effectiveAnalysis() {
     }
     return live;
   }
+
+function analysisForIdentifiedAsset() {
+  if (state.asset) return effectiveAnalysis();
+  return {
+    direction: "WAIT",
+    confidence: 0,
+    reason: "Identificando o ativo selecionado antes de iniciar a nova leitura.",
+    factors: ["A indicação anterior foi removida para não misturar análises de ativos diferentes."],
+    source: "asset-identification"
+  };
+}
   if (liveDirection !== "WAIT" && Number(live.confidence) > 0) return live;
   return {
     ...live,
@@ -798,7 +809,7 @@ function renderState(next = {}, source = "extension") {
   $("riskAmount").textContent = formatMoney(state.risk.baseAmount);
   renderSetupWarnings();
 
-  displayedAnalysis = signalStabilizer.update(effectiveAnalysis(), state.asset);
+  displayedAnalysis = signalStabilizer.update(analysisForIdentifiedAsset(), state.asset);
   renderSignal(displayedAnalysis);
 
   const pulse = $("monitorPulse");
