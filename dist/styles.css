@@ -270,28 +270,29 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   contain: layout;
 }
 .robot-overlay.dragging { transition: none; user-select: none; }
-.robot-toggle {
-  position: absolute;
-  z-index: 2;
-  top: -8px;
-  right: 55px;
+.robot-avatar {
+  width: 68px;
+  display: grid;
+  justify-items: center;
+  align-self: end;
+  justify-self: end;
+  gap: 5px;
+}
+.robot-controls {
+  position: relative;
+  z-index: 4;
+  width: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.robot-toggle,
+.robot-voice-toggle {
+  position: static;
+  flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(255, 255, 255, .12);
-  border-radius: 50%;
-  background: #f4f8ff;
-  color: #18304f;
-  cursor: pointer;
-  font-weight: 850;
-}
-.robot-toggle:hover { border-color: var(--line-orange); color: var(--orange); }
-.robot-voice-toggle {
-  position: absolute;
-  z-index: 3;
-  top: -8px;
-  right: 20px;
-  width: 30px;
-  height: 30px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -300,10 +301,14 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   background: #f4f8ff;
   color: #18304f;
   cursor: pointer;
-  font-size: 14px;
+  font-weight: 850;
   line-height: 1;
   box-shadow: 0 7px 18px rgba(0, 0, 0, .24);
   transition: border-color .18s ease, color .18s ease, background .18s ease, transform .18s ease;
+}
+.robot-toggle:hover { border-color: var(--line-orange); color: var(--orange); }
+.robot-voice-toggle {
+  font-size: 14px;
 }
 .robot-voice-toggle:hover { border-color: #66a3ff; color: #185bb8; transform: translateY(-1px); }
 .robot-voice-toggle[aria-pressed="true"] { border-color: rgba(255, 93, 101, .45); background: #fff0f1; color: #c53340; }
@@ -343,8 +348,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .robot-questions[hidden] { display: none; }
 .robot-questions button { width: 100%; min-height: 42px; padding: 10px 11px; border: 1px solid rgba(25, 56, 94, .16); border-radius: 10px; background: rgba(255,255,255,.62); color: #213a59; cursor: pointer; text-align: left; font-size: 13px; font-weight: 750; }
 .robot-questions button:hover { border-color: rgba(67,127,219,.36); color: #185bb8; }
-.robot-overlay.questions-open { width: min(420px, calc(100vw - 28px)); }
-.robot-character { position: relative; width: 68px; height: 91px; justify-self: end; transform-origin: center bottom; cursor: grab; touch-action: none; animation: robot-idle 3.6s ease-in-out infinite; }
+.robot-overlay.questions-open { width: min(390px, calc(100vw - 28px)); }
+.robot-character { position: relative; width: 68px; height: 91px; transform-origin: center bottom; cursor: grab; touch-action: none; animation: robot-idle 3.6s ease-in-out infinite; }
 .robot-overlay.dragging .robot-character { cursor: grabbing; animation: none; }
 .robot-antenna { position: absolute; z-index: 0; top: 0; left: 31px; width: 5px; height: 18px; border-radius: 4px; background: #cbd8e8; transform: rotate(8deg); }
 .robot-antenna i { position: absolute; top: -3px; left: -3px; width: 11px; height: 11px; border: 3px solid #233956; border-radius: 50%; background: #f8fbff; box-shadow: 0 0 12px rgba(197,220,250,.7); }
@@ -360,8 +365,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .robot-overlay.talking .robot-mouth { height: 6px; border: 0; border-radius: 50%; background: #1c2d44; animation: robot-talk .2s steps(2) 8; }
 .robot-overlay.minimized { width: 74px; grid-template-columns: 74px; }
 .robot-overlay.minimized .robot-bubble { display: none; }
-.robot-overlay.minimized .robot-toggle { top: -5px; right: 47px; background: #f4f8ff; color: #18304f; }
-.robot-overlay.minimized .robot-voice-toggle { top: -5px; right: 12px; }
+.robot-overlay.minimized .robot-avatar { width: 74px; }
 .robot-overlay.minimized .robot-character { cursor: pointer; }
 @keyframes robot-idle { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-4px) rotate(1deg); } }
 @keyframes robot-blink { 0%, 45%, 49%, 100% { transform: scaleY(1); } 47% { transform: scaleY(.08); } }
@@ -408,8 +412,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   .macro-heading small { display: none; }
   .macro-buttons { grid-template-columns: repeat(2, 1fr); }
   .robot-overlay { right: 12px; bottom: 12px; width: min(340px, calc(100vw - 24px)); grid-template-columns: minmax(0, 1fr) 62px; }
-  .robot-character { transform: scale(.86); transform-origin: right bottom; }
+  .robot-avatar { width: 62px; gap: 1px; }
+  .robot-controls { width: 62px; gap: 4px; }
+  .robot-character { transform: scale(.86); transform-origin: center bottom; }
   .robot-overlay.minimized { width: 62px; grid-template-columns: 62px; }
+  .robot-overlay.minimized .robot-avatar { width: 62px; }
 }
 
 html.auth-checking body { visibility: hidden; }

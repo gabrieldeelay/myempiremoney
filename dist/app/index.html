@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#061326" />
   <title>Atlas | Assistente de operações</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=3.7.0" />
+  <link rel="stylesheet" href="/styles.css?v=3.7.1" />
 </head>
 <body>
   <div class="app-shell">
@@ -101,8 +101,6 @@
     </main>
 
     <aside class="robot-overlay" id="robotOverlay" aria-label="Comentários do Atlas Bot">
-      <button class="robot-voice-toggle" id="robotVoiceToggle" type="button" aria-pressed="false" aria-label="Silenciar voz do Atlas" title="Silenciar voz do Atlas">🔊</button>
-      <button class="robot-toggle" id="robotToggle" type="button" aria-expanded="true" aria-label="Minimizar Atlas Bot">−</button>
       <div class="robot-bubble">
         <p id="robotLine" aria-live="polite">Calma aí, tô esperando a tela terminar de falar comigo.</p>
         <div class="robot-questions" id="robotQuestions" hidden>
@@ -111,15 +109,21 @@
           <button type="button" data-question="risk">Qual é o risco agora?</button>
         </div>
       </div>
-      <div class="robot-character" id="robotCharacter" role="button" tabindex="0" aria-label="Conversar com o Atlas Bot">
-        <span class="robot-antenna"><i></i></span>
-        <div class="robot-head">
-          <span class="robot-eye left"></span>
-          <span class="robot-eye right"></span>
-          <span class="robot-mouth"></span>
+      <div class="robot-avatar">
+        <div class="robot-controls" aria-label="Controles do Atlas Bot">
+          <button class="robot-toggle" id="robotToggle" type="button" aria-expanded="true" aria-label="Minimizar Atlas Bot">−</button>
+          <button class="robot-voice-toggle" id="robotVoiceToggle" type="button" aria-pressed="false" aria-label="Silenciar voz do Atlas" title="Silenciar voz do Atlas">🔊</button>
         </div>
-        <div class="robot-neck"></div>
-        <div class="robot-body"><i>↗</i></div>
+        <div class="robot-character" id="robotCharacter" role="button" tabindex="0" aria-label="Conversar com o Atlas Bot">
+          <span class="robot-antenna"><i></i></span>
+          <div class="robot-head">
+            <span class="robot-eye left"></span>
+            <span class="robot-eye right"></span>
+            <span class="robot-mouth"></span>
+          </div>
+          <div class="robot-neck"></div>
+          <div class="robot-body"><i>↗</i></div>
+        </div>
       </div>
     </aside>
   </div>
@@ -174,7 +178,7 @@
   <canvas id="screenReaderCanvas" hidden></canvas>
 
   <script type="module" src="/modules/app-guard.js?v=3.2.0"></script>
-  <script type="module" src="/modules/app.js?v=3.7.0"></script>
+  <script type="module" src="/modules/app.js?v=3.7.1"></script>
   <script type="module" src="/modules/insights.js?v=3.2.0"></script>
   <script type="module" src="/modules/screen-reader.js?v=3.6.1"></script>
 </body>

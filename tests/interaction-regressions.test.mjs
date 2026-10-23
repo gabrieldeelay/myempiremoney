@@ -16,6 +16,8 @@ const insights = await readFile(new URL("../dist/modules/insights.js", import.me
 const newsApi = await readFile(new URL("../api/news.js", import.meta.url), "utf8");
 const extensionBackground = await readFile(new URL("../extension/background.js", import.meta.url), "utf8");
 const screenReader = await readFile(new URL("../dist/modules/screen-reader.js", import.meta.url), "utf8");
+const ttsApi = await readFile(new URL("../api/tts.js", import.meta.url), "utf8");
+const server = await readFile(new URL("../app.js", import.meta.url), "utf8");
 
 assert.equal(normalizeAssetName("ETHUSDT"), "ETHEREUM");
 assert.equal(normalizeAssetName("sol/usdt"), "SOLANA");
@@ -84,7 +86,21 @@ assert.match(styles, /max-height:\s*calc\(100dvh - 24px\)/, "o balão deve perma
 assert.match(app, /robotLine"\)\.innerHTML = formatRobotMessage/, "o balão deve aceitar ênfase segura em negrito e itálico");
 assert.match(app, /createOscillator\(\)/, "o robô deve emitir um som local suave");
 assert.match(html, /id="robotVoiceToggle"/, "o robô deve oferecer um controle de voz direto no personagem");
+assert.match(html, /class="robot-avatar"/, "os controles e o personagem devem formar um único componente visual");
+assert.match(styles, /\.robot-controls\s*\{[^}]*display:\s*flex/s, "os controles devem permanecer presos ao personagem");
+assert.doesNotMatch(styles, /\.robot-voice-toggle\s*\{[^}]*position:\s*absolute/s, "o áudio não pode flutuar pelo topo de um balão expandido");
 assert.match(app, /new SpeechSynthesisUtterance\(spokenText\)/, "as mensagens do robô devem ser narradas em português");
+assert.match(app, /fetch\("\/api\/tts"/, "o robô deve priorizar a narração neural");
+assert.match(app, /this\.voiceQueue = \[spokenText\]/, "uma nova mensagem não pode interromper a fala atual");
+assert.match(app, /if \(moves % 5 === 0\)/, "o robô só deve reclamar no quinto movimento e em seus múltiplos");
+assert.match(app, /\{ count: moves \}/, "a reclamação deve informar quantas vezes o robô foi movido");
+assert.match(ttsApi, /pt-BR-AntonioNeural/, "a voz principal deve ser masculina e natural em português brasileiro");
+assert.match(ttsApi, /Ocp-Apim-Subscription-Key/, "o servidor deve chamar o Azure Speech sem expor a chave ao navegador");
+assert.match(ttsApi, /requireUser\(req\)/, "a geração de voz deve exigir uma sessão válida");
+assert.match(server, /"\/api\/tts": require\("\.\/api\/tts"\)/, "a rota da voz neural deve estar publicada");
+assert.match(adminPage, /id="speechApiKey"/, "o administrador deve poder configurar a chave da voz neural");
+assert.match(adminPage, /id="speechRegion"/, "o administrador deve poder configurar a região da voz neural");
+assert.match(adminModule, /speechChanged \? speech : \{\}/, "o painel deve salvar a configuração da voz neural");
 assert.match(app, /utterance\.pitch = \.82/, "a narração deve usar um timbre masculino");
 assert.match(app, /if \(this\.voiceSpeaking\) this\.voiceQueue = \[spokenText\]/, "a fala atual não pode ser cortada e a fila deve conservar apenas a mensagem mais recente");
 assert.match(app, /atlas-robot-audio-enabled/, "a preferência de mudo deve permanecer salva no navegador");

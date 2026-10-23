@@ -1,6 +1,7 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.5.0";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.6.1";
+import { getAccessToken } from "./atlas-client.js?v=3.2.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -253,6 +254,9 @@ const robot = {
   voiceSpeaking: false,
   activeVoiceText: "",
   narratorVoice: null,
+  voiceAudio: null,
+  voiceObjectUrl: "",
+  voiceRequestController: null,
   phrases: {
     waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
     noaccess: ["A Hezilex abriu. Agora ative a leitura visual para eu interpretar as velas sem extensão.", "O gráfico está na tela, mas a leitura visual ainda está desligada. Clique em ‘Ativar leitura’ e escolha esta aba.", "Sem extensão, eu leio a imagem da aba. Só falta você autorizar o compartilhamento da tela."],
@@ -279,7 +283,7 @@ const robot = {
     protectionTaken: ["[[good:Proteção bem posicionada.]] O preço chegou à região prevista antes da nova **{direction}** em {asset}.", "[[good:Boa leitura da proteção.]] A reentrada em **{direction}** aconteceu na faixa planejada de {asset}.", "A proteção respeitou o nível técnico. Agora deixa o gráfico trabalhar sem inventar uma terceira entrada."],
     protectionEarly: ["[[bad:Proteção antecipada.]] O preço ainda não tinha alcançado a região planejada de {asset}.", "Você protegeu cedo em {asset}. A ideia era esperar o preço chegar ao nível marcado antes da nova **{direction}**.", "[[bad:Faltou esperar o nível.]] A proteção veio antes do preço confirmar a região em {asset}."],
     adclose: ["Fechou o anúncio. Finalmente uma operação com 100% de acerto.", "Anúncio eliminado. Essa entrada eu aprovo sem indicador.", "Boa. Menos propaganda, mais gráfico e só um pouco menos de caos.", "Fechou o anúncio com precisão. Se operar assim, talvez dê jogo."],
-    dragged: ["De novo me arrastando? Eu sou analista, não ícone de desktop.", "Já é a segunda mudança. Escolhe um canto e deixa eu trabalhar, criatura.", "Me põe aqui, me põe ali… o gráfico parado e eu fazendo turismo.", "Você mexeu em mim de novo. Isso não conta como gerenciamento de risco."],
+    dragged: ["Já são {count} mudanças. Eu sou analista, não ícone de desktop.", "{count} passeios pelo gráfico. Escolhe um canto e deixa eu trabalhar, criatura.", "Você já me arrastou {count} vezes. O gráfico parado e eu fazendo turismo.", "Mudança número {count}. Isso ainda não conta como gerenciamento de risco."],
     win: ["[[good:Resultado positivo]] em {asset}. O mérito está na disciplina, não na euforia.", "[[good:Lucro confirmado]] em {asset}. Preserve o método que trouxe o resultado.", "{asset} terminou no [[good:positivo]]. Boa execução vale mais que comemoração antecipada."],
     loss: ["[[bad:Resultado negativo]] em {asset}. Revanche não é indicador.", "[[bad:Perda confirmada]] em {asset}. Revise o contexto sem aumentar a mão.", "{asset} terminou no [[bad:negativo]]. Aceite o dado e proteja a próxima decisão."],
     draw: ["Empate em {asset}. Nem o mercado quis bancar essa história.", "{asset} devolveu a entrada. Emoção gasta, saldo preservado.", "Resultado neutro em {asset}. Próxima vela, mesmo plano."],
@@ -305,6 +309,15 @@ const robot = {
     this.voiceQueue = [];
     this.voiceSpeaking = false;
     this.activeVoiceText = "";
+    this.voiceRequestController?.abort();
+    this.voiceRequestController = null;
+    if (this.voiceAudio) {
+      this.voiceAudio.pause();
+      this.voiceAudio.removeAttribute("src");
+      this.voiceAudio = null;
+    }
+    if (this.voiceObjectUrl) URL.revokeObjectURL(this.voiceObjectUrl);
+    this.voiceObjectUrl = "";
     window.speechSynthesis?.cancel();
     clearTimeout(this.speechTimer);
     $("robotOverlay").classList.remove("talking");
@@ -347,7 +360,7 @@ const robot = {
     return this.narratorVoice;
   },
   canNarrate() {
-    return this.soundEnabled && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+    return this.soundEnabled && ("Audio" in window || ("speechSynthesis" in window && "SpeechSynthesisUtterance" in window));
   },
   enqueueNarration(line) {
     if (!this.canNarrate()) return false;
@@ -358,9 +371,11 @@ const robot = {
     this.drainNarration();
     return true;
   },
-  drainNarration() {
-    if (!this.canNarrate() || this.voiceSpeaking || !this.voiceQueue.length) return;
-    const spokenText = this.voiceQueue.shift();
+  playBrowserNarration(spokenText, finish) {
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      finish();
+      return;
+    }
     const utterance = new SpeechSynthesisUtterance(spokenText);
     const voice = this.narratorVoice || this.selectNarratorVoice();
     if (voice) utterance.voice = voice;
@@ -368,18 +383,71 @@ const robot = {
     utterance.rate = .96;
     utterance.pitch = .82;
     utterance.volume = .92;
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    window.speechSynthesis.speak(utterance);
+  },
+  async playNaturalNarration(spokenText, finish) {
+    try {
+      const token = await getAccessToken();
+      const controller = new AbortController();
+      this.voiceRequestController = controller;
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: {
+          Accept: "audio/mpeg",
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ text: spokenText }),
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error("Voz neural indisponível");
+      const blob = await response.blob();
+      if (!blob.size || !this.soundEnabled) return finish();
+      this.voiceObjectUrl = URL.createObjectURL(blob);
+      const audio = new Audio(this.voiceObjectUrl);
+      this.voiceAudio = audio;
+      audio.volume = .92;
+      audio.onended = finish;
+      audio.onerror = () => {
+        audio.onended = null;
+        this.voiceAudio = null;
+        if (this.voiceObjectUrl) URL.revokeObjectURL(this.voiceObjectUrl);
+        this.voiceObjectUrl = "";
+        this.playBrowserNarration(spokenText, finish);
+      };
+      await audio.play();
+    } catch (error) {
+      if (error?.name === "AbortError" || !this.soundEnabled) finish();
+      else this.playBrowserNarration(spokenText, finish);
+    } finally {
+      this.voiceRequestController = null;
+    }
+  },
+  drainNarration() {
+    if (!this.canNarrate() || this.voiceSpeaking || !this.voiceQueue.length) return;
+    const spokenText = this.voiceQueue.shift();
     this.voiceSpeaking = true;
     this.activeVoiceText = spokenText;
     $("robotOverlay").classList.add("talking");
+    let finished = false;
     const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (this.voiceAudio) {
+        this.voiceAudio.onended = null;
+        this.voiceAudio.onerror = null;
+        this.voiceAudio = null;
+      }
+      if (this.voiceObjectUrl) URL.revokeObjectURL(this.voiceObjectUrl);
+      this.voiceObjectUrl = "";
       this.voiceSpeaking = false;
       this.activeVoiceText = "";
       if (this.soundEnabled && this.voiceQueue.length) this.drainNarration();
       else $("robotOverlay").classList.remove("talking");
     };
-    utterance.onend = finish;
-    utterance.onerror = finish;
-    window.speechSynthesis.speak(utterance);
+    this.playNaturalNarration(spokenText, finish);
   },
   playSound(context) {
     if (!this.soundEnabled || !this.soundReady || !this.audioContext) return;
@@ -842,7 +910,7 @@ function finishRobotDrag(event) {
   suppressRobotClickUntil = Date.now() + 350;
   const moves = Number(localStorage.getItem("atlas-robot-moves") || 0) + 1;
   localStorage.setItem("atlas-robot-moves", String(moves));
-  if (moves >= 2) robot.speak("dragged", {}, true, true);
+  if (moves % 5 === 0) robot.speak("dragged", { count: moves }, true, true);
 }
 $("robotCharacter").addEventListener("pointerup", finishRobotDrag);
 $("robotCharacter").addEventListener("pointercancel", finishRobotDrag);
