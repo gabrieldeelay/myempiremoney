@@ -1,6 +1,6 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
-import { createSignalStabilizer } from "./signal-stability.js?v=3.9.1";
-import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.6.1";
+import { createSignalStabilizer } from "./signal-stability.js?v=3.9.3";
+import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.9.3";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -161,8 +161,8 @@ function renderSignal(analysis = effectiveAnalysis()) {
   const reversalSetup = analysis?.setup === "INTRACANDLE_REVERSAL";
   const entryAdvice = entryBlocked
     ? finalDirection === "BUY"
-      ? "A compra perdeu o ponto seguro. Não entre atrasado; aguarde uma nova confirmação."
-      : "A venda perdeu o ponto seguro. Não entre atrasado; aguarde uma nova confirmação."
+      ? "A direção continua compradora. O ponto desta vela passou; aguarde uma nova entrada."
+      : "A direção continua vendedora. O ponto desta vela passou; aguarde uma nova entrada."
     : watchingReversal
       ? finalDirection === "BUY"
         ? "Queda forte detectada. Espere a vela reagir para cima antes de considerar compra."
@@ -185,7 +185,7 @@ function renderSignal(analysis = effectiveAnalysis()) {
   card.classList.toggle("expired", entryBlocked);
   card.classList.toggle("observing", watchingReversal);
   $("analysisDirection").textContent = entryBlocked
-    ? `${finalDirection === "BUY" ? "COMPRA" : "VENDA"} ENCERRADA`
+    ? finalDirection === "BUY" ? "COMPRA" : "VENDA"
     : watchingReversal
       ? `${finalDirection === "BUY" ? "COMPRA" : "VENDA"} EM OBSERVAÇÃO`
     : finalDirection === "BUY"
@@ -206,7 +206,7 @@ function renderSignal(analysis = effectiveAnalysis()) {
     const initializing = analysis?.stability === "initializing";
     const reversal = analysis?.setup === "INTRACANDLE_REVERSAL";
     const stretched = analysis?.setup === "STRETCHED_CANDLE";
-    stability.textContent = reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched ? "NÃO ENTRE AGORA" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
+    stability.textContent = reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "NÃO ENTRE AGORA" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
     stability.className = `signal-stability ${checking || initializing || stretched ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
   }
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
@@ -824,6 +824,9 @@ function renderState(next = {}, source = "extension") {
   const newIntracandleReversal = displayedAnalysis?.setup === "INTRACANDLE_REVERSAL"
     && displayedAnalysis?.direction !== "WAIT"
     && (previousSetup !== "INTRACANDLE_REVERSAL" || previousDirection === "WAIT");
+  const renewedSameDirection = displayedAnalysis?.entryOpportunityRenewed === true
+    && displayedAnalysis.direction === previousDirection
+    && ["BUY", "SELL"].includes(displayedAnalysis.direction);
   if (newOperation && state.manualOperation.outcome === "OPEN") {
     flashTrade(state.manualOperation.direction, state.manualOperation.exposure?.severity);
   }
@@ -837,6 +840,14 @@ function renderState(next = {}, source = "extension") {
     const side = displayedAnalysis.direction === "BUY" ? "COMPRA" : "VENDA";
     showToast(`Possível reversão para ${side} nesta vela. Aguarde o melhor ponto de entrada.`, "info", 8000);
     robot.speak(displayedAnalysis.direction === "BUY" ? "reversalBuy" : "reversalSell", { asset: state.asset }, true, true);
+  }
+  else if (renewedSameDirection) {
+    const side = displayedAnalysis.direction === "BUY" ? "COMPRA" : "VENDA";
+    flashTrade(displayedAnalysis.direction);
+    showToast(`Nova oportunidade de ${side} confirmada em ${state.asset}.`, "success", 7000);
+    if (robot.canSpeakAutomatically()) {
+      robot.speak(displayedAnalysis.direction === "BUY" ? "buy" : "sell", { confidence: displayedAnalysis.confidence }, true, true);
+    }
   }
   else if (justLoggedIn) return;
   else if (displayedAnalysis.direction !== previousDirection

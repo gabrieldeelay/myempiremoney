@@ -14,6 +14,7 @@ test("tolera erros comuns do OCR nos controles de minuto", () => {
   assert.equal(minuteFromOcr("5M"), 5);
   assert.equal(minuteFromOcr("I mIN"), 1);
   assert.equal(minuteFromOcr("00:14"), null);
+  assert.equal(minuteFromOcr("1m 5 min"), null);
 });
 
 test("não aceita uma leitura isolada e descarta um valor antigo quando o OCR para de confirmar", () => {
@@ -26,6 +27,16 @@ test("não aceita uma leitura isolada e descarta um valor antigo quando o OCR pa
   assert.equal(reading.update(5), 5);
   clock = 5000;
   assert.equal(reading.update(null), null);
+});
+
+test("um 5m confirmado não vira aviso por ruídos isolados de 1m", () => {
+  const reading = createMinuteReadingStabilizer({ requiredHits: 2, warningHits: 4 });
+  assert.equal(reading.update(5), null);
+  assert.equal(reading.update(5), 5);
+  assert.equal(reading.update(1), 5);
+  assert.equal(reading.update(1), 5);
+  assert.equal(reading.update(1), 5);
+  assert.equal(reading.update(1), 1);
 });
 
 test("avisa quando gráfico e expiração não estão em cinco minutos", () => {

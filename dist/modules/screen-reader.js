@@ -1,6 +1,6 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
 import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.8.0";
-import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.6.1";
+import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.9.3";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
 const statusLabels = [...document.querySelectorAll("[data-screen-reader-status]")];
@@ -112,13 +112,13 @@ function frameBounds() {
 function prepareSetupCrop(kind, activeTab) {
   const frame = frameBounds();
   const region = kind === "timeframe"
-    ? { left: .055, width: .17 }
-    : { left: .67, width: .22 };
+    ? { left: .055, width: .18 }
+    : { left: .78, width: .21 };
   const cropLeft = Math.max(0, Math.round(frame.x + frame.width * region.left));
   const cropTop = Math.max(0, Math.round(activeTab?.y ? activeTab.y + 4 : frame.y + frame.height * .18));
   const cropWidth = Math.min(canvas.width - cropLeft, Math.round(frame.width * region.width));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * .18));
-  const scale = 3;
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * .085));
+  const scale = 4;
   ocrCanvas.width = Math.max(1, cropWidth * scale);
   ocrCanvas.height = Math.max(1, cropHeight * scale);
   ocrContext.imageSmoothingEnabled = false;

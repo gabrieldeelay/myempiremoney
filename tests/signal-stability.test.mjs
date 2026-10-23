@@ -94,6 +94,46 @@ test("encerra a entrada sem apagar imediatamente a direção que havia sido conf
   assert.equal(blocked.stability, "checking");
 });
 
+test("mantém a direção confirmada mesmo quando leituras seguintes voltam para aguardar", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
+  assert.equal(filter.update({ direction: "SELL", confidence: 80 }, "AUD/JPY").direction, "SELL");
+  clock = 90000;
+  const held = filter.update({ direction: "WAIT", confidence: 44 }, "AUD/JPY");
+  assert.equal(held.direction, "SELL");
+  assert.equal(held.stability, "checking");
+});
+
+test("não reabre na mesma vela um ponto de entrada que já foi bloqueado", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
+  filter.update({ direction: "SELL", confidence: 84, technical: { lastCandle: { centerX: 180, width: 12 } } }, "AUD/JPY");
+  clock = 500;
+  filter.update({ direction: "WAIT", confidence: 60, setup: "STRETCHED_CANDLE", blockedDirection: "SELL", technical: { lastCandle: { centerX: 180, width: 12 } } }, "AUD/JPY");
+  clock = 5000;
+  const sameCandle = filter.update({ direction: "SELL", confidence: 82, setup: "TREND_CONTINUATION", technical: { lastCandle: { centerX: 182, width: 12 } } }, "AUD/JPY");
+  assert.equal(sameCandle.direction, "SELL");
+  assert.equal(sameCandle.entryBlocked, true);
+  clock = 8000;
+  const nextCandle = filter.update({ direction: "SELL", confidence: 82, setup: "TREND_CONTINUATION", technical: { lastCandle: { centerX: 202, width: 12 } } }, "AUD/JPY");
+  assert.equal(nextCandle.direction, "SELL");
+  assert.equal(nextCandle.entryBlocked, undefined);
+  assert.equal(nextCandle.entryOpportunityRenewed, true);
+  assert.equal(nextCandle.stability, "stable");
+});
+
+test("não anuncia nova venda sem uma nova leitura vendedora confirmada", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
+  filter.update({ direction: "SELL", confidence: 84, technical: { lastCandle: { centerX: 180, width: 12 } } }, "AUD/JPY");
+  clock = 500;
+  filter.update({ direction: "WAIT", confidence: 60, setup: "STRETCHED_CANDLE", blockedDirection: "SELL", technical: { lastCandle: { centerX: 180, width: 12 } } }, "AUD/JPY");
+  clock = 8000;
+  const noEntry = filter.update({ direction: "WAIT", confidence: 50, technical: { lastCandle: { centerX: 202, width: 12 } } }, "AUD/JPY");
+  assert.equal(noEntry.direction, "SELL");
+  assert.equal(noEntry.entryOpportunityRenewed, undefined);
+});
+
 test("confirma reversão intravela rapidamente sem publicar um único quadro isolado", () => {
   let clock = 0;
   const filter = createSignalStabilizer({ now: () => clock });

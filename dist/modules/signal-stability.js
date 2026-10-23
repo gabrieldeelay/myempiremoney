@@ -31,20 +31,20 @@ export function createSignalStabilizer(options = {}) {
   const now = typeof options.now === "function" ? options.now : () => Date.now();
   const initialConfirmMs = options.initialConfirmMs ?? 3000;
   const switchConfirmMs = options.switchConfirmMs ?? 12000;
-  const waitConfirmMs = options.waitConfirmMs ?? 20000;
   const minHoldMs = options.minHoldMs ?? 35000;
   const initialHits = options.initialHits ?? 3;
   const switchHits = options.switchHits ?? 7;
-  const waitHits = options.waitHits ?? 10;
 
   let asset = "";
   let stable = null;
   let candidate = null;
+  let entryBlock = null;
 
   function reset(nextAsset = "") {
     asset = String(nextAsset || "").trim().toUpperCase();
     stable = null;
     candidate = null;
+    entryBlock = null;
   }
 
   function rememberCandidate(analysis, timestamp) {
@@ -62,7 +62,36 @@ export function createSignalStabilizer(options = {}) {
   function promote(analysis, timestamp) {
     stable = { ...analysis, direction: normalizedDirection(analysis.direction), confidence: normalizedConfidence(analysis.confidence), since: timestamp };
     candidate = null;
+    entryBlock = null;
     return { ...stable, stability: "stable", transition: null };
+  }
+
+  function blockedView(analysis, transition = null) {
+    const direction = entryBlock?.direction || stable?.direction || "WAIT";
+    const side = direction === "BUY" ? "compradora" : "vendedora";
+    return {
+      ...stable,
+      ...analysis,
+      setup: "STRETCHED_CANDLE",
+      direction,
+      confidence: Math.min(stable?.confidence || 100, analysis.confidence || stable?.confidence || 0),
+      entryBlocked: true,
+      expiredDirection: direction,
+      since: stable?.since,
+      stability: "checking",
+      transition,
+      reason: `A direção ${side} permanece, mas o ponto seguro desta vela já passou. Aguarde uma nova entrada na mesma direção ou uma reversão confirmada.`
+    };
+  }
+
+  function movedToNewCandle(analysis, timestamp) {
+    const currentX = Number(analysis?.technical?.lastCandle?.centerX);
+    const blockedX = Number(entryBlock?.candleX);
+    if (Number.isFinite(currentX) && Number.isFinite(blockedX)) {
+      const width = Math.max(4, Number(entryBlock?.candleWidth) || 4);
+      return Math.abs(currentX - blockedX) > width * .75;
+    }
+    return timestamp - Number(entryBlock?.since || timestamp) >= 60000;
   }
 
   function update(input = {}, nextAsset = "") {
@@ -79,17 +108,14 @@ export function createSignalStabilizer(options = {}) {
     if (analysis.setup === "STRETCHED_CANDLE") {
       candidate = null;
       if (stable && analysis.blockedDirection === stable.direction) {
-        return {
-          ...stable,
-          ...analysis,
+        const candle = analysis?.technical?.lastCandle;
+        entryBlock ||= {
           direction: stable.direction,
-          confidence: Math.min(stable.confidence, analysis.confidence || stable.confidence),
-          entryBlocked: true,
-          expiredDirection: stable.direction,
-          since: stable.since,
-          stability: "checking",
-          transition: null
+          since: timestamp,
+          candleX: Number(candle?.centerX),
+          candleWidth: Number(candle?.width)
         };
+        return blockedView(analysis);
       }
       stable = null;
       return { ...analysis, direction: "WAIT", stability: "checking", transition: null };
@@ -97,23 +123,34 @@ export function createSignalStabilizer(options = {}) {
 
     if (analysis.setup === "INTRACANDLE_REVERSAL" && analysis.urgentReversal) {
       const nextCandidate = rememberCandidate(analysis, timestamp);
-      stable = null;
       const confirmed = nextCandidate.hits >= 2 && timestamp - nextCandidate.since >= 700;
       if (confirmed) return promote(analysis, timestamp);
+      const transition = {
+        direction: analysis.direction,
+        confidence: analysis.confidence,
+        hits: nextCandidate.hits,
+        elapsedMs: timestamp - nextCandidate.since,
+        requiredMs: 700,
+        requiredHits: 2,
+        holdRemainingMs: 0
+      };
+      if (stable) return entryBlock ? blockedView(analysis, transition) : { ...stable, stability: "checking", transition };
       return {
         ...analysis,
         direction: "WAIT",
         stability: "checking",
-        transition: {
-          direction: analysis.direction,
-          confidence: analysis.confidence,
-          hits: nextCandidate.hits,
-          elapsedMs: timestamp - nextCandidate.since,
-          requiredMs: 700,
-          requiredHits: 2,
-          holdRemainingMs: 0
-        }
+        transition
       };
+    }
+
+    let entryOpportunityRenewed = false;
+    if (entryBlock) {
+      if (!movedToNewCandle(analysis, timestamp)) {
+        candidate = null;
+        return blockedView(analysis);
+      }
+      entryOpportunityRenewed = analysis.direction === stable?.direction && analysis.confidence >= 62;
+      entryBlock = null;
     }
 
     if (!stable) {
@@ -130,16 +167,32 @@ export function createSignalStabilizer(options = {}) {
       candidate = null;
       const confidence = Math.round((stable.confidence * .72) + (analysis.confidence * .28));
       stable = { ...stable, ...analysis, confidence, since: stable.since };
-      return { ...stable, stability: "stable", transition: null };
+      return { ...stable, stability: "stable", transition: null, ...(entryOpportunityRenewed ? { entryOpportunityRenewed: true } : {}) };
+    }
+
+    if (analysis.direction === "WAIT") {
+      candidate = null;
+      return {
+        ...stable,
+        stability: "checking",
+        transition: {
+          direction: "WAIT",
+          confidence: analysis.confidence,
+          hits: 0,
+          elapsedMs: 0,
+          requiredMs: null,
+          requiredHits: null,
+          holdRemainingMs: 0
+        }
+      };
     }
 
     const nextCandidate = rememberCandidate(analysis, timestamp);
     const candidateAge = timestamp - nextCandidate.since;
     const stableAge = timestamp - stable.since;
-    const movingToWait = nextCandidate.direction === "WAIT";
-    const requiredMs = movingToWait ? waitConfirmMs : switchConfirmMs;
-    const requiredHits = movingToWait ? waitHits : switchHits;
-    const confidenceEnough = movingToWait || nextCandidate.analysis.confidence >= 62;
+    const requiredMs = switchConfirmMs;
+    const requiredHits = switchHits;
+    const confidenceEnough = nextCandidate.analysis.confidence >= 62;
     const confirmed = stableAge >= minHoldMs
       && candidateAge >= requiredMs
       && nextCandidate.hits >= requiredHits
@@ -165,6 +218,6 @@ export function createSignalStabilizer(options = {}) {
   return {
     update,
     reset,
-    snapshot: () => ({ asset, stable: stable ? { ...stable } : null, candidate: candidate ? { ...candidate } : null })
+    snapshot: () => ({ asset, stable: stable ? { ...stable } : null, candidate: candidate ? { ...candidate } : null, entryBlock: entryBlock ? { ...entryBlock } : null })
   };
 }

@@ -5,13 +5,15 @@ export function minuteValue(value) {
 
 export function minuteFromOcr(value) {
   const normalized = String(value || "").toUpperCase().replace(/[IL|]/g, "1");
-  const match = normalized.match(/\b([15])\s*M(?:1N|IN)?\b/);
-  return match ? Number(match[1]) : null;
+  const matches = [...normalized.matchAll(/\b([15])\s*M(?:1N|IN)?\b/g)].map(match => Number(match[1]));
+  const distinct = [...new Set(matches)];
+  return distinct.length === 1 ? distinct[0] : null;
 }
 
 export function createMinuteReadingStabilizer(options = {}) {
   const requiredHits = options.requiredHits ?? 2;
-  const staleAfterMs = options.staleAfterMs ?? 4000;
+  const warningHits = options.warningHits ?? 6;
+  const staleAfterMs = options.staleAfterMs ?? 15000;
   const now = typeof options.now === "function" ? options.now : () => Date.now();
   let stable = null;
   let candidate = null;
@@ -38,7 +40,8 @@ export function createMinuteReadingStabilizer(options = {}) {
       return stable;
     }
     candidateHits += 1;
-    if (candidateHits >= requiredHits) {
+    const hitsNeeded = stable === 5 && candidate === 1 ? warningHits : requiredHits;
+    if (candidateHits >= hitsNeeded) {
       stable = candidate;
       candidate = null;
       candidateHits = 0;

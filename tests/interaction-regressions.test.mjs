@@ -140,10 +140,13 @@ assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desapa
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
 assert.match(screenReader, /screen-vision\.js\?v=3\.8\.0/, "a leitura deve carregar a nova lógica de reversão sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
-assert.match(app, /signal-stability\.js\?v=3\.9\.1/, "o painel deve carregar a estabilidade prolongada sem usar cache antigo");
+assert.match(app, /signal-stability\.js\?v=3\.9\.3/, "o painel deve carregar a direção travada sem usar cache antigo");
+assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
+assert.match(screenReader, /setup-warning-state\.js\?v=3\.9\.3/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
+assert.match(screenReader, /left: \.78, width: \.21/, "a leitura da expiração deve mirar o controle à direita, não o centro do gráfico");
 assert.match(screenReader, /asset: asset \|\| lastAsset/, "uma falha momentânea do OCR não pode apagar o ativo e o sinal atuais");
-assert.match(app, /COMPRA" : "VENDA"\} ENCERRADA/, "um sinal que perdeu o ponto deve ser encerrado de forma explícita em vez de simplesmente sumir");
-assert.match(app, /Não entre atrasado; aguarde uma nova confirmação/, "um sinal encerrado deve impedir entradas tardias");
+assert.match(app, /finalDirection === "BUY" \? "COMPRA" : "VENDA"/, "a direção confirmada deve continuar visível mesmo depois que o ponto daquela vela passar");
+assert.match(app, /A direção continua vendedora\. O ponto desta vela passou; aguarde uma nova entrada\./, "a venda deve permanecer visível sem incentivar uma entrada atrasada");
 assert.match(styles, /\.signal-card\.expired/, "um sinal encerrado deve ter um estado visual próprio");
 assert.match(app, /COMPRA" : "VENDA"\} EM OBSERVAÇÃO/, "uma vela esticada deve revelar a possível reversão sem liberar uma entrada prematura");
 assert.match(app, /Queda forte detectada\. Espere a vela reagir para cima antes de considerar compra\./, "uma queda forte deve explicar exatamente qual confirmação falta para compra");
