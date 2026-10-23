@@ -76,6 +76,33 @@ export function createSignalStabilizer(options = {}) {
       confidence: normalizedConfidence(input.confidence)
     };
 
+    if (analysis.setup === "STRETCHED_CANDLE") {
+      stable = null;
+      candidate = null;
+      return { ...analysis, direction: "WAIT", stability: "checking", transition: null };
+    }
+
+    if (analysis.setup === "INTRACANDLE_REVERSAL" && analysis.urgentReversal) {
+      const nextCandidate = rememberCandidate(analysis, timestamp);
+      stable = null;
+      const confirmed = nextCandidate.hits >= 2 && timestamp - nextCandidate.since >= 700;
+      if (confirmed) return promote(analysis, timestamp);
+      return {
+        ...analysis,
+        direction: "WAIT",
+        stability: "checking",
+        transition: {
+          direction: analysis.direction,
+          confidence: analysis.confidence,
+          hits: nextCandidate.hits,
+          elapsedMs: timestamp - nextCandidate.since,
+          requiredMs: 700,
+          requiredHits: 2,
+          holdRemainingMs: 0
+        }
+      };
+    }
+
     if (!stable) {
       if (analysis.direction === "WAIT" || analysis.confidence < 62) {
         candidate = null;

@@ -218,27 +218,54 @@ export function classifyCandleSequence(bodies = []) {
   const closeStretch = last.direction === "BUY"
     ? (average(previousCloses) - lastClose) / averagePreviousHeight
     : (lastClose - average(previousCloses)) / averagePreviousHeight;
-  const exhaustionReversal = spikeRatio >= 1.55 && closeStretch >= .7;
-  if (exhaustionReversal) {
-    const direction = last.direction === "BUY" ? "SELL" : "BUY";
-    const confidence = Math.round(clamp(73 + (spikeRatio - 1.55) * 9 + (closeStretch - .7) * 5, 0, 89));
+  const previousExtremeClose = last.direction === "BUY" ? Math.min(...previousCloses) : Math.max(...previousCloses);
+  const extremeBreak = last.direction === "BUY"
+    ? (previousExtremeClose - lastClose) / averagePreviousHeight
+    : (lastClose - previousExtremeClose) / averagePreviousHeight;
+  const recentSameSide = previous.slice(-4).filter(body => body.direction === last.direction).length;
+  const impulseStretch = spikeRatio >= 1.35
+    && closeStretch >= .55
+    && extremeBreak >= .28
+    && (recentSameSide >= 1 || spikeRatio >= 1.65);
+  const matureRunStretch = recent.length >= 6
+    && recentSameSide >= 2
+    && closeStretch >= .68
+    && extremeBreak >= -.05;
+  const extremeBodyStretch = recent.length >= 6
+    && spikeRatio >= 1.65
+    && closeStretch >= .9
+    && extremeBreak >= -.05;
+  const stretchedCandle = impulseStretch || matureRunStretch || extremeBodyStretch;
+  const technical = {
+    lastCandle: { direction: last.direction, centerX: last.centerX, width: last.width, height: last.height },
+    averagePreviousHeight,
+    spikeRatio,
+    closeStretch,
+    extremeBreak
+  };
+  if (stretchedCandle) {
+    const reversalDirection = last.direction === "BUY" ? "SELL" : "BUY";
     const stretchedSide = last.direction === "BUY" ? "compradora" : "vendedora";
-    const correctionSide = direction === "BUY" ? "compra" : "venda";
+    const blockedSide = last.direction === "BUY" ? "compra" : "venda";
+    const correctionSide = reversalDirection === "BUY" ? "compra" : "venda";
     return {
-      direction,
-      confidence,
+      direction: "WAIT",
+      confidence: Math.round(clamp(54 + (spikeRatio - 1.35) * 8 + (extremeBreak - .28) * 5, 54, 61)),
       chartDetected: true,
-      score: direction === "BUY" ? .52 : -.52,
+      score: 0,
       candleCount: recent.length,
-      setup: "EXHAUSTION_REVERSAL",
-      entryTiming: "NEXT_CANDLE",
+      setup: "STRETCHED_CANDLE",
+      blockedDirection: last.direction,
+      reversalDirection,
+      entryTiming: "WAIT_CONFIRMATION",
+      technical,
       factors: [
         `A última vela é ${spikeRatio.toFixed(1)}x maior que a média recente.`,
-        `O fechamento ficou ${closeStretch.toFixed(1)} corpos médios além dos fechamentos anteriores.`,
-        `A pressão ${stretchedSide} está esticada; a leitura busca correção curta para ${correctionSide}.`,
-        "A entrada é somente na próxima vela, depois do fechamento da vela atual."
+        `O preço avançou ${Math.max(0, extremeBreak).toFixed(1)} corpos médios além do extremo recente.`,
+        `A pressão ${stretchedSide} está esticada; entrar em ${blockedSide} agora seria perseguir um movimento atrasado.`,
+        `O Atlas só considerará ${correctionSide} nesta vela se o corpo rejeitar parte relevante do movimento ou trocar de direção.`
       ],
-      reason: `Exaustão ${stretchedSide}: impulso esticado favorece ${correctionSide} na próxima vela.`
+      reason: `Vela ${stretchedSide} muito esticada. ${blockedSide[0].toUpperCase()}${blockedSide.slice(1)} tardia bloqueada; aguardando rejeição técnica para possível ${correctionSide}.`
     };
   }
   const split = Math.max(1, Math.floor(recent.length / 2));
@@ -289,9 +316,92 @@ export function classifyCandleSequence(bodies = []) {
     candleCount: recent.length,
     setup: "TREND_CONTINUATION",
     entryTiming,
+    technical,
     factors,
     reason
   };
+}
+
+export function createIntracandleReversalTracker(options = {}) {
+  const retracementThreshold = options.retracementThreshold ?? .16;
+  const flipBodyRatio = options.flipBodyRatio ?? .22;
+  let watch = null;
+
+  function reset() {
+    watch = null;
+  }
+
+  function update(input = null, asset = "") {
+    if (!input) return input;
+    const candle = input.technical?.lastCandle;
+    const normalizedAsset = String(asset || "").trim().toUpperCase();
+    if (!candle) {
+      reset();
+      return input;
+    }
+
+    const sameCandle = watch
+      && watch.asset === normalizedAsset
+      && Math.abs(Number(candle.centerX) - watch.centerX) <= Math.max(5, watch.width * .7);
+    if (!sameCandle) watch = null;
+
+    if (!watch && input.setup === "STRETCHED_CANDLE") {
+      watch = {
+        asset: normalizedAsset,
+        centerX: Number(candle.centerX),
+        width: Math.max(1, Number(candle.width) || 1),
+        direction: input.blockedDirection,
+        reversalDirection: input.reversalDirection,
+        peakHeight: Number(candle.height) || 0,
+        averagePreviousHeight: Number(input.technical.averagePreviousHeight) || 1,
+        factors: [...(input.factors || [])]
+      };
+    }
+    if (!watch) return input;
+
+    watch.peakHeight = Math.max(watch.peakHeight, Number(candle.height) || 0);
+    const flipped = candle.direction !== watch.direction
+      && Number(candle.height) >= watch.averagePreviousHeight * flipBodyRatio;
+    const retracement = candle.direction === watch.direction
+      ? Math.max(0, (watch.peakHeight - Number(candle.height)) / Math.max(1, watch.peakHeight))
+      : 1;
+    const rejected = flipped || retracement >= retracementThreshold;
+    if (rejected) {
+      const directionLabel = watch.reversalDirection === "BUY" ? "compra" : "venda";
+      const rejectionLabel = flipped
+        ? "A vela trocou de direção depois do movimento esticado."
+        : `O corpo devolveu ${Math.round(retracement * 100)}% depois de atingir o extremo.`;
+      return {
+        ...input,
+        direction: watch.reversalDirection,
+        confidence: Math.round(clamp(68 + (flipped ? 6 : 0) + retracement * 35, 68, 84)),
+        setup: "INTRACANDLE_REVERSAL",
+        blockedDirection: watch.direction,
+        entryTiming: "CURRENT_CANDLE",
+        urgentReversal: true,
+        factors: [
+          ...watch.factors,
+          rejectionLabel,
+          `A reversão tem fundamento técnico para possível ${directionLabel} nesta vela, mas o ponto de entrada ainda deve ser escolhido com cuidado.`
+        ],
+        reason: `Rejeição confirmada após movimento esticado: possível ${directionLabel} ainda nesta vela.`
+      };
+    }
+
+    return {
+      ...input,
+      direction: "WAIT",
+      confidence: Math.min(61, Number(input.confidence) || 58),
+      setup: "STRETCHED_CANDLE",
+      blockedDirection: watch.direction,
+      reversalDirection: watch.reversalDirection,
+      entryTiming: "WAIT_CONFIRMATION",
+      factors: watch.factors,
+      reason: `Movimento esticado detectado. Entrada atrasada bloqueada; aguardando rejeição real antes de considerar a direção contrária.`
+    };
+  }
+
+  return { update, reset };
 }
 
 export function analyzeChartPixels(data, width, height) {

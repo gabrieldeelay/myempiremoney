@@ -1,5 +1,5 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
-import { createSignalStabilizer } from "./signal-stability.js?v=3.5.0";
+import { createSignalStabilizer } from "./signal-stability.js?v=3.8.0";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.6.1";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
@@ -80,6 +80,7 @@ function effectiveAnalysis() {
   const trendDirection = String(trend?.direction || "WAIT").toUpperCase();
   if (!trend) return live;
   if (live.source === "screen-capture") {
+    if (live.setup === "STRETCHED_CANDLE") return live;
     if (liveDirection === "WAIT") {
       return {
         ...live,
@@ -91,7 +92,7 @@ function effectiveAnalysis() {
       };
     }
     if (trendDirection !== "WAIT" && trendDirection !== liveDirection) {
-      if (live.setup === "EXHAUSTION_REVERSAL") {
+      if (["EXHAUSTION_REVERSAL", "INTRACANDLE_REVERSAL"].includes(live.setup)) {
         return {
           ...live,
           confidence: Math.max(62, Number(live.confidence || 0) - 8),
@@ -141,7 +142,7 @@ function renderSignal(analysis = effectiveAnalysis()) {
   const actionable = ["BUY", "SELL"].includes(direction) && confidence >= 62;
   const probable = actionable && confidence < 75;
   const finalDirection = actionable ? direction : "WAIT";
-  const gale = confidence >= 87 ? "SEM GALE" : confidence >= 75 ? "ATÉ GALE 1" : confidence >= 62 ? "ATÉ GALE 2" : "NÃO ENTRAR";
+  const gale = !actionable ? "NÃO ENTRAR" : confidence >= 87 ? "SEM GALE" : confidence >= 75 ? "ATÉ GALE 1" : "ATÉ GALE 2";
   const timingCode = finalDirection === "WAIT"
     ? "WAIT_CONFIRMATION"
     : analysis?.entryTiming === "CURRENT_CANDLE" ? "CURRENT_CANDLE" : "NEXT_CANDLE";
@@ -171,8 +172,10 @@ function renderSignal(analysis = effectiveAnalysis()) {
   if (stability) {
     const checking = analysis?.stability === "checking";
     const initializing = analysis?.stability === "initializing";
-    stability.textContent = checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
-    stability.className = `signal-stability ${checking || initializing ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
+    const reversal = analysis?.setup === "INTRACANDLE_REVERSAL";
+    const stretched = analysis?.setup === "STRETCHED_CANDLE";
+    stability.textContent = reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched ? "NÃO ENTRE AGORA" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
+    stability.className = `signal-stability ${checking || initializing || stretched ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
   }
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
   const details = Array.isArray(analysis?.factors) && analysis.factors.length
@@ -295,6 +298,8 @@ const robot = {
     protectionEarly: ["[[bad:Proteção antecipada.]] O preço ainda não tinha alcançado a região planejada de {asset}.", "Você protegeu cedo em {asset}. A ideia era esperar o preço chegar ao nível marcado antes da nova **{direction}**.", "[[bad:Faltou esperar o nível.]] A proteção veio antes do preço confirmar a região em {asset}."],
     adclose: ["Fechou o anúncio. Finalmente uma operação com 100% de acerto.", "Anúncio eliminado. Essa entrada eu aprovo sem indicador.", "Boa. Menos propaganda, mais gráfico e só um pouco menos de caos.", "Fechou o anúncio com precisão. Se operar assim, talvez dê jogo."],
     dragged: ["Escolhe um canto e deixa eu acompanhar o gráfico.", "Eu sou analista, não ícone de desktop. Deixa eu trabalhar daqui.", "O gráfico está parado e eu fazendo turismo. Vamos focar na leitura.", "Pode me deixar neste canto. Se houver algo importante, eu aviso."],
+    reversalBuy: ["Possível **reversão para compra** em {asset}. A queda esticou e começou a rejeitar o fundo; escolha com cuidado o ponto nesta vela.", "A pressão vendedora perdeu força em {asset}. Há fundamento para **possível compra nesta vela**, sem antecipar o clique."],
+    reversalSell: ["Possível **reversão para venda** em {asset}. A alta esticou e começou a rejeitar o topo; escolha com cuidado o ponto nesta vela.", "A pressão compradora perdeu força em {asset}. Há fundamento para **possível venda nesta vela**, sem antecipar o clique."],
     win: ["[[good:Resultado positivo]] em {asset}. O mérito está na disciplina, não na euforia.", "[[good:Lucro confirmado]] em {asset}. Preserve o método que trouxe o resultado.", "{asset} terminou no [[good:positivo]]. Boa execução vale mais que comemoração antecipada."],
     loss: ["[[bad:Resultado negativo]] em {asset}. Revanche não é indicador.", "[[bad:Perda confirmada]] em {asset}. Revise o contexto sem aumentar a mão.", "{asset} terminou no [[bad:negativo]]. Aceite o dado e proteja a próxima decisão."],
     draw: ["Empate em {asset}. Nem o mercado quis bancar essa história.", "{asset} devolveu a entrada. Emoção gasta, saldo preservado.", "Resultado neutro em {asset}. Próxima vela, mesmo plano."],
@@ -735,6 +740,7 @@ function renderConnection(connected) {
 
 function renderState(next = {}, source = "extension") {
   const previousDirection = displayedAnalysis?.direction || "WAIT";
+  const previousSetup = displayedAnalysis?.setup || "";
   const previousOperationKey = state.manualOperation?.key;
   const previousUiEventKey = state.uiEvent?.key;
   const normalizedAsset = "asset" in next ? normalizeAssetName(next.asset) : state.asset;
@@ -783,6 +789,9 @@ function renderState(next = {}, source = "extension") {
   lastLoginState = true;
   if (justLoggedIn) robot.speak("connect", {}, true, true);
   const newOperation = state.manualOperation?.key && state.manualOperation.key !== previousOperationKey;
+  const newIntracandleReversal = displayedAnalysis?.setup === "INTRACANDLE_REVERSAL"
+    && displayedAnalysis?.direction !== "WAIT"
+    && (previousSetup !== "INTRACANDLE_REVERSAL" || previousDirection === "WAIT");
   if (newOperation && state.manualOperation.outcome === "OPEN") {
     flashTrade(state.manualOperation.direction, state.manualOperation.exposure?.severity);
   }
@@ -792,6 +801,11 @@ function renderState(next = {}, source = "extension") {
     showToast(`Proteção no ponto em ${state.uiEvent.asset}: ${state.uiEvent.direction === "SELL" ? "VENDA" : "COMPRA"}${Number.isFinite(amount) ? ` de ${formatMoney(amount)}` : ""}.`, "success", 8000);
   }
   else if (newOperation) robot.commentOnOperation(state.manualOperation);
+  else if (newIntracandleReversal) {
+    const side = displayedAnalysis.direction === "BUY" ? "COMPRA" : "VENDA";
+    showToast(`Possível reversão para ${side} nesta vela. Aguarde o melhor ponto de entrada.`, "info", 8000);
+    robot.speak(displayedAnalysis.direction === "BUY" ? "reversalBuy" : "reversalSell", { asset: state.asset }, true, true);
+  }
   else if (justLoggedIn) return;
   else if (displayedAnalysis.direction !== previousDirection
     && displayedAnalysis.direction !== "WAIT"

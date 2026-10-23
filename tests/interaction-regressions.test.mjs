@@ -75,7 +75,7 @@ assert.match(html, /id="entryAdvice"/, "a indicação deve aconselhar o usuário
 assert.match(html, /id="galeBadge"/, "a leitura deve exibir o limite de gale calculado");
 assert.match(html, /id="analysisDetails"/, "o painel deve explicar os fatores que fomentam a leitura");
 assert.match(app, /confidence >= 87 \? "SEM GALE"/, "confiança muito alta deve ser apresentada sem gale");
-assert.match(app, /confidence >= 62 \? "ATÉ GALE 2"/, "leitura duvidosa deve limitar a exposição ao gale 2");
+assert.match(app, /confidence >= 75 \? "ATÉ GALE 1" : "ATÉ GALE 2"/, "leitura duvidosa deve limitar a exposição ao gale 2");
 assert.match(app, /probable \? "PROVÁVEL " : ""/, "leituras de menor confiança devem ser marcadas como prováveis");
 assert.match(styles, /--probable:\s*#c7a2ff/, "leituras prováveis devem usar uma cor própria");
 assert.match(styles, /\.signal-more:hover \.signal-tooltip/, "os fundamentos devem aparecer ao passar o mouse em Ler mais");
@@ -101,6 +101,9 @@ assert.doesNotMatch(app, /robot\.speak\("dragged", \{ count: moves \}/, "a recla
 assert.match(app, /"NESTA VELA"/, "a indicação da vela atual deve permanecer curta no design");
 assert.match(app, /Espere o melhor momento para entrar nesta vela\./, "a orientação da vela atual deve aparecer separada do selo");
 assert.match(styles, /@keyframes entryTimingPulse/, "a indicação do momento da entrada deve pulsar suavemente");
+assert.match(app, /NÃO ENTRE AGORA/, "uma vela esticada deve impedir que o sinal antigo incentive uma entrada atrasada");
+assert.match(app, /REVERSÃO TÉCNICA/, "uma rejeição confirmada deve ficar claramente identificada");
+assert.match(app, /Possível reversão para \$\{side\} nesta vela/, "uma reversão intravela deve gerar um alerta adicional");
 assert.match(localTts, /pt_BR-faber-medium-uint8\.onnx/, "a voz local deve usar o modelo masculino Faber em português brasileiro");
 assert.match(localTts, /vozz-piper-v1/, "o modelo local deve usar cache persistente no navegador");
 assert.doesNotMatch(server, /\/api\/tts/, "a voz local não deve depender de uma rota paga no servidor");
@@ -124,7 +127,9 @@ assert.match(html, /id="screenReaderVideo"/, "a captura da aba deve permanecer i
 assert.doesNotMatch(html, /install-flow\.js/, "a extensão não pode continuar sendo requisito do painel");
 assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "as configurações não devem empurrar instalação de extensão");
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
-assert.match(screenReader, /screen-vision\.js\?v=3\.7\.4/, "a leitura deve carregar a nova lógica de momento da entrada sem usar cache antigo");
+assert.match(screenReader, /screen-vision\.js\?v=3\.8\.0/, "a leitura deve carregar a nova lógica de reversão sem usar cache antigo");
+assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
+assert.match(app, /signal-stability\.js\?v=3\.8\.0/, "o painel deve carregar o bloqueio imediato de sinais atrasados sem usar cache antigo");
 assert.match(screenReader, /source: "screen-capture"/, "o painel deve identificar sinais produzidos pela leitura visual");
 assert.match(screenReader, /Tesseract\.createWorker/, "o ativo visível deve ser identificado localmente por OCR");
 assert.match(screenReader, /const scale = 4/, "o rótulo pequeno do ativo deve ser ampliado antes do OCR");

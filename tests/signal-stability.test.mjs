@@ -75,3 +75,31 @@ test("reinicia a confirmação quando o ativo muda", () => {
   clock = 1300;
   assert.equal(filter.update(buy, "ETHEREUM").direction, "WAIT");
 });
+
+test("cancela imediatamente um sinal que ficou atrasado em uma vela esticada", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
+  assert.equal(filter.update({ direction: "SELL", confidence: 82 }, "LITECOIN").direction, "SELL");
+  clock = 400;
+  const blocked = filter.update({
+    direction: "WAIT",
+    confidence: 60,
+    setup: "STRETCHED_CANDLE",
+    blockedDirection: "SELL",
+    reason: "queda esticada"
+  }, "LITECOIN");
+  assert.equal(blocked.direction, "WAIT");
+  assert.equal(blocked.setup, "STRETCHED_CANDLE");
+});
+
+test("confirma reversão intravela rapidamente sem publicar um único quadro isolado", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock });
+  const reversal = { direction: "BUY", confidence: 74, setup: "INTRACANDLE_REVERSAL", urgentReversal: true, entryTiming: "CURRENT_CANDLE" };
+  assert.equal(filter.update(reversal, "LITECOIN").direction, "WAIT");
+  clock = 850;
+  const confirmed = filter.update(reversal, "LITECOIN");
+  assert.equal(confirmed.direction, "BUY");
+  assert.equal(confirmed.entryTiming, "CURRENT_CANDLE");
+  assert.equal(confirmed.setup, "INTRACANDLE_REVERSAL");
+});

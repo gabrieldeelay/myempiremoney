@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.7.4";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.8.0";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.6.1";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
@@ -25,6 +25,7 @@ let lastTimeframe = null;
 let lastExpiration = null;
 const timeframeReading = createMinuteReadingStabilizer();
 const expirationReading = createMinuteReadingStabilizer();
+const reversalTracker = createIntracandleReversalTracker();
 
 function setStatus(label, kind = "") {
   statusLabels.forEach(element => {
@@ -212,7 +213,7 @@ async function inspectFrame() {
       canvas.height = targetHeight;
     }
     context.drawImage(video, 0, 0, targetWidth, targetHeight);
-    const analysis = analyzeCandles();
+    const rawAnalysis = analyzeCandles();
     const frame = context.getImageData(0, 0, canvas.width, canvas.height);
     const activeTab = findActiveTabRect(frame.data, canvas.width, canvas.height);
     const tabCenter = activeTab ? activeTab.x + activeTab.width / 2 : null;
@@ -222,10 +223,12 @@ async function inspectFrame() {
     if (tabMoved) {
       lastAsset = null;
       missedAssetReads = 0;
+      reversalTracker.reset();
     }
     const setup = await readSetupValues(activeTab);
     const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
     if ("asset" in visible) lastAsset = visible.asset;
+    const analysis = reversalTracker.update(rawAnalysis, lastAsset);
     window.dispatchEvent(new CustomEvent("atlas:screen-state", {
       detail: {
         version: "visual-1.0",
@@ -254,6 +257,7 @@ async function stopReading(reason = "Leitura visual desativada") {
   stream?.getTracks().forEach(track => track.stop());
   stream = null;
   video.srcObject = null;
+  reversalTracker.reset();
   setStatus(reason, "");
   setButtons("Ativar leitura da tela");
   window.dispatchEvent(new CustomEvent("atlas:screen-stopped"));
