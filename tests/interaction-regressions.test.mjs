@@ -140,7 +140,7 @@ assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desapa
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
 assert.match(screenReader, /screen-vision\.js\?v=3\.8\.0/, "a leitura deve carregar a nova lógica de reversão sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
-assert.match(app, /signal-stability\.js\?v=3\.9\.4/, "o painel deve carregar a direção travada sem usar cache antigo");
+assert.match(app, /signal-stability\.js\?v=3\.9\.5/, "o painel deve carregar a direção travada sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
 assert.match(screenReader, /setup-warning-state\.js\?v=3\.9\.3/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
 assert.match(screenReader, /left: \.78, width: \.21/, "a leitura da expiração deve mirar o controle à direita, não o centro do gráfico");
@@ -149,6 +149,7 @@ assert.match(app, /finalDirection === "BUY" \? "COMPRA" : "VENDA"/, "a direção
 assert.match(app, /A direção continua vendedora\. O ponto desta vela passou; aguarde uma nova entrada\./, "a venda deve permanecer visível sem incentivar uma entrada atrasada");
 assert.match(styles, /\.signal-card\.expired/, "um sinal encerrado deve ter um estado visual próprio");
 assert.match(app, /POSSÍVEL \$\{finalDirection === "BUY" \? "COMPRA" : "VENDA"\}/, "uma vela esticada deve aparecer como possível compra ou possível venda");
+assert.match(app, /entryBlocked\s*\? `POSSÍVEL/, "o estado amarelo deve ser identificado como possível, não como sinal confirmado");
 assert.doesNotMatch(app, /COMPRA" : "VENDA"\} EM OBSERVAÇÃO/, "a interface não deve chamar a hipótese de compra ou venda em observação");
 assert.match(app, /Queda forte detectada\. Espere a vela reagir para cima antes de considerar compra\./, "uma queda forte deve explicar exatamente qual confirmação falta para compra");
 assert.match(styles, /\.signal-card\.observing/, "uma possível reversão ainda não confirmada deve ter estado visual próprio");

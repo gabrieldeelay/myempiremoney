@@ -33,6 +33,7 @@ export function createSignalStabilizer(options = {}) {
   const switchConfirmMs = options.switchConfirmMs ?? 12000;
   const minHoldMs = options.minHoldMs ?? 35000;
   const observationGraceMs = options.observationGraceMs ?? 15000;
+  const candleDurationMs = options.candleDurationMs ?? 300000;
   const initialHits = options.initialHits ?? 3;
   const switchHits = options.switchHits ?? 7;
 
@@ -41,6 +42,7 @@ export function createSignalStabilizer(options = {}) {
   let candidate = null;
   let entryBlock = null;
   let observation = null;
+  let stableCandleBucket = null;
 
   function reset(nextAsset = "") {
     asset = String(nextAsset || "").trim().toUpperCase();
@@ -48,6 +50,7 @@ export function createSignalStabilizer(options = {}) {
     candidate = null;
     entryBlock = null;
     observation = null;
+    stableCandleBucket = null;
   }
 
   function rememberCandidate(analysis, timestamp) {
@@ -67,7 +70,22 @@ export function createSignalStabilizer(options = {}) {
     candidate = null;
     entryBlock = null;
     observation = null;
+    lockStableCandle(analysis, timestamp);
     return { ...stable, stability: "stable", transition: null };
+  }
+
+  function lockStableCandle(analysis, timestamp) {
+    const candleX = Number(analysis?.technical?.lastCandle?.centerX);
+    stableCandleBucket = Number.isFinite(candleX) && candleDurationMs > 0
+      ? Math.floor(timestamp / candleDurationMs)
+      : null;
+  }
+
+  function stableDirectionIsLocked(timestamp) {
+    return stable
+      && stableCandleBucket != null
+      && candleDurationMs > 0
+      && Math.floor(timestamp / candleDurationMs) === stableCandleBucket;
   }
 
   function rememberObservation(analysis, timestamp) {
@@ -143,6 +161,11 @@ export function createSignalStabilizer(options = {}) {
       confidence: normalizedConfidence(input.confidence)
     };
 
+    if (stableDirectionIsLocked(timestamp)) {
+      candidate = null;
+      return { ...stable, stability: "stable", transition: null, candleLocked: true };
+    }
+
     if (analysis.setup === "STRETCHED_CANDLE") {
       candidate = null;
       if (stable && analysis.blockedDirection === stable.direction) {
@@ -213,6 +236,7 @@ export function createSignalStabilizer(options = {}) {
       candidate = null;
       const confidence = Math.round((stable.confidence * .72) + (analysis.confidence * .28));
       stable = { ...stable, ...analysis, confidence, since: stable.since };
+      lockStableCandle(analysis, timestamp);
       return { ...stable, stability: "stable", transition: null, ...(entryOpportunityRenewed ? { entryOpportunityRenewed: true } : {}) };
     }
 
@@ -264,6 +288,6 @@ export function createSignalStabilizer(options = {}) {
   return {
     update,
     reset,
-    snapshot: () => ({ asset, stable: stable ? { ...stable } : null, candidate: candidate ? { ...candidate } : null, entryBlock: entryBlock ? { ...entryBlock } : null, observation: observation ? { ...observation } : null })
+    snapshot: () => ({ asset, stable: stable ? { ...stable } : null, candidate: candidate ? { ...candidate } : null, entryBlock: entryBlock ? { ...entryBlock } : null, observation: observation ? { ...observation } : null, stableCandleBucket })
   };
 }

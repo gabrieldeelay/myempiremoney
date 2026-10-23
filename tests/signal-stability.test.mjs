@@ -108,14 +108,14 @@ test("não reabre na mesma vela um ponto de entrada que já foi bloqueado", () =
   let clock = 0;
   const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
   filter.update({ direction: "SELL", confidence: 84, technical: { lastCandle: { centerX: 180, width: 12 } } }, "AUD/JPY");
-  clock = 500;
-  filter.update({ direction: "WAIT", confidence: 60, setup: "STRETCHED_CANDLE", blockedDirection: "SELL", technical: { lastCandle: { centerX: 180, width: 12 } } }, "AUD/JPY");
-  clock = 5000;
-  const sameCandle = filter.update({ direction: "SELL", confidence: 82, setup: "TREND_CONTINUATION", technical: { lastCandle: { centerX: 182, width: 12 } } }, "AUD/JPY");
+  clock = 300500;
+  filter.update({ direction: "WAIT", confidence: 60, setup: "STRETCHED_CANDLE", blockedDirection: "SELL", technical: { lastCandle: { centerX: 200, width: 12 } } }, "AUD/JPY");
+  clock = 305000;
+  const sameCandle = filter.update({ direction: "SELL", confidence: 82, setup: "TREND_CONTINUATION", technical: { lastCandle: { centerX: 202, width: 12 } } }, "AUD/JPY");
   assert.equal(sameCandle.direction, "SELL");
   assert.equal(sameCandle.entryBlocked, true);
-  clock = 8000;
-  const nextCandle = filter.update({ direction: "SELL", confidence: 82, setup: "TREND_CONTINUATION", technical: { lastCandle: { centerX: 202, width: 12 } } }, "AUD/JPY");
+  clock = 600500;
+  const nextCandle = filter.update({ direction: "SELL", confidence: 82, setup: "TREND_CONTINUATION", technical: { lastCandle: { centerX: 230, width: 12 } } }, "AUD/JPY");
   assert.equal(nextCandle.direction, "SELL");
   assert.equal(nextCandle.entryBlocked, undefined);
   assert.equal(nextCandle.entryOpportunityRenewed, true);
@@ -172,6 +172,44 @@ test("encerra a observação quando uma nova vela substitui a hipótese anterior
   assert.equal(nextCandle.setup, undefined);
   assert.equal(nextCandle.direction, "WAIT");
   assert.equal(nextCandle.confidence, 0);
+});
+
+test("mantém uma compra confirmada até o fim da vela de cinco minutos", () => {
+  let clock = 60000;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
+  const buy = { direction: "BUY", confidence: 82, technical: { lastCandle: { centerX: 180, width: 12 } } };
+  const sellReversal = { direction: "SELL", confidence: 80, setup: "INTRACANDLE_REVERSAL", urgentReversal: true, technical: { lastCandle: { centerX: 181, width: 12 } } };
+  assert.equal(filter.update(buy, "BITCOIN").direction, "BUY");
+
+  clock = 120000;
+  const held = filter.update(sellReversal, "BITCOIN");
+  assert.equal(held.direction, "BUY");
+  assert.equal(held.candleLocked, true);
+
+  clock = 300100;
+  assert.equal(filter.update(sellReversal, "BITCOIN").direction, "BUY");
+  clock = 301000;
+  assert.equal(filter.update(sellReversal, "BITCOIN").direction, "SELL");
+});
+
+test("mantém uma venda confirmada até o fim da vela de cinco minutos", () => {
+  let clock = 60000;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
+  const sell = { direction: "SELL", confidence: 82, technical: { lastCandle: { centerX: 180, width: 12 } } };
+  assert.equal(filter.update(sell, "EUR/USD").direction, "SELL");
+
+  clock = 120000;
+  const stretched = filter.update({
+    direction: "WAIT",
+    confidence: 54,
+    setup: "STRETCHED_CANDLE",
+    blockedDirection: "SELL",
+    reversalDirection: "BUY",
+    technical: { lastCandle: { centerX: 181, width: 12 } }
+  }, "EUR/USD");
+  assert.equal(stretched.direction, "SELL");
+  assert.equal(stretched.entryBlocked, undefined);
+  assert.equal(stretched.candleLocked, true);
 });
 
 test("confirma reversão intravela rapidamente sem publicar um único quadro isolado", () => {
