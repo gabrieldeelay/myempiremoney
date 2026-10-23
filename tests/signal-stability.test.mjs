@@ -134,6 +134,46 @@ test("não anuncia nova venda sem uma nova leitura vendedora confirmada", () => 
   assert.equal(noEntry.entryOpportunityRenewed, undefined);
 });
 
+test("mantém uma possível compra visível durante falhas breves da leitura da mesma vela", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock, observationGraceMs: 15000 });
+  const observed = filter.update({
+    direction: "WAIT",
+    confidence: 54,
+    setup: "STRETCHED_CANDLE",
+    blockedDirection: "SELL",
+    reversalDirection: "BUY",
+    technical: { lastCandle: { centerX: 180, width: 12 } }
+  }, "AUD/JPY");
+  assert.equal(observed.setup, "STRETCHED_CANDLE");
+  assert.equal(observed.reversalDirection, "BUY");
+
+  clock = 2200;
+  const held = filter.update({ direction: "WAIT", confidence: 0, technical: { lastCandle: { centerX: 181, width: 12 } } }, "AUD/JPY");
+  assert.equal(held.setup, "STRETCHED_CANDLE");
+  assert.equal(held.reversalDirection, "BUY");
+  assert.equal(held.observationHeld, true);
+  assert.equal(held.confidence, 54);
+});
+
+test("encerra a observação quando uma nova vela substitui a hipótese anterior", () => {
+  let clock = 0;
+  const filter = createSignalStabilizer({ now: () => clock });
+  filter.update({
+    direction: "WAIT",
+    confidence: 54,
+    setup: "STRETCHED_CANDLE",
+    blockedDirection: "SELL",
+    reversalDirection: "BUY",
+    technical: { lastCandle: { centerX: 180, width: 10 } }
+  }, "AUD/JPY");
+  clock = 5000;
+  const nextCandle = filter.update({ direction: "WAIT", confidence: 0, technical: { lastCandle: { centerX: 205, width: 10 } } }, "AUD/JPY");
+  assert.equal(nextCandle.setup, undefined);
+  assert.equal(nextCandle.direction, "WAIT");
+  assert.equal(nextCandle.confidence, 0);
+});
+
 test("confirma reversão intravela rapidamente sem publicar um único quadro isolado", () => {
   let clock = 0;
   const filter = createSignalStabilizer({ now: () => clock });

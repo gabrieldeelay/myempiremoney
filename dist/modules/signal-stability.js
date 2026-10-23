@@ -32,6 +32,7 @@ export function createSignalStabilizer(options = {}) {
   const initialConfirmMs = options.initialConfirmMs ?? 3000;
   const switchConfirmMs = options.switchConfirmMs ?? 12000;
   const minHoldMs = options.minHoldMs ?? 35000;
+  const observationGraceMs = options.observationGraceMs ?? 15000;
   const initialHits = options.initialHits ?? 3;
   const switchHits = options.switchHits ?? 7;
 
@@ -39,12 +40,14 @@ export function createSignalStabilizer(options = {}) {
   let stable = null;
   let candidate = null;
   let entryBlock = null;
+  let observation = null;
 
   function reset(nextAsset = "") {
     asset = String(nextAsset || "").trim().toUpperCase();
     stable = null;
     candidate = null;
     entryBlock = null;
+    observation = null;
   }
 
   function rememberCandidate(analysis, timestamp) {
@@ -63,7 +66,42 @@ export function createSignalStabilizer(options = {}) {
     stable = { ...analysis, direction: normalizedDirection(analysis.direction), confidence: normalizedConfidence(analysis.confidence), since: timestamp };
     candidate = null;
     entryBlock = null;
+    observation = null;
     return { ...stable, stability: "stable", transition: null };
+  }
+
+  function rememberObservation(analysis, timestamp) {
+    const candle = analysis?.technical?.lastCandle;
+    observation = {
+      analysis: { ...analysis },
+      direction: normalizedDirection(analysis.reversalDirection),
+      candleX: Number(candle?.centerX),
+      candleWidth: Number(candle?.width),
+      lastSeenAt: timestamp
+    };
+  }
+
+  function observationStillRelevant(analysis, timestamp) {
+    if (!observation || !["BUY", "SELL"].includes(observation.direction)) return false;
+    const currentX = Number(analysis?.technical?.lastCandle?.centerX);
+    const observedX = Number(observation.candleX);
+    if (Number.isFinite(currentX) && Number.isFinite(observedX)) {
+      const width = Math.max(5, Number(observation.candleWidth) || 5);
+      return Math.abs(currentX - observedX) <= Math.max(8, width * 1.35);
+    }
+    return timestamp - observation.lastSeenAt <= observationGraceMs;
+  }
+
+  function observationView(transition = null) {
+    return {
+      ...observation.analysis,
+      direction: "WAIT",
+      reversalDirection: observation.direction,
+      setup: "STRETCHED_CANDLE",
+      stability: "checking",
+      transition,
+      observationHeld: true
+    };
   }
 
   function blockedView(analysis, transition = null) {
@@ -118,7 +156,8 @@ export function createSignalStabilizer(options = {}) {
         return blockedView(analysis);
       }
       stable = null;
-      return { ...analysis, direction: "WAIT", stability: "checking", transition: null };
+      rememberObservation(analysis, timestamp);
+      return observationView();
     }
 
     if (analysis.setup === "INTRACANDLE_REVERSAL" && analysis.urgentReversal) {
@@ -135,6 +174,7 @@ export function createSignalStabilizer(options = {}) {
         holdRemainingMs: 0
       };
       if (stable) return entryBlock ? blockedView(analysis, transition) : { ...stable, stability: "checking", transition };
+      if (observationStillRelevant(analysis, timestamp)) return observationView(transition);
       return {
         ...analysis,
         direction: "WAIT",
@@ -156,11 +196,17 @@ export function createSignalStabilizer(options = {}) {
     if (!stable) {
       if (analysis.direction === "WAIT" || analysis.confidence < 62) {
         candidate = null;
+        if (observationStillRelevant(analysis, timestamp)) return observationView();
+        observation = null;
         return waitingAnalysis();
       }
       const nextCandidate = rememberCandidate(analysis, timestamp);
       const confirmed = nextCandidate.hits >= initialHits && timestamp - nextCandidate.since >= initialConfirmMs;
-      return confirmed ? promote(analysis, timestamp) : waitingAnalysis(nextCandidate);
+      if (confirmed) return promote(analysis, timestamp);
+      if (observationStillRelevant(analysis, timestamp)) {
+        return observationView({ direction: nextCandidate.direction, confidence: nextCandidate.analysis.confidence, hits: nextCandidate.hits });
+      }
+      return waitingAnalysis(nextCandidate);
     }
 
     if (analysis.direction === stable.direction) {
@@ -218,6 +264,6 @@ export function createSignalStabilizer(options = {}) {
   return {
     update,
     reset,
-    snapshot: () => ({ asset, stable: stable ? { ...stable } : null, candidate: candidate ? { ...candidate } : null, entryBlock: entryBlock ? { ...entryBlock } : null })
+    snapshot: () => ({ asset, stable: stable ? { ...stable } : null, candidate: candidate ? { ...candidate } : null, entryBlock: entryBlock ? { ...entryBlock } : null, observation: observation ? { ...observation } : null })
   };
 }

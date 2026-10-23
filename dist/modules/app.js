@@ -1,5 +1,5 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
-import { createSignalStabilizer } from "./signal-stability.js?v=3.9.3";
+import { createSignalStabilizer } from "./signal-stability.js?v=3.9.4";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.9.3";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
@@ -187,7 +187,7 @@ function renderSignal(analysis = effectiveAnalysis()) {
   $("analysisDirection").textContent = entryBlocked
     ? finalDirection === "BUY" ? "COMPRA" : "VENDA"
     : watchingReversal
-      ? `${finalDirection === "BUY" ? "COMPRA" : "VENDA"} EM OBSERVAÇÃO`
+      ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
     : finalDirection === "BUY"
     ? `${probable ? "PROVÁVEL " : ""}COMPRA`
     : finalDirection === "SELL" ? `${probable ? "PROVÁVEL " : ""}VENDA` : "AGUARDAR";
