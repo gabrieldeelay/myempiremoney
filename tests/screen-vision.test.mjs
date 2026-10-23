@@ -27,6 +27,14 @@ test("reconhece o ativo mesmo com erro comum do OCR", () => {
 test("reconhece pares de moedas mesmo com uma letra confundida pelo OCR", () => {
   assert.equal(fuzzyMatchAsset("EUR/USO"), "EUR/USD");
   assert.equal(fuzzyMatchAsset("AUD/JRY"), "AUD/JPY");
+  assert.equal(fuzzyMatchAsset("AUP/JY"), "AUD/JPY");
+  assert.equal(fuzzyMatchAsset("AUOJPY"), "AUD/JPY");
+});
+
+test("não confunde ruído de uma aba Forex com o ticker curto XRP", () => {
+  assert.equal(fuzzyMatchAsset("EUR/USD XRP"), "EUR/USD");
+  assert.equal(fuzzyMatchAsset("XXRPXX"), null);
+  assert.equal(fuzzyMatchAsset("XRP"), "XRP");
 });
 
 test("localiza a linha azul da aba ativa", () => {

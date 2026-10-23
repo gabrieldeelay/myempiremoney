@@ -46,35 +46,20 @@ function editDistance(a, b) {
 export function fuzzyMatchAsset(value = "") {
   const text = String(value).toUpperCase().replace(/[|]/g, "I");
   const compact = text.replace(/[^A-Z]/g, "");
-  for (const asset of ASSETS) {
-    if (compact.includes(asset)) return asset;
-  }
+  const tokens = text.split(/[^A-Z]+/).filter(token => token.length >= 3);
   for (const left of FIAT) {
     for (const right of FIAT) {
       if (left !== right && compact.includes(`${left}${right}`)) return `${left}/${right}`;
     }
   }
-
-  let bestFiat = null;
-  for (let start = 0; start <= Math.max(0, compact.length - 6); start += 1) {
-    const candidate = compact.slice(start, start + 6);
-    if (candidate.length !== 6) continue;
-    for (const left of FIAT) {
-      for (const right of FIAT) {
-        if (left === right) continue;
-        const pair = `${left}${right}`;
-        const distance = editDistance(candidate, pair);
-        const similarity = 1 - distance / 6;
-        if (!bestFiat || similarity > bestFiat.similarity) bestFiat = { asset: `${left}/${right}`, similarity };
-      }
-    }
+  for (const asset of ASSETS) {
+    if (asset.length <= 3 ? tokens.includes(asset) : compact.includes(asset)) return asset;
   }
-  if (bestFiat?.similarity >= .83) return bestFiat.asset;
 
-  const tokens = text.split(/[^A-Z]+/).filter(token => token.length >= 3);
   let best = null;
   for (const token of tokens) {
     for (const asset of ASSETS) {
+      if (asset.length <= 3) continue;
       const variants = [token];
       if (token.length > asset.length) {
         for (let start = 0; start <= token.length - Math.max(3, asset.length - 2); start += 1) {
@@ -90,6 +75,26 @@ export function fuzzyMatchAsset(value = "") {
       }
     }
   }
+
+  let bestFiat = null;
+  const forexSources = [compact, ...tokens].filter(value => value.length >= 5);
+  for (const source of forexSources) {
+    for (const length of [5, 6, 7]) {
+      for (let start = 0; start <= source.length - length; start += 1) {
+        const candidate = source.slice(start, start + length);
+        for (const left of FIAT) {
+          for (const right of FIAT) {
+            if (left === right) continue;
+            const pair = `${left}${right}`;
+            const distance = editDistance(candidate, pair);
+            const similarity = 1 - distance / Math.max(candidate.length, pair.length);
+            if (!bestFiat || similarity > bestFiat.similarity) bestFiat = { asset: `${left}/${right}`, similarity };
+          }
+        }
+      }
+    }
+  }
+  if (bestFiat?.similarity >= .66 && bestFiat.similarity >= (best?.similarity || 0)) return bestFiat.asset;
   return best?.similarity >= .58 ? best.asset : null;
 }
 

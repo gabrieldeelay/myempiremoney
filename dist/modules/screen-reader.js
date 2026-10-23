@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.9.6";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.9.7";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.9.3";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
@@ -60,10 +60,10 @@ function analyzeCandles() {
   return analyzeChartPixels(frame.data, canvas.width, canvas.height);
 }
 
-function prepareOcrCrop(tab) {
+function prepareOcrCrop(tab, textOnly = false) {
   const cropTop = Math.max(0, Math.round(tab.y - tab.height * .92));
-  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * .04));
-  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * .92));
+  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * (textOnly ? .22 : .04)));
+  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * (textOnly ? .76 : .92)));
   const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .68));
   const scale = 4;
   const source = document.createElement("canvas");
@@ -191,8 +191,18 @@ async function readVisibleText(activeTab, force = false) {
       tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/"
     });
     const result = await reader.recognize(ocrCanvas);
-    const text = result?.data?.text || "";
-    const asset = fuzzyMatchAsset(text);
+    let text = result?.data?.text || "";
+    let asset = fuzzyMatchAsset(text);
+    if (!asset) {
+      prepareOcrCrop(activeTab, true);
+      await reader.setParameters({
+        tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/"
+      });
+      const fallbackResult = await reader.recognize(ocrCanvas);
+      text = `${text} ${fallbackResult?.data?.text || ""}`;
+      asset = fuzzyMatchAsset(text);
+    }
     missedAssetReads = asset ? 0 : missedAssetReads + 1;
     return {
       asset: asset || lastAsset,
@@ -230,8 +240,10 @@ async function inspectFrame() {
       missedAssetReads = 0;
       reversalTracker.reset();
     }
+    let visible = {};
+    if (tabMoved || !lastAsset) visible = await readVisibleText(activeTab, true);
     const setup = await readSetupValues(activeTab);
-    const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
+    if (!tabMoved && lastAsset) visible = await readVisibleText(activeTab, false);
     if ("asset" in visible) lastAsset = visible.asset;
     const analysis = reversalTracker.update(rawAnalysis, lastAsset);
     window.dispatchEvent(new CustomEvent("atlas:screen-state", {
