@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#061326" />
   <title>Atlas | Assistente de operações</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=3.8.1" />
+  <link rel="stylesheet" href="/styles.css?v=3.8.2" />
 </head>
 <body>
   <div class="app-shell">
@@ -40,6 +40,14 @@
             <span class="loader-ring"></span>
             <p>Abrindo a plataforma…</p>
           </div>
+          <aside class="screen-reader-prompt" data-screen-reader-prompt aria-live="polite">
+            <span class="screen-reader-prompt-icon" aria-hidden="true">◉</span>
+            <div>
+              <strong>Ative a leitura para receber sinais ao vivo</strong>
+              <small>Sem a leitura, o Atlas não acompanha o ativo nem as velas da Hezilex.</small>
+            </div>
+            <button type="button" data-screen-reader-start>Ativar leitura agora</button>
+          </aside>
           <iframe
             id="hezilexFrame"
             title="Plataforma oficial Hezilex"
@@ -187,6 +195,6 @@
   <script type="module" src="/modules/app-guard.js?v=3.2.0"></script>
   <script type="module" src="/modules/app.js?v=3.8.1"></script>
   <script type="module" src="/modules/insights.js?v=3.2.0"></script>
-  <script type="module" src="/modules/screen-reader.js?v=3.8.0"></script>
+  <script type="module" src="/modules/screen-reader.js?v=3.8.1"></script>
 </body>
 </html>

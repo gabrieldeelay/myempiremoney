@@ -130,10 +130,14 @@ assert.match(styles, /\.cursor-glow/, "o fundo deve ter iluminação suave que a
 assert.match(html, /data-settings-trigger/, "a instalação deve ficar dentro de Configurações");
 assert.doesNotMatch(html, /Abrir em nova aba|app\.hezilex\.com<\/code>/, "o topo não deve exibir ações e endereço desnecessários");
 assert.match(html, /data-screen-reader-start/, "a leitura visual deve poder ser ativada sem extensão");
+assert.match(html, /data-screen-reader-prompt/, "o gráfico deve avisar claramente quando a leitura visual ainda não foi ativada");
+assert.match(html, /Ative a leitura para receber sinais ao vivo/, "o aviso deve explicar por que a ativação é necessária");
 assert.match(html, /id="screenReaderVideo"/, "a captura da aba deve permanecer interna e invisível");
 assert.doesNotMatch(html, /install-flow\.js/, "a extensão não pode continuar sendo requisito do painel");
 assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "as configurações não devem empurrar instalação de extensão");
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
+assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desaparecer automaticamente quando a leitura começar");
+assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
 assert.match(screenReader, /screen-vision\.js\?v=3\.8\.0/, "a leitura deve carregar a nova lógica de reversão sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.8\.0/, "o painel deve carregar o bloqueio imediato de sinais atrasados sem usar cache antigo");
@@ -142,6 +146,7 @@ assert.match(screenReader, /Tesseract\.createWorker/, "o ativo visível deve ser
 assert.match(screenReader, /const scale = 4/, "o rótulo pequeno do ativo deve ser ampliado antes do OCR");
 assert.match(screenReader, /max - min < 70/, "o OCR deve remover as cores do ícone e preservar o texto claro da aba");
 assert.match(screenReader, /setInterval\(inspectFrame, 850\)/, "a troca da aba ativa deve ser percebida em menos de um segundo");
+assert.match(styles, /@keyframes screenReaderPromptPulse/, "o aviso de ativação deve chamar atenção sem cobrir o gráfico inteiro");
 assert.match(screenReader, /readVisibleText\(activeTab, tabMoved \|\| !lastAsset\)/, "mudar a aba deve forçar uma leitura imediata do novo ativo");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");

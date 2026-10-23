@@ -10,6 +10,7 @@ const context = canvas?.getContext("2d", { willReadFrequently: true });
 const ocrCanvas = document.createElement("canvas");
 const ocrContext = ocrCanvas.getContext("2d", { willReadFrequently: true });
 const modal = document.getElementById("installModal");
+const activationPrompts = [...document.querySelectorAll("[data-screen-reader-prompt]")];
 
 let stream = null;
 let worker = null;
@@ -40,6 +41,10 @@ function setButtons(label, disabled = false) {
     button.disabled = disabled;
     button.classList.toggle("active", Boolean(stream));
   });
+}
+
+function showActivationPrompt(visible) {
+  activationPrompts.forEach(prompt => { prompt.hidden = !visible; });
 }
 
 function balanceFromText(value) {
@@ -258,6 +263,7 @@ async function stopReading(reason = "Leitura visual desativada") {
   stream = null;
   video.srcObject = null;
   reversalTracker.reset();
+  showActivationPrompt(true);
   setStatus(reason, "");
   setButtons("Ativar leitura da tela");
   window.dispatchEvent(new CustomEvent("atlas:screen-stopped"));
@@ -284,6 +290,7 @@ async function startReading() {
     });
     video.srcObject = stream;
     await video.play();
+    showActivationPrompt(false);
     stream.getVideoTracks()[0]?.addEventListener("ended", () => stopReading("Compartilhamento encerrado"), { once: true });
     setButtons("Encerrar leitura");
     setStatus("Iniciando leitura visual…", "waiting");
@@ -292,6 +299,7 @@ async function startReading() {
     analysisTimer = setInterval(inspectFrame, 850);
   } catch (error) {
     stream = null;
+    showActivationPrompt(true);
     const denied = error?.name === "NotAllowedError";
     setStatus(denied ? "Compartilhamento não autorizado" : "Não foi possível iniciar a leitura", "error");
     setButtons("Ativar leitura da tela");
@@ -316,3 +324,4 @@ document.addEventListener("keydown", event => {
   }
 });
 setStatus("Pronta para ativar", "");
+showActivationPrompt(true);
