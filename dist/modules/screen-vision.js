@@ -258,6 +258,13 @@ export function classifyCandleSequence(bodies = []) {
   const confidence = direction === "WAIT"
     ? Math.round(42 + Math.abs(score) * 35)
     : Math.round(clamp(57 + Math.abs(score) * 34 + Math.min(8, recent.length), 0, 91));
+  const recentAgreement = recent.slice(-3).filter(body => body.direction === direction).length;
+  const currentCandleEntry = direction !== "WAIT"
+    && Math.abs(score) >= .42
+    && last.direction === direction
+    && recentAgreement >= 2
+    && spikeRatio <= 1.35;
+  const entryTiming = direction === "WAIT" ? "WAIT_CONFIRMATION" : currentCandleEntry ? "CURRENT_CANDLE" : "NEXT_CANDLE";
   const reason = direction === "BUY"
     ? `Leitura visual: ${recent.length} velas recentes mostram fechamentos e pressão para cima.`
     : direction === "SELL"
@@ -268,7 +275,11 @@ export function classifyCandleSequence(bodies = []) {
     `Deslocamento dos fechamentos: ${normalizedMove >= 0 ? "para cima" : "para baixo"} (${Math.round(Math.abs(normalizedMove) * 100)}%).`,
     `Distribuição das velas: ${Math.round(buyerShare * 100)}% compradoras e ${Math.round((1 - buyerShare) * 100)}% vendedoras.`,
     `Força combinada de deslocamento e sequência: ${Math.round(Math.abs(score) * 100)}%.`,
-    direction === "WAIT" ? "A entrada deve esperar uma nova confirmação." : "A leitura vale para a próxima vela, após o fechamento da atual."
+    direction === "WAIT"
+      ? "A entrada deve esperar uma nova confirmação."
+      : currentCandleEntry
+        ? "A sequência e a vela atual estão alinhadas; a leitura vale para esta vela, escolhendo com cuidado o melhor momento de entrada."
+        : "A leitura ainda precisa do fechamento atual; prepare a entrada somente para a próxima vela."
   ];
   return {
     direction,
@@ -277,7 +288,7 @@ export function classifyCandleSequence(bodies = []) {
     score,
     candleCount: recent.length,
     setup: "TREND_CONTINUATION",
-    entryTiming: direction === "WAIT" ? "WAIT_CONFIRMATION" : "NEXT_CANDLE",
+    entryTiming,
     factors,
     reason
   };

@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.4.0";
+import { analyzeChartPixels, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.7.4";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.6.1";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];

@@ -51,6 +51,7 @@ test("sequência ascendente resulta em compra", () => {
   paint(image, 165, 60, 175, 84, [13, 199, 144]);
   const result = analyzeChartPixels(image.data, image.width, image.height);
   assert.equal(result.direction, "BUY");
+  assert.equal(result.entryTiming, "CURRENT_CANDLE");
 });
 
 test("vela compradora esticada indica correção de venda na próxima vela", () => {

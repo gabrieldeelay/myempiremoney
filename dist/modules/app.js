@@ -142,9 +142,15 @@ function renderSignal(analysis = effectiveAnalysis()) {
   const probable = actionable && confidence < 75;
   const finalDirection = actionable ? direction : "WAIT";
   const gale = confidence >= 87 ? "SEM GALE" : confidence >= 75 ? "ATÉ GALE 1" : confidence >= 62 ? "ATÉ GALE 2" : "NÃO ENTRAR";
-  const timing = finalDirection === "WAIT"
-    ? "AGUARDE CONFIRMAÇÃO"
-    : analysis?.entryTiming === "CURRENT_CANDLE" ? "VELA ATUAL" : "PRÓXIMA VELA";
+  const timingCode = finalDirection === "WAIT"
+    ? "WAIT_CONFIRMATION"
+    : analysis?.entryTiming === "CURRENT_CANDLE" ? "CURRENT_CANDLE" : "NEXT_CANDLE";
+  const timing = timingCode === "CURRENT_CANDLE" ? "NESTA VELA" : timingCode === "NEXT_CANDLE" ? "PRÓXIMA VELA" : "AGUARDE CONFIRMAÇÃO";
+  const entryAdvice = timingCode === "CURRENT_CANDLE"
+    ? "Espere o melhor momento para entrar nesta vela."
+    : timingCode === "NEXT_CANDLE"
+      ? "Aguarde a vela atual fechar antes de entrar."
+      : "Espere uma leitura estável.";
   const card = $("signalCard");
   card.classList.toggle("buy", finalDirection === "BUY");
   card.classList.toggle("sell", finalDirection === "SELL");
@@ -154,7 +160,11 @@ function renderSignal(analysis = effectiveAnalysis()) {
     : finalDirection === "SELL" ? `${probable ? "PROVÁVEL " : ""}VENDA` : "AGUARDAR";
   $("signalIcon").textContent = finalDirection === "BUY" ? "↗" : finalDirection === "SELL" ? "↘" : "—";
   $("confidenceBadge").textContent = `${confidence}% CONFIANÇA`;
-  $("entryTiming").textContent = timing;
+  const timingBadge = $("entryTiming");
+  timingBadge.textContent = timing;
+  timingBadge.className = `entry-timing ${timingCode === "CURRENT_CANDLE" ? "current" : timingCode === "NEXT_CANDLE" ? "next" : "waiting"}`;
+  timingBadge.setAttribute("aria-label", `${timing}. ${entryAdvice}`);
+  $("entryAdvice").textContent = entryAdvice;
   $("galeBadge").textContent = gale;
   $("galeBadge").className = `gale-badge gale-${gale === "SEM GALE" ? "none" : gale.includes("1") ? "one" : gale.includes("2") ? "two" : "wait"}`;
   const stability = $("signalStability");
@@ -284,7 +294,7 @@ const robot = {
     protectionTaken: ["[[good:Proteção bem posicionada.]] O preço chegou à região prevista antes da nova **{direction}** em {asset}.", "[[good:Boa leitura da proteção.]] A reentrada em **{direction}** aconteceu na faixa planejada de {asset}.", "A proteção respeitou o nível técnico. Agora deixa o gráfico trabalhar sem inventar uma terceira entrada."],
     protectionEarly: ["[[bad:Proteção antecipada.]] O preço ainda não tinha alcançado a região planejada de {asset}.", "Você protegeu cedo em {asset}. A ideia era esperar o preço chegar ao nível marcado antes da nova **{direction}**.", "[[bad:Faltou esperar o nível.]] A proteção veio antes do preço confirmar a região em {asset}."],
     adclose: ["Fechou o anúncio. Finalmente uma operação com 100% de acerto.", "Anúncio eliminado. Essa entrada eu aprovo sem indicador.", "Boa. Menos propaganda, mais gráfico e só um pouco menos de caos.", "Fechou o anúncio com precisão. Se operar assim, talvez dê jogo."],
-    dragged: ["Já são {count} mudanças. Eu sou analista, não ícone de desktop.", "{count} passeios pelo gráfico. Escolhe um canto e deixa eu trabalhar, criatura.", "Você já me arrastou {count} vezes. O gráfico parado e eu fazendo turismo.", "Mudança número {count}. Isso ainda não conta como gerenciamento de risco."],
+    dragged: ["Escolhe um canto e deixa eu acompanhar o gráfico.", "Eu sou analista, não ícone de desktop. Deixa eu trabalhar daqui.", "O gráfico está parado e eu fazendo turismo. Vamos focar na leitura.", "Pode me deixar neste canto. Se houver algo importante, eu aviso."],
     win: ["[[good:Resultado positivo]] em {asset}. O mérito está na disciplina, não na euforia.", "[[good:Lucro confirmado]] em {asset}. Preserve o método que trouxe o resultado.", "{asset} terminou no [[good:positivo]]. Boa execução vale mais que comemoração antecipada."],
     loss: ["[[bad:Resultado negativo]] em {asset}. Revanche não é indicador.", "[[bad:Perda confirmada]] em {asset}. Revise o contexto sem aumentar a mão.", "{asset} terminou no [[bad:negativo]]. Aceite o dado e proteja a próxima decisão."],
     draw: ["Empate em {asset}. Nem o mercado quis bancar essa história.", "{asset} devolveu a entrada. Emoção gasta, saldo preservado.", "Resultado neutro em {asset}. Próxima vela, mesmo plano."],
@@ -916,7 +926,7 @@ function finishRobotDrag(event) {
   suppressRobotClickUntil = Date.now() + 350;
   const moves = Number(localStorage.getItem("atlas-robot-moves") || 0) + 1;
   localStorage.setItem("atlas-robot-moves", String(moves));
-  if (moves % 5 === 0) robot.speak("dragged", { count: moves }, true, true);
+  if (moves % 3 === 0) robot.speak("dragged", {}, true, true);
 }
 $("robotCharacter").addEventListener("pointerup", finishRobotDrag);
 $("robotCharacter").addEventListener("pointercancel", finishRobotDrag);

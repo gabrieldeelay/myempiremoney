@@ -190,6 +190,9 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .signal-line span { padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; color: #a5b6ca; font-size: 10px; font-weight: 850; letter-spacing: .04em; }
 .signal-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .signal-meta > span { padding: 3px 7px; border: 1px solid rgba(115,160,225,.16); border-radius: 6px; background: rgba(87,151,255,.05); color: #91a8c5; font-size: 9px; font-weight: 900; letter-spacing: .06em; }
+.signal-meta .entry-timing.current, .signal-meta .entry-timing.next { border-color: rgba(103,147,255,.48); background: linear-gradient(135deg, rgba(72,133,255,.18), rgba(122,91,255,.15)); color: #dce8ff; animation: entryTimingPulse 1.8s ease-in-out infinite; }
+.signal-meta .entry-timing.current { border-color: rgba(49,214,155,.45); background: linear-gradient(135deg, rgba(49,214,155,.14), rgba(55,137,255,.12)); color: #baf7df; }
+.signal-meta .entry-timing.waiting { color: #91a8c5; }
 .signal-meta .gale-none { border-color: rgba(49,214,155,.24); background: rgba(49,214,155,.08); color: #75e8bf; }
 .signal-meta .gale-one { border-color: rgba(87,151,255,.28); background: rgba(87,151,255,.09); color: #9dc0ff; }
 .signal-meta .gale-two { border-color: rgba(199,162,255,.3); background: rgba(199,162,255,.1); color: var(--probable); }
@@ -198,6 +201,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .signal-meta .signal-stability.checking { border-color: rgba(255,179,71,.3); background: rgba(255,179,71,.1); color: #ffd18a; animation: stabilityPulse 1.6s ease-in-out infinite; }
 .signal-meta .signal-stability.waiting { color: #91a8c5; }
 @keyframes stabilityPulse { 50% { border-color: rgba(255,179,71,.65); box-shadow: 0 0 12px rgba(255,179,71,.16); } }
+@keyframes entryTimingPulse { 0%, 100% { box-shadow: 0 0 0 rgba(87,151,255,0); transform: scale(1); } 50% { box-shadow: 0 0 13px rgba(87,151,255,.28); transform: scale(1.045); } }
 .setup-warning-stack { position: fixed; z-index: 90; top: 70px; left: 50%; display: grid; width: min(460px, calc(100vw - 28px)); gap: 10px; transform: translateX(-50%); }
 .setup-warning-stack[hidden] { display: none; }
 .setup-warning { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 12px 12px 12px 13px; overflow: hidden; border: 1px solid rgba(255,179,71,.42); border-radius: 14px; background: linear-gradient(135deg, rgba(13,29,52,.98), rgba(7,17,33,.98)); box-shadow: 0 18px 55px rgba(0,0,0,.5), 0 0 24px rgba(255,179,71,.09); animation: setupWarningIn .24s ease-out both; }
@@ -215,6 +219,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 @keyframes setupWarningIn { from { opacity: 0; transform: translateY(-12px) scale(.98); } }
 @media (max-width: 620px) { .setup-warning { grid-template-columns: 32px minmax(0, 1fr); } .setup-warning-actions { grid-column: 2; justify-content: flex-start; } }
 .signal-copy p { max-width: 480px; margin: 6px 0 0; overflow: hidden; color: #9aacc1; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.analysis-summary strong { color: #dce8ff; font-weight: 850; }
+.signal-card.buy .analysis-summary strong { color: #8cebc9; }
+.signal-card.sell .analysis-summary strong { color: #ff9ea4; }
+.signal-card.probable .analysis-summary strong { color: #d6bfff; }
 .signal-more { position: relative; z-index: 4; margin-top: 5px; padding: 0; border: 0; background: transparent; color: #79a9f6; cursor: help; font-size: 10px; font-weight: 850; text-decoration: underline; text-decoration-color: rgba(121,169,246,.42); text-underline-offset: 3px; }
 .signal-tooltip { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 9px); width: min(390px, calc(100vw - 42px)); padding: 13px 14px; border: 1px solid rgba(105,160,245,.3); border-radius: 12px; background: rgba(5,17,34,.98); color: #b9c9dc; box-shadow: 0 18px 48px rgba(0,0,0,.52); text-align: left; opacity: 0; visibility: hidden; transform: translateY(5px); transition: .16s opacity, .16s transform, .16s visibility; pointer-events: none; }
 .signal-more:hover .signal-tooltip, .signal-more:focus-visible .signal-tooltip { opacity: 1; visibility: visible; transform: translateY(0); }

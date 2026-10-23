@@ -71,6 +71,7 @@ assert.match(app, /exposureCritical/, "o robô deve interromper o silêncio quan
 assert.match(app, /flashTrade\(state\.manualOperation\.direction/, "cada operação manual deve disparar o efeito visual correspondente");
 assert.match(html, /id="tradeFlash"/, "o painel precisa ter uma camada de glow sobre a tela inteira");
 assert.match(html, /id="entryTiming"/, "a leitura deve dizer se a entrada é para a vela atual ou para a próxima");
+assert.match(html, /id="entryAdvice"/, "a indicação deve aconselhar o usuário sem alongar o selo principal");
 assert.match(html, /id="galeBadge"/, "a leitura deve exibir o limite de gale calculado");
 assert.match(html, /id="analysisDetails"/, "o painel deve explicar os fatores que fomentam a leitura");
 assert.match(app, /confidence >= 87 \? "SEM GALE"/, "confiança muito alta deve ser apresentada sem gale");
@@ -95,8 +96,11 @@ assert.match(app, /Piper\.carregar\(\{/, "o robô deve inicializar o motor Piper
 assert.match(app, /narrator\.falar\(spokenText/, "o robô deve gerar a fala diretamente no navegador");
 assert.match(app, /vozz@178ff1640f950426790ea3b7257b15a1aa1238ea/, "o modelo local deve usar uma versão fixa e reproduzível");
 assert.match(app, /this\.voiceQueue = \[spokenText\]/, "uma nova mensagem não pode interromper a fala atual");
-assert.match(app, /if \(moves % 5 === 0\)/, "o robô só deve reclamar no quinto movimento e em seus múltiplos");
-assert.match(app, /\{ count: moves \}/, "a reclamação deve informar quantas vezes o robô foi movido");
+assert.match(app, /if \(moves % 3 === 0\)/, "o robô deve reclamar a cada terceira movimentação");
+assert.doesNotMatch(app, /robot\.speak\("dragged", \{ count: moves \}/, "a reclamação não deve dizer quantas vezes o robô foi movido");
+assert.match(app, /"NESTA VELA"/, "a indicação da vela atual deve permanecer curta no design");
+assert.match(app, /Espere o melhor momento para entrar nesta vela\./, "a orientação da vela atual deve aparecer separada do selo");
+assert.match(styles, /@keyframes entryTimingPulse/, "a indicação do momento da entrada deve pulsar suavemente");
 assert.match(localTts, /pt_BR-faber-medium-uint8\.onnx/, "a voz local deve usar o modelo masculino Faber em português brasileiro");
 assert.match(localTts, /vozz-piper-v1/, "o modelo local deve usar cache persistente no navegador");
 assert.doesNotMatch(server, /\/api\/tts/, "a voz local não deve depender de uma rota paga no servidor");
@@ -120,6 +124,7 @@ assert.match(html, /id="screenReaderVideo"/, "a captura da aba deve permanecer i
 assert.doesNotMatch(html, /install-flow\.js/, "a extensão não pode continuar sendo requisito do painel");
 assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "as configurações não devem empurrar instalação de extensão");
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
+assert.match(screenReader, /screen-vision\.js\?v=3\.7\.4/, "a leitura deve carregar a nova lógica de momento da entrada sem usar cache antigo");
 assert.match(screenReader, /source: "screen-capture"/, "o painel deve identificar sinais produzidos pela leitura visual");
 assert.match(screenReader, /Tesseract\.createWorker/, "o ativo visível deve ser identificado localmente por OCR");
 assert.match(screenReader, /const scale = 4/, "o rótulo pequeno do ativo deve ser ampliado antes do OCR");

@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#061326" />
   <title>Atlas | Assistente de operações</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=3.7.1" />
+  <link rel="stylesheet" href="/styles.css?v=3.7.4" />
 </head>
 <body>
   <div class="app-shell">
@@ -60,11 +60,11 @@
               <span id="confidenceBadge">0% CONFIANÇA</span>
             </div>
             <div class="signal-meta" aria-label="Momento da entrada e limite de gale">
-              <span id="entryTiming">AGUARDE CONFIRMAÇÃO</span>
+              <span class="entry-timing waiting" id="entryTiming">AGUARDE CONFIRMAÇÃO</span>
               <span class="gale-badge gale-wait" id="galeBadge">NÃO ENTRAR</span>
               <span class="signal-stability waiting" id="signalStability">SEM SINAL CONFIRMADO</span>
             </div>
-            <p id="analysisReason">Entre na Hezilex para iniciar a análise em tempo real.</p>
+            <p class="analysis-summary"><strong id="entryAdvice">Espere uma leitura estável.</strong> <span id="analysisReason">Entre na Hezilex para iniciar a análise em tempo real.</span></p>
             <button class="signal-more" type="button" aria-describedby="analysisTooltip">
               Ler mais
               <span class="signal-tooltip" id="analysisTooltip" role="tooltip">
@@ -178,8 +178,8 @@
   <canvas id="screenReaderCanvas" hidden></canvas>
 
   <script type="module" src="/modules/app-guard.js?v=3.2.0"></script>
-  <script type="module" src="/modules/app.js?v=3.7.3"></script>
+  <script type="module" src="/modules/app.js?v=3.7.4"></script>
   <script type="module" src="/modules/insights.js?v=3.2.0"></script>
-  <script type="module" src="/modules/screen-reader.js?v=3.6.1"></script>
+  <script type="module" src="/modules/screen-reader.js?v=3.7.4"></script>
 </body>
 </html>
