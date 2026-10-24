@@ -1,5 +1,5 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
-import { createSignalStabilizer } from "./signal-stability.js?v=3.9.5";
+import { createSignalStabilizer } from "./signal-stability.js?v=3.14.0";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.12.1";
 import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.1";
 import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.5";

@@ -158,7 +158,7 @@ assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desapa
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
 assert.match(screenReader, /screen-vision\.js\?v=3\.12\.1/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
-assert.match(app, /signal-stability\.js\?v=3\.9\.5/, "o painel deve carregar a direção travada sem usar cache antigo");
+assert.match(app, /signal-stability\.js\?v=3\.14\.0/, "o painel deve carregar o alerta de reversão sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
 assert.match(screenReader, /setup-warning-state\.js\?v=3\.12\.1/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
 assert.match(screenReader, /left: \.65, width: \.18/, "a expiração deve ser lida sem misturar o contador regressivo com o valor de cinco minutos");
@@ -205,6 +205,8 @@ assert.match(analysisPolicy, /A direção só é publicada quando o servidor cen
 assert.match(app, /createSignalStabilizer\(\{ initialConfirmMs: 0, initialHits: 1 \}\)/, "o primeiro sinal central deve aparecer sem atraso");
 assert.doesNotMatch(app, /identifiedAnalysis\.source === "market-radar-5m"/, "o radar central não pode contornar o bloqueio por vela");
 assert.match(signalStability, /analysis\.signalKind === "no-opportunity"/, "sem oportunidade só deve substituir um sinal após o fechamento da vela");
+assert.match(signalStability, /const oppositeStretch = \["STRETCHED_CANDLE", "INTRACANDLE_REVERSAL"\]/, "uma vela extrema deve abrir possível compra ou venda mesmo durante o cooldown");
+assert.match(signalStability, /Possível \$\{reversalDirection === "BUY" \? "compra" : "venda"\} nesta vela/, "a reversão intravela deve explicar o novo alerta sem confirmar entrada cedo demais");
 assert.match(signalStability, /minimumSignalConfidence = options\.minimumSignalConfidence \?\? 50/, "o estabilizador deve aceitar possíveis sinais a partir de cinquenta por cento");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");

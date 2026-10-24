@@ -165,6 +165,35 @@ export function createSignalStabilizer(options = {}) {
     };
 
     if (stableDirectionIsLocked(timestamp)) {
+      const reversalDirection = analysis.setup === "INTRACANDLE_REVERSAL"
+        ? analysis.direction
+        : normalizedDirection(analysis.reversalDirection);
+      const oppositeStretch = ["STRETCHED_CANDLE", "INTRACANDLE_REVERSAL"].includes(analysis.setup)
+        && ["BUY", "SELL"].includes(reversalDirection)
+        && reversalDirection !== stable.direction;
+      if (oppositeStretch) {
+        const observedAnalysis = {
+          ...analysis,
+          direction: "WAIT",
+          reversalDirection,
+          entryTiming: "CURRENT_CANDLE",
+          reason: analysis.setup === "INTRACANDLE_REVERSAL"
+            ? `Reação técnica detectada contra o sinal anterior. Possível ${reversalDirection === "BUY" ? "compra" : "venda"} nesta vela.`
+            : analysis.reason
+        };
+        candidate = null;
+        rememberObservation(observedAnalysis, timestamp);
+        return observationView(analysis.setup === "INTRACANDLE_REVERSAL" ? {
+          direction: reversalDirection,
+          confidence: analysis.confidence,
+          hits: 1,
+          reason: "reversal-watch"
+        } : null);
+      }
+      if (observationStillRelevant(analysis, timestamp)) {
+        candidate = null;
+        return observationView();
+      }
       candidate = null;
       return { ...stable, stability: "stable", transition: null, candleLocked: true };
     }
