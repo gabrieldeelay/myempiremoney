@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#061326" />
   <title>Atlas | Assistente de operações</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=3.13.0" />
+  <link rel="stylesheet" href="/styles.css?v=3.15.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -63,34 +63,58 @@
           <div class="signal-cycle" id="signalCycle" role="status" aria-live="polite" hidden>
             <i aria-hidden="true"></i><span>NOVA VELA</span><time id="signalCycleTime">—</time>
           </div>
-          <div class="signal-icon" id="signalIcon">—</div>
-          <div class="signal-copy">
-            <small id="signalKicker">LEITURA ATUAL</small>
-            <div class="signal-line">
-              <h1 id="analysisDirection">AGUARDAR</h1>
-              <span id="confidenceBadge">0% CONFIANÇA</span>
-            </div>
-            <div class="signal-meta" aria-label="Momento da entrada e limite de gale">
-              <span class="entry-timing waiting" id="entryTiming">AGUARDE CONFIRMAÇÃO</span>
-              <span class="gale-badge gale-wait" id="galeBadge">NÃO ENTRAR</span>
-              <span class="signal-stability waiting" id="signalStability">SEM SINAL CONFIRMADO</span>
-            </div>
-            <div class="entry-guidance" id="entryGuidance" role="status" aria-live="polite">
-              <span class="entry-guidance-icon" aria-hidden="true">!</span>
-              <div>
-                <small>ORIENTAÇÃO DE ENTRADA</small>
-                <strong id="entryAdvice">Não entre agora. Aguarde uma leitura confirmada.</strong>
+          <section class="signal-pane signal-pane-current" aria-labelledby="currentCandleTitle">
+            <div class="signal-pane-title"><i aria-hidden="true"></i><span id="currentCandleTitle">NESTA VELA</span></div>
+            <div class="signal-pane-body">
+              <div class="signal-icon" id="signalIcon">—</div>
+              <div class="signal-copy">
+                <small id="signalKicker">ENTRADA DURANTE A FORMAÇÃO</small>
+                <div class="signal-line">
+                  <h1 id="analysisDirection">SEM ENTRADA</h1>
+                  <span id="confidenceBadge">0% CONFIANÇA</span>
+                </div>
+                <div class="signal-meta" aria-label="Momento da entrada e limite de gale">
+                  <span class="entry-timing current" id="entryTiming">NESTA VELA</span>
+                  <span class="gale-badge gale-wait" id="galeBadge">NÃO ENTRAR</span>
+                  <span class="signal-stability waiting" id="signalStability">ANÁLISE AO VIVO</span>
+                </div>
+                <div class="entry-guidance" id="entryGuidance" role="status" aria-live="polite">
+                  <span class="entry-guidance-icon" aria-hidden="true">!</span>
+                  <div>
+                    <small>ORIENTAÇÃO DE ENTRADA</small>
+                    <strong id="entryAdvice">Aguardando a leitura da vela atual.</strong>
+                  </div>
+                </div>
+                <p class="analysis-summary"><span id="analysisReason">Entre na Hezilex para iniciar a análise em tempo real.</span></p>
+                <button class="signal-more" type="button" aria-describedby="analysisTooltip">
+                  Ler mais
+                  <span class="signal-tooltip" id="analysisTooltip" role="tooltip">
+                    <strong>O que fomenta esta leitura</strong>
+                    <ul id="analysisDetails"><li>Aguardando dados suficientes do gráfico.</li></ul>
+                  </span>
+                </button>
               </div>
             </div>
-            <p class="analysis-summary"><span id="analysisReason">Entre na Hezilex para iniciar a análise em tempo real.</span></p>
-            <button class="signal-more" type="button" aria-describedby="analysisTooltip">
-              Ler mais
-              <span class="signal-tooltip" id="analysisTooltip" role="tooltip">
-                <strong>O que fomenta esta leitura</strong>
-                <ul id="analysisDetails"><li>Aguardando dados suficientes do gráfico.</li></ul>
-              </span>
-            </button>
-          </div>
+          </section>
+
+          <section class="signal-pane signal-pane-next" id="nextSignalPane" aria-labelledby="nextCandleTitle">
+            <div class="signal-pane-title"><i aria-hidden="true"></i><span id="nextCandleTitle">PRÓXIMA VELA</span></div>
+            <div class="signal-pane-body">
+              <div class="signal-icon next-signal-icon" id="nextSignalIcon">—</div>
+              <div class="signal-copy next-signal-copy">
+                <small>DIREÇÃO APÓS O FECHAMENTO</small>
+                <div class="signal-line">
+                  <h1 id="nextAnalysisDirection">SEM DIREÇÃO</h1>
+                  <span id="nextConfidenceBadge">0% CONFIANÇA</span>
+                </div>
+                <div class="signal-meta">
+                  <span class="entry-timing next">PRÓXIMA VELA</span>
+                  <span class="signal-stability waiting" id="nextSignalStability">AGUARDANDO DIREÇÃO</span>
+                </div>
+                <p class="analysis-summary" id="nextAnalysisReason">A direção provável será atualizada pela última vela fechada.</p>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div class="market-facts">
@@ -144,6 +168,11 @@
 
   <div class="cursor-glow" id="cursorGlow" aria-hidden="true"></div>
   <div class="trade-flash" id="tradeFlash" aria-hidden="true"></div>
+  <aside class="extreme-alert" id="extremeAlert" role="status" aria-live="assertive" hidden>
+    <span class="extreme-alert-icon" id="extremeAlertIcon">↗</span>
+    <div><small>MOVIMENTO EXTREMO</small><strong id="extremeAlertLabel">POSSÍVEL COMPRA</strong><p id="extremeAlertDetail">Aguarde confirmação técnica.</p></div>
+    <button type="button" id="extremeAlertClose" aria-label="Fechar alerta">×</button>
+  </aside>
   <aside class="setup-warning-stack" id="setupWarnings" aria-label="Avisos de configuração" aria-live="assertive" hidden></aside>
 
   <div class="install-modal" id="installModal" hidden>
@@ -192,8 +221,8 @@
   <canvas id="screenReaderCanvas" hidden></canvas>
 
   <script type="module" src="/modules/app-guard.js?v=3.2.0"></script>
-  <script type="module" src="/modules/app.js?v=3.14.0"></script>
+  <script type="module" src="/modules/app.js?v=3.15.0"></script>
   <script type="module" src="/modules/insights.js?v=3.11.0"></script>
-  <script type="module" src="/modules/screen-reader.js?v=3.12.4"></script>
+  <script type="module" src="/modules/screen-reader.js?v=3.15.0"></script>
 </body>
 </html>

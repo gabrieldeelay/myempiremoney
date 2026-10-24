@@ -55,6 +55,15 @@ test("pode confirmar 1m já na primeira leitura ao abrir ou trocar o ativo", () 
   assert.equal(reading.update(1), 1);
 });
 
+test("a expiração exige três leituras iguais para não transformar o contador em falso aviso", () => {
+  const reading = createMinuteReadingStabilizer({ requiredHits: 3, warningHits: 7 });
+  assert.equal(reading.update(1), null);
+  assert.equal(reading.update(1), null);
+  assert.equal(reading.update(5), null, "um 5 min visível deve invalidar a hipótese criada pelo contador");
+  assert.equal(reading.update(5), null);
+  assert.equal(reading.update(5), 5);
+});
+
 test("avisa quando gráfico e expiração não estão em cinco minutos", () => {
   const tracker = createSetupWarningTracker();
   const issues = tracker.update({ asset: "BITCOIN", timeframe: "1m", expiration: "1 min" });

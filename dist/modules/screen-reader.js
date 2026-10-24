@@ -1,6 +1,6 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.12.1";
-import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.12.1";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.15.0";
+import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.15.0";
 
 const ASSET_OCR_INTERVAL_MS = 450;
 const READING_ISSUE_AFTER_MS = 6500;
@@ -31,7 +31,9 @@ let captureStartedAt = 0;
 let missedChartReads = 0;
 let assetRevision = 0;
 const timeframeReading = createMinuteReadingStabilizer({ immediateInitialMismatch: true });
-const expirationReading = createMinuteReadingStabilizer();
+// Expiration sits next to a changing countdown. Requiring three matching OCR
+// samples keeps a timer such as 01:34 from becoming a false "1 min" warning.
+const expirationReading = createMinuteReadingStabilizer({ requiredHits: 3, warningHits: 7 });
 const reversalTracker = createIntracandleReversalTracker();
 
 function resetSetupReadings() {
@@ -135,10 +137,12 @@ function prepareSetupCrop(kind, activeTab) {
     : { left: .65, width: .18 };
   const cropLeft = Math.max(0, Math.round(frame.x + frame.width * region.left));
   const cropTop = Math.max(0, Math.round(activeTab?.y
-    ? activeTab.y + (kind === "expiration" ? activeTab.height * .5 : 4)
+    ? activeTab.y + (kind === "expiration" ? Math.max(19, frame.height * .028) : 4)
     : frame.y + frame.height * (kind === "expiration" ? .235 : .18)));
   const cropWidth = Math.min(canvas.width - cropLeft, Math.round(frame.width * region.width));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * (kind === "expiration" ? .052 : .085)));
+  // The narrow expiration strip contains the selected "5 min" row but not
+  // the countdown rendered above it. Timeframe keeps the larger tab crop.
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * (kind === "expiration" ? .034 : .085)));
   const scale = 4;
   ocrCanvas.width = Math.max(1, cropWidth * scale);
   ocrCanvas.height = Math.max(1, cropHeight * scale);

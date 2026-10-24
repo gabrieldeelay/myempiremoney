@@ -5,6 +5,7 @@ import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.1";
 import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.5";
 import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
 import { createSaoPauloCandleClock, signalEffectTone } from "./candle-cycle.js?v=3.13.0";
+import { composeDualSignalViews, signalLabel } from "./dual-signal.js?v=3.15.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -35,6 +36,8 @@ let currentSignalTone = "neutral";
 let signalVisualTimer = null;
 let signalCycleTimer = null;
 let lastVisualEffect = { at: 0, reason: "", tone: "" };
+let extremeAlertTimer = null;
+let lastExtremeAlertSignature = "";
 const screenRevisionGuard = createScreenRevisionGuard();
 let state = {
   version: null,
@@ -176,7 +179,64 @@ function triggerSignalVisual(tone, reason = "signal", cycle = null) {
   }, 1800);
 }
 
-function renderSignal(analysis = effectiveAnalysis()) {
+function renderNextSignal(view = {}) {
+  const pane = $("nextSignalPane");
+  if (!pane) return;
+  const direction = String(view.direction || "WAIT").toUpperCase();
+  const confidence = Math.round(Number(view.confidence) || 0);
+  const possible = Boolean(view.possible && ["BUY", "SELL"].includes(direction));
+  pane.classList.toggle("buy", direction === "BUY" && !possible);
+  pane.classList.toggle("sell", direction === "SELL" && !possible);
+  pane.classList.toggle("possible-buy", direction === "BUY" && possible);
+  pane.classList.toggle("possible-sell", direction === "SELL" && possible);
+  pane.classList.toggle("waiting", direction === "WAIT");
+  $("nextSignalIcon").textContent = direction === "BUY" ? "↗" : direction === "SELL" ? "↘" : "—";
+  $("nextAnalysisDirection").textContent = direction === "WAIT" ? "SEM DIREÇÃO" : signalLabel(view);
+  $("nextConfidenceBadge").textContent = `${confidence}% CONFIANÇA`;
+  $("nextSignalStability").textContent = direction === "WAIT"
+    ? "AGUARDANDO DIREÇÃO"
+    : possible ? "CENÁRIO EM FORMAÇÃO" : "DIREÇÃO CONFIRMADA";
+  $("nextSignalStability").className = `signal-stability ${direction === "WAIT" ? "waiting" : possible ? "checking" : "stable"}`;
+  $("nextAnalysisReason").textContent = view.reason || "A direção provável será atualizada pela última vela fechada.";
+}
+
+function showExtremeMovementAlert(view = {}) {
+  const host = $("extremeAlert");
+  const direction = String(view.direction || "WAIT").toUpperCase();
+  if (!host || !["BUY", "SELL"].includes(direction) || !["STRETCHED_CANDLE", "INTRACANDLE_REVERSAL"].includes(view.setup)) return;
+  const candle = view.technical?.lastCandle;
+  const asset = state.asset || selectedRadarAsset || "";
+  const signature = `${asset}|${direction}|${view.setup}|${Math.round(Number(candle?.centerX) || 0)}`;
+  if (signature === lastExtremeAlertSignature) return;
+  lastExtremeAlertSignature = signature;
+  clearTimeout(extremeAlertTimer);
+  host.className = `extreme-alert ${direction === "SELL" ? "sell" : "buy"}`;
+  $("extremeAlertIcon").textContent = direction === "BUY" ? "↗" : "↘";
+  $("extremeAlertLabel").textContent = `${signalLabel({ ...view, possible: true })} · ${Math.round(Number(view.confidence) || 0)}%`;
+  $("extremeAlertDetail").textContent = view.setup === "INTRACANDLE_REVERSAL"
+    ? "Rejeição técnica detectada nesta vela. Aguarde o melhor ponto antes de entrar."
+    : direction === "BUY"
+      ? "Queda extrema em observação. A compra depende de reação real do preço."
+      : "Alta extrema em observação. A venda depende de rejeição real do preço.";
+  host.hidden = false;
+  extremeAlertTimer = setTimeout(() => { host.hidden = true; }, 5600);
+}
+
+function renderSignal(centralAnalysis = effectiveAnalysis()) {
+  const views = composeDualSignalViews({
+    live: state.analysis || {},
+    central: centralAnalysis || {},
+    trend: trendForAsset(),
+    timeframe: state.timeframe,
+    expiration: state.expiration
+  });
+  const analysis = {
+    ...views.current,
+    signalKind: views.current.direction === "WAIT" ? "no-opportunity" : "entry",
+    entryConfirmed: views.current.direction !== "WAIT",
+    entryTiming: "CURRENT_CANDLE"
+  };
+  renderNextSignal(views.next);
   const direction = String(analysis?.direction || "WAIT").toUpperCase();
   const confidence = Math.round(Number(analysis?.confidence) || 0);
   const entryBlocked = analysis?.entryBlocked === true;
@@ -247,20 +307,8 @@ function renderSignal(analysis = effectiveAnalysis()) {
   card.classList.toggle("observing", watchingReversal);
   card.classList.toggle("trend-only", trendOnly && !possible);
   card.classList.toggle("scanning", finalDirection === "WAIT" && dataReady() && !noOpportunity);
-  if ($("signalKicker")) $("signalKicker").textContent = noOpportunity
-      ? "ANÁLISE CONCLUÍDA"
-      : directional || watchingReversal ? "SINAL DE ENTRADA" : "LEITURA ATUAL";
-  $("analysisDirection").textContent = entryBlocked
-    ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
-    : watchingReversal
-      ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
-    : trendOnly
-      ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
-    : noOpportunity
-      ? "SEM OPORTUNIDADE"
-    : finalDirection === "BUY"
-    ? `${possible ? "POSSÍVEL " : ""}COMPRA`
-    : finalDirection === "SELL" ? `${possible ? "POSSÍVEL " : ""}VENDA` : "AGUARDAR";
+  if ($("signalKicker")) $("signalKicker").textContent = "ENTRADA DURANTE A FORMAÇÃO";
+  $("analysisDirection").textContent = signalLabel({ direction: finalDirection, possible });
   $("signalIcon").textContent = finalDirection === "BUY" ? "↗" : finalDirection === "SELL" ? "↘" : "—";
   $("confidenceBadge").textContent = `${confidence}% CONFIANÇA`;
   const timingBadge = $("entryTiming");
@@ -296,15 +344,17 @@ function renderSignal(analysis = effectiveAnalysis()) {
     return entry;
   }));
 
-  currentSignalTone = signalEffectTone(finalDirection, possible);
+  const primaryVisualView = finalDirection !== "WAIT" ? { direction: finalDirection, possible } : views.next;
+  currentSignalTone = signalEffectTone(primaryVisualView.direction, primaryVisualView.possible);
   card.dataset.signalTone = currentSignalTone;
   const visibleAsset = state.asset || analysis?.previewAsset || selectedRadarAsset || "";
-  const visualSignature = `${visibleAsset}|${currentSignalTone}|${timingCode}`;
+  const visualSignature = `${visibleAsset}|${signalEffectTone(finalDirection, possible)}|${signalEffectTone(views.next.direction, views.next.possible)}`;
   const isSignal = currentSignalTone !== "neutral";
   if (isSignal && visualSignature !== lastSignalVisualSignature) {
     triggerSignalVisual(currentSignalTone, "signal");
   }
   lastSignalVisualSignature = visualSignature;
+  if (views.setupVerified) showExtremeMovementAlert(views.current);
 }
 
 function renderSetupWarnings(force = false) {
@@ -1152,6 +1202,11 @@ $("setupWarnings")?.addEventListener("click", event => {
   setupWarningTracker.dismiss(button.dataset.setupWarningDismiss, state.asset);
   setupWarningRenderKey = "";
   renderSetupWarnings(true);
+});
+
+$("extremeAlertClose")?.addEventListener("click", () => {
+  clearTimeout(extremeAlertTimer);
+  $("extremeAlert").hidden = true;
 });
 
 addEventListener("atlas:trends", event => {
