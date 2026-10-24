@@ -257,7 +257,7 @@ export function classifyCandleSequence(bodies = []) {
     : Math.max(...previous.map(body => body.y1));
   const lastExtreme = last.direction === "BUY" ? last.y0 : last.y1;
   const levelDistance = Math.abs(lastExtreme - referenceLevel) / averagePreviousHeight;
-  const levelTouch = levelDistance <= .35 || extremeBreak >= .18;
+  const levelTouch = levelDistance <= .5 || extremeBreak >= .1;
   const recentSameSide = previous.slice(-4).filter(body => body.direction === last.direction).length;
   const impulseStretch = spikeRatio >= 1.35
     && closeStretch >= .55
@@ -275,7 +275,12 @@ export function classifyCandleSequence(bodies = []) {
     && spikeRatio >= 1.28
     && closeStretch >= .48
     && recentSameSide >= 1;
-  const stretchedCandle = impulseStretch || matureRunStretch || extremeBodyStretch || levelExhaustion;
+  const contextualExhaustion = recent.length >= 4
+    && levelTouch
+    && spikeRatio >= 1.32
+    && closeStretch >= .32
+    && (recentSameSide >= 1 || extremeBreak >= .12 || spikeRatio >= 1.45);
+  const stretchedCandle = impulseStretch || matureRunStretch || extremeBodyStretch || levelExhaustion || contextualExhaustion;
   const technical = {
     lastCandle: { direction: last.direction, centerX: last.centerX, width: last.width, height: last.height },
     averagePreviousHeight,
@@ -366,8 +371,8 @@ export function classifyCandleSequence(bodies = []) {
 }
 
 export function createIntracandleReversalTracker(options = {}) {
-  const retracementThreshold = options.retracementThreshold ?? .16;
-  const flipBodyRatio = options.flipBodyRatio ?? .22;
+  const retracementThreshold = options.retracementThreshold ?? .1;
+  const flipBodyRatio = options.flipBodyRatio ?? .16;
   let watch = null;
 
   function reset() {

@@ -127,6 +127,60 @@ test("rejeição mensurável após vela vendedora esticada confirma possível co
   assert.equal(rejected.urgentReversal, true);
 });
 
+test("queda relevante em suporte abre possível compra ainda na vela atual", () => {
+  const bodies = [
+    { direction: "BUY", centerX: 90, width: 10, height: 20, y0: 94, y1: 113 },
+    { direction: "SELL", centerX: 110, width: 10, height: 18, y0: 96, y1: 113 },
+    { direction: "BUY", centerX: 130, width: 10, height: 21, y0: 91, y1: 111 },
+    { direction: "SELL", centerX: 150, width: 10, height: 22, y0: 101, y1: 122 },
+    { direction: "SELL", centerX: 170, width: 10, height: 29, y0: 108, y1: 136 }
+  ];
+  const result = classifyCandleSequence(bodies);
+  assert.equal(result.setup, "STRETCHED_CANDLE");
+  assert.equal(result.reversalDirection, "BUY");
+  assert.ok(result.confidence >= 50);
+});
+
+test("alta relevante em resistência abre possível venda ainda na vela atual", () => {
+  const bodies = [
+    { direction: "SELL", centerX: 90, width: 10, height: 20, y0: 89, y1: 108 },
+    { direction: "BUY", centerX: 110, width: 10, height: 18, y0: 88, y1: 105 },
+    { direction: "SELL", centerX: 130, width: 10, height: 21, y0: 90, y1: 110 },
+    { direction: "BUY", centerX: 150, width: 10, height: 22, y0: 78, y1: 99 },
+    { direction: "BUY", centerX: 170, width: 10, height: 29, y0: 64, y1: 92 }
+  ];
+  const result = classifyCandleSequence(bodies);
+  assert.equal(result.setup, "STRETCHED_CANDLE");
+  assert.equal(result.reversalDirection, "SELL");
+  assert.ok(result.confidence >= 50);
+});
+
+test("reação de dez por cento confirma rapidamente a reversão intravela contextual", () => {
+  const tracker = createIntracandleReversalTracker();
+  const watch = {
+    direction: "WAIT",
+    confidence: 56,
+    setup: "STRETCHED_CANDLE",
+    blockedDirection: "SELL",
+    reversalDirection: "BUY",
+    factors: ["Queda em suporte."],
+    technical: {
+      averagePreviousHeight: 20,
+      lastCandle: { direction: "SELL", centerX: 180, width: 10, height: 50 }
+    }
+  };
+  tracker.update(watch, "BNB");
+  const reacted = tracker.update({
+    ...watch,
+    technical: {
+      averagePreviousHeight: 20,
+      lastCandle: { direction: "SELL", centerX: 180, width: 10, height: 45 }
+    }
+  }, "BNB");
+  assert.equal(reacted.direction, "BUY");
+  assert.equal(reacted.entryTiming, "CURRENT_CANDLE");
+});
+
 test("deslocamento acumulado bloqueia venda tardia mesmo sem uma última vela isoladamente gigante", () => {
   const bodies = [
     { direction: "BUY", centerX: 100, width: 10, height: 80, y0: 80, y1: 159 },

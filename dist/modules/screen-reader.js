@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.15.0";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.16.4";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.15.0";
 
 const ASSET_OCR_INTERVAL_MS = 450;
