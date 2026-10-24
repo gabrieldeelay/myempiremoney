@@ -55,6 +55,12 @@ test("avisa quando gráfico e expiração não estão em cinco minutos", () => {
   assert.equal(tracker.update({ asset: "BITCOIN", timeframe: "5m", expiration: "5 min" }).length, 0);
 });
 
+test("avisa sobre o gráfico mesmo quando a expiração ainda não foi reconhecida", () => {
+  const tracker = createSetupWarningTracker();
+  const issues = tracker.update({ asset: "BNB", timeframe: "1m", expiration: null });
+  assert.deepEqual(issues.map(issue => issue.id), ["timeframe"]);
+});
+
 test("vou mudar silencia o aviso somente durante a visita atual ao ativo", () => {
   const tracker = createSetupWarningTracker();
   const wrong = { timeframe: "1m", expiration: "5 min" };

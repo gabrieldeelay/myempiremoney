@@ -1,6 +1,8 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.9.5";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.9.8";
+import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.10.0";
+import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -22,8 +24,10 @@ let marketTrends = [];
 let selectedRadarAsset = null;
 const signalStabilizer = createSignalStabilizer();
 const setupWarningTracker = createSetupWarningTracker();
+const analysisCache = createAssetAnalysisCache();
 let displayedAnalysis = null;
 let setupWarningRenderKey = "";
+let radarUpdatedAt = null;
 let state = {
   version: null,
   asset: null,
@@ -35,7 +39,8 @@ let state = {
   defaults: { timeframe: false, expiration: false },
   manualOperation: null,
   uiEvent: null,
-  lastInspectionAt: null
+  lastInspectionAt: null,
+  readingIssue: null
 };
 
 function formatRobotMessage(value) {
@@ -70,60 +75,41 @@ function dataReady() {
 
 function trendForAsset(asset = state.asset || selectedRadarAsset) {
   const normalized = normalizeAssetName(asset);
-  return normalized ? marketTrends.find(item => normalizeAssetName(item.asset) === normalized) || null : null;
+  if (!normalized) return null;
+  return marketTrends.find(item => normalizeAssetName(item.asset) === normalized)
+    || analysisCache.trend(normalized)
+    || null;
 }
 
 function effectiveAnalysis() {
-  const live = state.analysis || {};
-  const trend = trendForAsset();
-  const liveDirection = String(live.direction || "WAIT").toUpperCase();
-  const trendDirection = String(trend?.direction || "WAIT").toUpperCase();
-  if (!trend) {
-    return {
-      ...live,
-      direction: "WAIT",
-      confidence: 0,
-      reason: "Sincronizando este ativo com o Radar Atlas 5M.",
-      factors: ["A direção só é publicada quando o servidor central confirma o mesmo sinal para todos."],
-      source: "market-radar-loading"
-    };
-  }
-  const directional = ["BUY", "SELL"].includes(trendDirection);
-  const visualAgrees = live.source === "screen-capture" && liveDirection === trendDirection;
-  const localEntryBlocked = directional && visualAgrees && live.entryBlocked === true;
-  const localTiming = directional && visualAgrees && !localEntryBlocked ? live.entryTiming : "NEXT_CANDLE";
-  const side = trendDirection === "BUY" ? "compra" : trendDirection === "SELL" ? "venda" : "aguardar";
-  const localContext = visualAgrees
-    ? "A leitura da tela confirma a mesma direção e ajuda a escolher o momento da entrada."
-    : directional
-      ? "A tela ainda não confirmou o ponto; a direção central permanece a mesma para todos."
-      : "O servidor ainda não encontrou vantagem técnica suficiente.";
-  return {
-    ...live,
-    ...trend,
-    direction: trendDirection,
-    confidence: Math.round(Number(trend.confidence) || 0),
-    entryTiming: localTiming,
-    entryBlocked: localEntryBlocked,
-    setup: visualAgrees ? live.setup : null,
-    technical: live.technical,
-    factors: [
-      `Direção central de ${side} calculada na última vela de 5 minutos já fechada.`,
-      trend.reason || "EMA9, EMA21, RSI e momentum calculados no servidor.",
-      localContext
-    ],
-    reason: `Radar Atlas 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}. ${localContext}`,
-    source: "market-radar-5m"
-  };
+  return composeCentralAnalysis({
+    live: state.analysis || {},
+    trend: trendForAsset(),
+    timeframe: state.timeframe,
+    expiration: state.expiration
+  });
 }
 
 function analysisForIdentifiedAsset() {
   if (state.asset) return effectiveAnalysis();
+  const fallbackAsset = selectedRadarAsset
+    || normalizeAssetName(analysisCache.lastAsset())
+    || normalizeAssetName(strongestTrend(marketTrends)?.asset);
+  const fallbackTrend = trendForAsset(fallbackAsset);
+  if (fallbackAsset && fallbackTrend) {
+    selectedRadarAsset = fallbackAsset;
+    return {
+      ...composeCentralAnalysis({ trend: fallbackTrend }),
+      previewAsset: fallbackAsset,
+      reason: `Análise pronta de ${fallbackAsset}. A direção do mercado já está disponível; ative a leitura para confirmar o ponto de entrada na Hezilex.`
+    };
+  }
   return {
     direction: "WAIT",
     confidence: 0,
-    reason: "Identificando o ativo selecionado antes de iniciar a nova leitura.",
-    factors: ["A indicação anterior foi removida para não misturar análises de ativos diferentes."],
+    signalKind: "syncing",
+    reason: "O Radar Atlas está carregando a primeira análise. Isso deve levar apenas alguns segundos.",
+    factors: ["Nenhum resultado antigo será apresentado como se ainda estivesse válido."],
     source: "asset-identification"
   };
 }
@@ -137,23 +123,31 @@ function renderSignal(analysis = effectiveAnalysis()) {
   const confidence = Math.round(Number(analysis?.confidence) || 0);
   const entryBlocked = analysis?.entryBlocked === true;
   const directional = ["BUY", "SELL"].includes(direction);
+  const trendOnly = analysis?.signalKind === "trend" && directional && analysis?.entryConfirmed !== true;
+  const noOpportunity = analysis?.signalKind === "no-opportunity";
   const watchingReversal = !entryBlocked
     && analysis?.setup === "STRETCHED_CANDLE"
     && ["BUY", "SELL"].includes(analysis?.reversalDirection);
-  const actionable = directional && confidence >= 62 && !entryBlocked;
+  const actionable = directional && confidence >= 62 && !entryBlocked && !trendOnly && analysis?.entryConfirmed !== false;
   const probable = actionable && confidence < 75;
   const finalDirection = entryBlocked && directional
     ? direction
+    : trendOnly
+      ? direction
     : actionable
       ? direction
       : watchingReversal
         ? analysis.reversalDirection
         : "WAIT";
   const gale = !actionable ? "NÃO ENTRAR" : confidence >= 87 ? "SEM GALE" : confidence >= 75 ? "ATÉ GALE 1" : "ATÉ GALE 2";
-  const timingCode = entryBlocked || watchingReversal || finalDirection === "WAIT"
+  const timingCode = entryBlocked || watchingReversal || trendOnly || noOpportunity || finalDirection === "WAIT"
     ? "WAIT_CONFIRMATION"
     : analysis?.entryTiming === "CURRENT_CANDLE" ? "CURRENT_CANDLE" : "NEXT_CANDLE";
-  const timing = timingCode === "CURRENT_CANDLE" ? "NESTA VELA" : timingCode === "NEXT_CANDLE" ? "PRÓXIMA VELA" : "AGUARDE CONFIRMAÇÃO";
+  const timing = trendOnly
+    ? "SEM ENTRADA AINDA"
+    : noOpportunity
+      ? "SEM OPORTUNIDADE"
+      : timingCode === "CURRENT_CANDLE" ? "NESTA VELA" : timingCode === "NEXT_CANDLE" ? "PRÓXIMA VELA" : "AGUARDE CONFIRMAÇÃO";
   const reversalSetup = analysis?.setup === "INTRACANDLE_REVERSAL";
   const entryAdvice = entryBlocked
     ? finalDirection === "BUY"
@@ -163,6 +157,12 @@ function renderSignal(analysis = effectiveAnalysis()) {
       ? finalDirection === "BUY"
         ? "Queda forte detectada. Espere a vela reagir para cima antes de considerar compra."
         : "Alta forte detectada. Espere a vela reagir para baixo antes de considerar venda."
+    : trendOnly
+      ? finalDirection === "BUY"
+        ? "O mercado está em tendência de alta, mas ainda não existe um ponto seguro de compra."
+        : "O mercado está em tendência de baixa, mas ainda não existe um ponto seguro de venda."
+    : noOpportunity
+      ? "Não entre agora. A análise terminou e não encontrou vantagem técnica suficiente."
     : timingCode === "CURRENT_CANDLE"
     ? finalDirection === "BUY"
       ? reversalSetup
@@ -182,11 +182,21 @@ function renderSignal(analysis = effectiveAnalysis()) {
   card.classList.toggle("probable", probable);
   card.classList.toggle("expired", entryBlocked);
   card.classList.toggle("observing", watchingReversal);
-  card.classList.toggle("scanning", finalDirection === "WAIT" && dataReady());
+  card.classList.toggle("trend-only", trendOnly);
+  card.classList.toggle("scanning", finalDirection === "WAIT" && dataReady() && !noOpportunity);
+  if ($("signalKicker")) $("signalKicker").textContent = trendOnly
+    ? "DIREÇÃO DO MERCADO"
+    : noOpportunity
+      ? "ANÁLISE CONCLUÍDA"
+      : actionable || entryBlocked || watchingReversal ? "SINAL DE ENTRADA" : "LEITURA ATUAL";
   $("analysisDirection").textContent = entryBlocked
     ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
     : watchingReversal
       ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
+    : trendOnly
+      ? `TENDÊNCIA DE ${finalDirection === "BUY" ? "ALTA" : "BAIXA"}`
+    : noOpportunity
+      ? "SEM OPORTUNIDADE"
     : finalDirection === "BUY"
     ? `${probable ? "PROVÁVEL " : ""}COMPRA`
     : finalDirection === "SELL" ? `${probable ? "PROVÁVEL " : ""}VENDA` : "AGUARDAR";
@@ -205,8 +215,8 @@ function renderSignal(analysis = effectiveAnalysis()) {
     const initializing = analysis?.stability === "initializing";
     const reversal = analysis?.setup === "INTRACANDLE_REVERSAL";
     const stretched = analysis?.setup === "STRETCHED_CANDLE";
-    stability.textContent = reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "NÃO ENTRE AGORA" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
-    stability.className = `signal-stability ${checking || initializing || stretched ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
+    stability.textContent = trendOnly ? "DIREÇÃO DO MERCADO" : noOpportunity ? "MERCADO SEM VANTAGEM" : reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "NÃO ENTRE AGORA" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
+    stability.className = `signal-stability ${trendOnly || checking || initializing || stretched ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
   }
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
   const details = Array.isArray(analysis?.factors) && analysis.factors.length
@@ -229,8 +239,16 @@ function renderSignal(analysis = effectiveAnalysis()) {
 function renderSetupWarnings(force = false) {
   const host = $("setupWarnings");
   if (!host) return;
-  const setupReady = state.bridge !== "screen-capture" || state.setupChecked === true;
-  const issues = setupReady ? setupWarningTracker.update(state) : [];
+  const issues = setupWarningTracker.update(state);
+  if (state.readingIssue) {
+    issues.push({
+      id: "reading",
+      title: "Leitura visual incompleta",
+      message: state.readingIssue,
+      detail: "O Atlas manteve a última análise válida e continuará tentando automaticamente.",
+      dismissible: false
+    });
+  }
   const renderKey = `${state.asset || ""}|${issues.map(issue => `${issue.id}:${issue.detail}`).join("|")}`;
   if (!force && renderKey === setupWarningRenderKey) return;
   setupWarningRenderKey = renderKey;
@@ -254,22 +272,24 @@ function renderSetupWarnings(force = false) {
     detail.textContent = issue.detail;
     copy.append(title, message, detail);
 
-    const actions = document.createElement("div");
-    actions.className = "setup-warning-actions";
-    const accept = document.createElement("button");
-    accept.type = "button";
-    accept.className = "setup-warning-accept";
-    accept.dataset.setupWarningDismiss = issue.id;
-    accept.textContent = "Vou mudar";
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "setup-warning-close";
-    close.dataset.setupWarningDismiss = issue.id;
-    close.setAttribute("aria-label", `Fechar aviso: ${issue.message}`);
-    close.textContent = "×";
-    actions.append(accept, close);
-
-    card.append(icon, copy, actions);
+    card.append(icon, copy);
+    if (issue.dismissible !== false) {
+      const actions = document.createElement("div");
+      actions.className = "setup-warning-actions";
+      const accept = document.createElement("button");
+      accept.type = "button";
+      accept.className = "setup-warning-accept";
+      accept.dataset.setupWarningDismiss = issue.id;
+      accept.textContent = "Vou mudar";
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "setup-warning-close";
+      close.dataset.setupWarningDismiss = issue.id;
+      close.setAttribute("aria-label", `Fechar aviso: ${issue.message}`);
+      close.textContent = "×";
+      actions.append(accept, close);
+      card.append(actions);
+    }
     return card;
   }));
 }
@@ -772,10 +792,24 @@ function renderConnection(connected) {
 function renderState(next = {}, source = "extension") {
   const previousDirection = displayedAnalysis?.direction || "WAIT";
   const previousSetup = displayedAnalysis?.setup || "";
+  const previousAsset = state.asset;
   const previousOperationKey = state.manualOperation?.key;
   const previousUiEventKey = state.uiEvent?.key;
   const nextAsset = "asset" in next ? normalizeAssetName(next.asset) : state.asset;
   const normalizedAsset = source === "screen" && !nextAsset ? state.asset : nextAsset;
+  const assetChanged = Boolean(normalizedAsset && normalizedAsset !== previousAsset);
+  const cached = assetChanged ? analysisCache.state(normalizedAsset) : null;
+  const currentTrend = trendForAsset(normalizedAsset);
+  const cachedDirection = cached?.rendered?.direction || cached?.analysis?.direction;
+  const cacheMatchesTrend = !currentTrend
+    || !cachedDirection
+    || String(cachedDirection).toUpperCase() === String(currentTrend.direction || "WAIT").toUpperCase();
+  const incomingAnalysisWeak = !next.analysis
+    || String(next.analysis.direction || "WAIT").toUpperCase() === "WAIT";
+  const usingCachedAnalysis = Boolean(cached?.analysis && cacheMatchesTrend && incomingAnalysisWeak);
+  const restoredAnalysis = usingCachedAnalysis
+    ? cached.analysis
+    : next.analysis;
   const normalizedOperation = next.manualOperation
     ? { ...next.manualOperation, asset: normalizeAssetName(next.manualOperation.asset) || normalizedAsset }
     : next.manualOperation;
@@ -783,8 +817,14 @@ function renderState(next = {}, source = "extension") {
     ...state,
     ...next,
     asset: normalizedAsset,
+    timeframe: next.timeframe ?? (assetChanged ? cached?.timeframe ?? null : state.timeframe),
+    expiration: next.expiration ?? (assetChanged ? cached?.expiration ?? null : state.expiration),
+    chartDetected: next.chartDetected ?? (assetChanged ? cached?.chartDetected ?? false : state.chartDetected),
+    lastInspectionAt: next.lastInspectionAt ?? (assetChanged ? cached?.lastInspectionAt ?? null : state.lastInspectionAt),
     ...(normalizedOperation ? { manualOperation: normalizedOperation } : {}),
-    analysis: { ...state.analysis, ...(next.analysis || {}) },
+    analysis: assetChanged
+      ? { ...(restoredAnalysis || { direction: "WAIT", confidence: 0 }) }
+      : { ...state.analysis, ...(restoredAnalysis || {}) },
     risk: { ...state.risk, ...(next.risk || {}) },
     defaults: { ...state.defaults, ...(next.defaults || {}) }
   };
@@ -792,7 +832,7 @@ function renderState(next = {}, source = "extension") {
   else extensionReady = true;
   renderConnection(dataReady());
 
-  $("agentAsset").textContent = state.asset || "Localizando";
+  $("agentAsset").textContent = state.asset || selectedRadarAsset || "Localizando";
   $("agentTimeframe").textContent = state.timeframe || (state.defaults.timeframe ? "5m" : "—");
   $("agentExpiration").textContent = state.expiration || (state.defaults.expiration ? "5 min" : "—");
   $("riskAmount").textContent = formatMoney(state.risk.baseAmount);
@@ -803,6 +843,18 @@ function renderState(next = {}, source = "extension") {
     ? { ...identifiedAnalysis, stability: "stable" }
     : signalStabilizer.update(identifiedAnalysis, state.asset);
   renderSignal(displayedAnalysis);
+  const visibleAsset = state.asset || identifiedAnalysis.previewAsset || selectedRadarAsset;
+  if (visibleAsset) $("agentAsset").textContent = visibleAsset;
+  if (state.asset && !usingCachedAnalysis) {
+    analysisCache.rememberState(state.asset, {
+      analysis: state.analysis,
+      rendered: displayedAnalysis,
+      timeframe: state.timeframe,
+      expiration: state.expiration,
+      chartDetected: state.chartDetected,
+      lastInspectionAt: state.lastInspectionAt
+    });
+  }
 
   const pulse = $("monitorPulse");
   const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;
@@ -814,6 +866,12 @@ function renderState(next = {}, source = "extension") {
   const justLoggedIn = loggedIn && lastLoginState !== true;
   robot.pruneQueue();
   if (!loggedIn) {
+    if (identifiedAnalysis.previewAsset) {
+      $("agentAsset").textContent = identifiedAnalysis.previewAsset;
+      pulse.classList.add("live");
+      pulse.textContent = visualIdentificationActive ? "Radar pronto · identificando ativo da tela" : "Radar 5M pronto";
+      return;
+    }
     if (visualIdentificationActive) {
       $("agentAsset").textContent = "Identificando ativo";
       $("analysisReason").textContent = "A leitura está ativa. Estou localizando o nome e o gráfico do ativo selecionado.";
@@ -1031,10 +1089,23 @@ $("setupWarnings")?.addEventListener("click", event => {
 
 addEventListener("atlas:trends", event => {
   marketTrends = Array.isArray(event.detail?.items) ? event.detail.items : [];
-  if (state.asset && trendForAsset(state.asset)) {
-    displayedAnalysis = { ...effectiveAnalysis(), stability: "stable" };
-    renderSignal(displayedAnalysis);
-  }
+  radarUpdatedAt = event.detail?.updatedAt || new Date().toISOString();
+  marketTrends.forEach(item => analysisCache.rememberTrend(item.asset, item, radarUpdatedAt));
+  const preferredAsset = state.asset
+    || selectedRadarAsset
+    || normalizeAssetName(analysisCache.lastAsset())
+    || normalizeAssetName(strongestTrend(marketTrends)?.asset);
+  if (!preferredAsset || !trendForAsset(preferredAsset)) return;
+  if (!state.asset) selectedRadarAsset = preferredAsset;
+  const readyAnalysis = state.asset
+    ? effectiveAnalysis()
+    : { ...composeCentralAnalysis({ trend: trendForAsset(preferredAsset) }), previewAsset: preferredAsset };
+  displayedAnalysis = { ...readyAnalysis, stability: "stable" };
+  renderSignal(displayedAnalysis);
+  $("agentAsset").textContent = preferredAsset;
+  const pulse = $("monitorPulse");
+  pulse.classList.add("live");
+  pulse.textContent = state.asset ? "Radar e leitura sincronizados" : "Análise pronta · ative a leitura para confirmar a entrada";
 });
 
 addEventListener("atlas:trend-selected", event => {
@@ -1047,12 +1118,15 @@ addEventListener("atlas:trend-selected", event => {
   $("agentTimeframe").textContent = trend.timeframe || "5m";
   renderSignal({
     ...trend,
+    signalKind: String(trend.direction || "WAIT").toUpperCase() === "WAIT" ? "no-opportunity" : "trend",
+    entryConfirmed: false,
+    entryTiming: "WAIT_CONFIRMATION",
     reason: `Radar 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}`,
     source: "market-radar-5m"
   });
   $("monitorPulse").classList.add("live");
   $("monitorPulse").textContent = "Radar 5M selecionado";
-  showToast(`${selectedRadarAsset}: ${trend.direction === "BUY" ? "COMPRA" : trend.direction === "SELL" ? "VENDA" : "AGUARDAR"} no Radar 5M.`, "info", 5000);
+  showToast(`${selectedRadarAsset}: tendência de ${trend.direction === "BUY" ? "ALTA" : trend.direction === "SELL" ? "BAIXA" : "MERCADO NEUTRO"} no Radar 5M.`, "info", 5000);
 });
 
 addEventListener("atlas:screen-started", () => {
@@ -1107,8 +1181,13 @@ function refreshReadingFeedback() {
   }
   pulse.classList.add("live");
   const asset = state.asset || "o ativo";
-  const direction = String(currentAnalysis()?.direction || "WAIT").toUpperCase();
-  pulse.textContent = direction === "WAIT"
+  const analysis = currentAnalysis();
+  const direction = String(analysis?.direction || "WAIT").toUpperCase();
+  pulse.textContent = analysis?.signalKind === "trend"
+    ? `Tendência de ${direction === "BUY" ? "alta" : "baixa"} em ${asset} · buscando ponto de entrada`
+    : analysis?.signalKind === "no-opportunity"
+      ? `${asset} sem oportunidade segura · radar atualizado`
+    : direction === "WAIT"
     ? `Analisando ${asset} · leitura há ${ageSeconds}s`
     : `${direction === "BUY" ? "Compra" : "Venda"} mantida · leitura há ${ageSeconds}s`;
 }

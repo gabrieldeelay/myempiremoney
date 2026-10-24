@@ -36,13 +36,17 @@ async function loadTrends() {
     const response = await fetch("/api/trends", { cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.items?.length) throw new Error(payload.error || "Sem tendências no momento.");
-    feed.innerHTML = payload.items.map((item, index) => `<button type="button" class="trend-row ${item.direction.toLowerCase()}" data-trend-asset="${item.asset}" aria-label="Ver leitura de ${item.asset}"><span class="trend-rank">0${index + 1}</span><span><b>${item.asset}</b><small>RSI ${item.rsi} · ${item.timeframe}</small></span><strong>${item.direction === "BUY" ? "COMPRA" : item.direction === "SELL" ? "VENDA" : "AGUARDAR"}<small>${item.confidence}%</small></strong></button>`).join("");
+    feed.innerHTML = payload.items.map((item, index) => `<button type="button" class="trend-row ${item.direction.toLowerCase()}" data-trend-asset="${item.asset}" aria-label="Ver tendência de ${item.asset}"><span class="trend-rank">0${index + 1}</span><span><b>${item.asset}</b><small>RSI ${item.rsi} · ${item.timeframe}</small></span><strong>${item.direction === "BUY" ? "ALTA" : item.direction === "SELL" ? "BAIXA" : "NEUTRA"}<small>direção · ${item.confidence}%</small></strong></button>`).join("");
     window.dispatchEvent(new CustomEvent("atlas:trends", { detail: { items: payload.signals || payload.items, source: payload.source, updatedAt: payload.updatedAt } }));
     feed.querySelectorAll("[data-trend-asset]").forEach(button => button.addEventListener("click", () => {
       const item = payload.items.find(trend => trend.asset === button.dataset.trendAsset);
       if (item) window.dispatchEvent(new CustomEvent("atlas:trend-selected", { detail: item }));
     }));
   } catch (error) {
+    if (feed.querySelector(".trend-row")) {
+      feed.dataset.stale = "true";
+      return;
+    }
     feed.innerHTML = `<div class="intel-empty"><b>Cálculo atualizando</b><span>${error.message}</span><button type="button" data-retry-trends>Tentar novamente</button></div>`;
     feed.querySelector("[data-retry-trends]")?.addEventListener("click", loadTrends);
   }

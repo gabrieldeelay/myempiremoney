@@ -1,6 +1,9 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.9.11";
-import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.9.8";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.10.0";
+import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.10.0";
+
+const ASSET_OCR_INTERVAL_MS = 1400;
+const READING_ISSUE_AFTER_MS = 6500;
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
 const statusLabels = [...document.querySelectorAll("[data-screen-reader-status]")];
@@ -24,6 +27,8 @@ let missedAssetReads = 0;
 let lastSetupOcrAt = 0;
 let lastTimeframe = null;
 let lastExpiration = null;
+let captureStartedAt = 0;
+let missedChartReads = 0;
 const timeframeReading = createMinuteReadingStabilizer();
 const expirationReading = createMinuteReadingStabilizer();
 const reversalTracker = createIntracandleReversalTracker();
@@ -187,7 +192,7 @@ async function ensureOcrWorker() {
 }
 
 async function readVisibleText(activeTab, force = false) {
-  if (!activeTab || ocrBusy || (!force && Date.now() - lastOcrAt < 5000) || !canvas.width) return {};
+  if (!activeTab || ocrBusy || (!force && Date.now() - lastOcrAt < ASSET_OCR_INTERVAL_MS) || !canvas.width) return {};
   ocrBusy = true;
   lastOcrAt = Date.now();
   try {
@@ -213,6 +218,7 @@ async function readVisibleText(activeTab, force = false) {
     missedAssetReads = asset ? 0 : missedAssetReads + 1;
     return {
       asset: asset || lastAsset,
+      recognizedAsset: asset,
       balance: balanceFromText(text),
       activeTabDetected: true
     };
@@ -245,17 +251,28 @@ async function inspectFrame() {
     if (tabMoved) {
       missedAssetReads = 0;
     }
-    let visible = {};
-    if (tabMoved || !lastAsset) visible = await readVisibleText(activeTab, true);
-    const recognizedAssetChanged = Boolean(visible.asset && lastAsset && visible.asset !== lastAsset);
+    const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
+    const recognizedAssetChanged = Boolean(visible.recognizedAsset && lastAsset && visible.recognizedAsset !== lastAsset);
     if (recognizedAssetChanged) {
       reversalTracker.reset();
       resetSetupReadings();
     }
     const setup = await readSetupValues(activeTab);
-    if (!tabMoved && lastAsset) visible = await readVisibleText(activeTab, false);
     if ("asset" in visible) lastAsset = visible.asset;
     const analysis = reversalTracker.update(rawAnalysis, lastAsset);
+    missedChartReads = analysis?.chartDetected ? 0 : missedChartReads + 1;
+    const readingAge = Date.now() - captureStartedAt;
+    const readingIssue = readingAge < READING_ISSUE_AFTER_MS
+      ? null
+      : !activeTab
+        ? "Não consegui localizar a aba ativa da Hezilex. Deixe a área das abas visível."
+        : !lastAsset || missedAssetReads >= 4
+          ? "Não consegui confirmar o nome do ativo. O Atlas continuará tentando sem trocar a análise atual."
+          : missedChartReads >= 8
+            ? `Reconheci ${lastAsset}, mas não consegui interpretar as velas do gráfico.`
+            : (!setup.timeframe || !setup.expiration) && readingAge >= 9000
+              ? "Não consegui confirmar o tempo do gráfico e da expiração. Verifique se os controles estão visíveis."
+              : null;
     window.dispatchEvent(new CustomEvent("atlas:screen-state", {
       detail: {
         version: "visual-1.0",
@@ -264,15 +281,25 @@ async function inspectFrame() {
         asset: lastAsset,
         timeframe: setup.timeframe,
         expiration: setup.expiration,
+        timeframeChecked: Boolean(setup.timeframe),
+        expirationChecked: Boolean(setup.expiration),
         setupChecked: Boolean(setup.timeframe && setup.expiration),
         balance: visible.balance,
         balanceConfidence: visible.balance != null ? "visual" : null,
         chartDetected: Boolean(analysis?.chartDetected),
+        readingIssue,
+        readingHealth: {
+          activeTab: Boolean(activeTab),
+          asset: Boolean(lastAsset),
+          chart: Boolean(analysis?.chartDetected),
+          timeframe: Boolean(setup.timeframe),
+          expiration: Boolean(setup.expiration)
+        },
         analysis: analysis || { direction: "WAIT", confidence: 0, reason: "Preparando a leitura visual.", source: "screen-capture" },
         lastInspectionAt: new Date().toISOString()
       }
     }));
-    setStatus(analysis?.chartDetected ? "Leitura visual ao vivo" : "Procurando o gráfico…", analysis?.chartDetected ? "connected" : "waiting");
+    setStatus(readingIssue || (analysis?.chartDetected ? "Leitura visual ao vivo" : "Procurando o gráfico…"), readingIssue ? "error" : analysis?.chartDetected ? "connected" : "waiting");
   } finally {
     processing = false;
   }
@@ -285,6 +312,9 @@ async function stopReading(reason = "Leitura visual desativada") {
   stream = null;
   video.srcObject = null;
   reversalTracker.reset();
+  captureStartedAt = 0;
+  missedChartReads = 0;
+  missedAssetReads = 0;
   showActivationPrompt(true);
   setStatus(reason, "");
   setButtons("Ativar leitura da tela");
@@ -312,6 +342,11 @@ async function startReading() {
     });
     video.srcObject = stream;
     await video.play();
+    captureStartedAt = Date.now();
+    missedAssetReads = 0;
+    missedChartReads = 0;
+    lastOcrAt = 0;
+    lastSetupOcrAt = 0;
     showActivationPrompt(false);
     stream.getVideoTracks()[0]?.addEventListener("ended", () => stopReading("Compartilhamento encerrado"), { once: true });
     setButtons("Encerrar leitura");

@@ -1,0 +1,48 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { composeCentralAnalysis, strongestTrend } from "../dist/modules/analysis-policy.js";
+
+const buyTrend = {
+  asset: "CARDANO",
+  direction: "BUY",
+  confidence: 78,
+  score: 31,
+  reason: "EMA9 acima da EMA21"
+};
+
+test("a tendência aparece imediatamente sem fingir que já existe ponto de entrada", () => {
+  const analysis = composeCentralAnalysis({ trend: buyTrend });
+  assert.equal(analysis.direction, "BUY");
+  assert.equal(analysis.signalKind, "trend");
+  assert.equal(analysis.entryConfirmed, false);
+  assert.match(analysis.reason, /Tendência de alta/);
+});
+
+test("a tendência vira sinal somente quando tela, gráfico e expiração estão alinhados", () => {
+  const analysis = composeCentralAnalysis({
+    trend: buyTrend,
+    live: { direction: "BUY", confidence: 81, source: "screen-capture", entryTiming: "CURRENT_CANDLE" },
+    timeframe: "5m",
+    expiration: "5 min"
+  });
+  assert.equal(analysis.signalKind, "entry");
+  assert.equal(analysis.entryConfirmed, true);
+  assert.equal(analysis.entryTiming, "CURRENT_CANDLE");
+});
+
+test("uma análise neutra termina como sem oportunidade em vez de carregar indefinidamente", () => {
+  const analysis = composeCentralAnalysis({ trend: { ...buyTrend, direction: "WAIT", confidence: 54 } });
+  assert.equal(analysis.direction, "WAIT");
+  assert.equal(analysis.signalKind, "no-opportunity");
+  assert.match(analysis.reason, /Sem oportunidade segura agora/);
+});
+
+test("o destaque inicial prioriza uma direção clara em vez de um ativo neutro", () => {
+  const result = strongestTrend([
+    { asset: "BITCOIN", direction: "WAIT", confidence: 90 },
+    { asset: "CARDANO", direction: "BUY", confidence: 70 },
+    { asset: "BNB", direction: "SELL", confidence: 76 }
+  ]);
+  assert.equal(result.asset, "BNB");
+});
+
