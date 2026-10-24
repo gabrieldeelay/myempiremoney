@@ -316,7 +316,7 @@ async function inspectFrame() {
         lastInspectionAt: new Date().toISOString()
       }
     }));
-    setStatus(readingIssue || (analysis?.chartDetected ? "Leitura visual ao vivo" : "Procurando o gráfico…"), readingIssue ? "error" : analysis?.chartDetected ? "connected" : "waiting");
+    setStatus(analysis?.chartDetected ? "Leitura visual ao vivo" : "Procurando o gráfico…", analysis?.chartDetected ? "connected" : "waiting");
   } finally {
     processing = false;
   }

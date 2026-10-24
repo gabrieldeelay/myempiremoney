@@ -187,7 +187,8 @@ assert.match(screenReader, /setupChecked:\s*Boolean\(setup\.timeframe && setup\.
 assert.match(html, /id="setupWarnings"/, "o painel deve reservar uma área própria para os avisos de 5 minutos");
 assert.doesNotMatch(app, /state\.setupChecked === true/, "um gráfico em 1m deve gerar aviso mesmo que a expiração ainda não tenha sido reconhecida");
 assert.match(screenReader, /readingIssue/, "falhas de ativo, gráfico ou configuração devem ser informadas ao usuário");
-assert.match(app, /setTimeout\(\(\) => \{[\s\S]*?\}, 8000\)/, "um aviso de falha de leitura deve desaparecer automaticamente");
+assert.doesNotMatch(app, /Leitura visual incompleta/, "falhas transitórias da leitura não devem abrir um aviso persistente");
+assert.doesNotMatch(app, /state\.readingIssue/, "falhas transitórias da leitura não devem ocupar a área de avisos");
 assert.doesNotMatch(html, />Tendências</, "a aba de tendências não deve mais aparecer na interface");
 assert.doesNotMatch(insights, /trend-row/, "ativos do radar central não devem mais ser exibidos como uma lista clicável");
 assert.match(app, /setupWarningTracker\.dismiss/, "o botão Vou mudar deve silenciar o aviso na visita atual ao ativo");
