@@ -1,8 +1,8 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.10.0";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.11.0";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.10.0";
 
-const ASSET_OCR_INTERVAL_MS = 1400;
+const ASSET_OCR_INTERVAL_MS = 900;
 const READING_ISSUE_AFTER_MS = 6500;
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
@@ -73,10 +73,10 @@ function analyzeCandles() {
 }
 
 function prepareOcrCrop(tab, textOnly = false) {
-  const cropTop = Math.max(0, Math.round(tab.y - tab.height * .92));
-  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * (textOnly ? .22 : .04)));
-  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * (textOnly ? .76 : .92)));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .68));
+  const cropTop = Math.max(0, Math.round(tab.y - tab.height * 1.08));
+  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * (textOnly ? .12 : .02)));
+  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * (textOnly ? .86 : .97)));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .9));
   const scale = 4;
   const source = document.createElement("canvas");
   source.width = cropWidth;
@@ -124,8 +124,8 @@ function frameBounds() {
 function prepareSetupCrop(kind, activeTab) {
   const frame = frameBounds();
   const region = kind === "timeframe"
-    ? { left: .055, width: .18 }
-    : { left: .78, width: .21 };
+    ? { left: .045, width: .23 }
+    : { left: .58, width: .3 };
   const cropLeft = Math.max(0, Math.round(frame.x + frame.width * region.left));
   const cropTop = Math.max(0, Math.round(activeTab?.y ? activeTab.y + 4 : frame.y + frame.height * .18));
   const cropWidth = Math.min(canvas.width - cropLeft, Math.round(frame.width * region.width));
@@ -200,20 +200,22 @@ async function readVisibleText(activeTab, force = false) {
     prepareOcrCrop(activeTab);
     await reader.setParameters({
       tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
-      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/"
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/0185"
     });
     const result = await reader.recognize(ocrCanvas);
     let text = result?.data?.text || "";
     let asset = fuzzyMatchAsset(text);
-    if (!asset) {
+    if (!asset || ["BNB", "XPL", "XRP"].includes(asset)) {
       prepareOcrCrop(activeTab, true);
       await reader.setParameters({
         tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
-        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/"
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/0185"
       });
       const fallbackResult = await reader.recognize(ocrCanvas);
-      text = `${text} ${fallbackResult?.data?.text || ""}`;
-      asset = fuzzyMatchAsset(text);
+      const fallbackText = fallbackResult?.data?.text || "";
+      const fallbackAsset = fuzzyMatchAsset(fallbackText);
+      text = `${text} ${fallbackText}`;
+      asset = fallbackAsset || asset || fuzzyMatchAsset(text);
     }
     missedAssetReads = asset ? 0 : missedAssetReads + 1;
     return {
@@ -252,13 +254,28 @@ async function inspectFrame() {
       missedAssetReads = 0;
     }
     const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
-    const recognizedAssetChanged = Boolean(visible.recognizedAsset && lastAsset && visible.recognizedAsset !== lastAsset);
-    if (recognizedAssetChanged) {
+    const detectedNewAsset = Boolean(visible.recognizedAsset && visible.recognizedAsset !== lastAsset);
+    if (detectedNewAsset) {
       reversalTracker.reset();
       resetSetupReadings();
     }
-    const setup = await readSetupValues(activeTab);
     if ("asset" in visible) lastAsset = visible.asset;
+    if (detectedNewAsset) {
+      window.dispatchEvent(new CustomEvent("atlas:screen-state", {
+        detail: {
+          bridge: "screen-capture",
+          monitoring: true,
+          asset: lastAsset,
+          timeframe: null,
+          expiration: null,
+          chartDetected: Boolean(rawAnalysis?.chartDetected),
+          readingIssue: null,
+          analysis: rawAnalysis || { direction: "WAIT", confidence: 0, source: "screen-capture" },
+          lastInspectionAt: new Date().toISOString()
+        }
+      }));
+    }
+    const setup = await readSetupValues(activeTab);
     const analysis = reversalTracker.update(rawAnalysis, lastAsset);
     missedChartReads = analysis?.chartDetected ? 0 : missedChartReads + 1;
     const readingAge = Date.now() - captureStartedAt;

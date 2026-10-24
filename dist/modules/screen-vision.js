@@ -46,7 +46,13 @@ function editDistance(a, b) {
 }
 
 export function fuzzyMatchAsset(value = "") {
-  const text = String(value).toUpperCase().replace(/[|]/g, "I");
+  const rawText = String(value).toUpperCase();
+  const rawTokens = rawText.split(/[^A-Z0-9]+/).filter(token => token.length >= 3);
+  for (const token of rawTokens) {
+    if (/^[8B][NMH][8B]$/.test(token) || /^(?:BN8|8NB|BMB)$/.test(token)) return "BNB";
+    if (/^XP(?:L|I|1)$/.test(token)) return "XPL";
+  }
+  const text = rawText.replace(/[|]/g, "I");
   const compact = text.replace(/[^A-Z]/g, "");
   const tokens = text.split(/[^A-Z]+/).filter(token => token.length >= 3);
   for (const left of FIAT) {
@@ -107,7 +113,7 @@ export function findActiveTabRect(data, width, height) {
   const endX = Math.floor(width * .72);
   const startY = Math.floor(height * .1);
   const endY = Math.floor(height * .3);
-  const minRun = Math.max(18, Math.floor(width * .018));
+  const minRun = Math.max(14, Math.floor(width * .014));
   const maxRun = Math.floor(width * .18);
   let best = null;
 

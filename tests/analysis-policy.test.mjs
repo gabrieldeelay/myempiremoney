@@ -28,6 +28,26 @@ test("a tendência vira sinal somente quando tela, gráfico e expiração estão
   assert.equal(analysis.signalKind, "entry");
   assert.equal(analysis.entryConfirmed, true);
   assert.equal(analysis.entryTiming, "CURRENT_CANDLE");
+  assert.ok(analysis.confidence > buyTrend.confidence, "a confirmação visual mais forte deve participar da confiança final");
+});
+
+test("uma oportunidade visual forte pode gerar entrada quando o radar central está neutro", () => {
+  const analysis = composeCentralAnalysis({
+    trend: { ...buyTrend, direction: "WAIT", confidence: 55 },
+    live: {
+      direction: "SELL",
+      confidence: 84,
+      score: -.61,
+      chartDetected: true,
+      source: "screen-capture",
+      entryTiming: "CURRENT_CANDLE"
+    },
+    timeframe: "5m",
+    expiration: "5 min"
+  });
+  assert.equal(analysis.signalKind, "entry");
+  assert.equal(analysis.direction, "SELL");
+  assert.ok(analysis.confidence >= 75);
 });
 
 test("uma análise neutra termina como sem oportunidade em vez de carregar indefinidamente", () => {

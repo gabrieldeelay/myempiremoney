@@ -1,6 +1,3 @@
-const tabs = [...document.querySelectorAll("[data-intel-tab]")];
-const panels = [...document.querySelectorAll("[data-intel-panel]")];
-
 function stars(count) {
   return `<span class="impact-stars" aria-label="Impacto ${count} de 5">${"★".repeat(count)}${"☆".repeat(5 - count)}</span>`;
 }
@@ -31,31 +28,13 @@ async function loadNews() {
 }
 
 async function loadTrends() {
-  const feed = document.querySelector("#trendsFeed");
   try {
     const response = await fetch("/api/trends", { cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.items?.length) throw new Error(payload.error || "Sem tendências no momento.");
-    feed.innerHTML = payload.items.map((item, index) => `<button type="button" class="trend-row ${item.direction.toLowerCase()}" data-trend-asset="${item.asset}" aria-label="Ver tendência de ${item.asset}"><span class="trend-rank">0${index + 1}</span><span><b>${item.asset}</b><small>RSI ${item.rsi} · ${item.timeframe}</small></span><strong>${item.direction === "BUY" ? "ALTA" : item.direction === "SELL" ? "BAIXA" : "NEUTRA"}<small>direção · ${item.confidence}%</small></strong></button>`).join("");
     window.dispatchEvent(new CustomEvent("atlas:trends", { detail: { items: payload.signals || payload.items, source: payload.source, updatedAt: payload.updatedAt } }));
-    feed.querySelectorAll("[data-trend-asset]").forEach(button => button.addEventListener("click", () => {
-      const item = payload.items.find(trend => trend.asset === button.dataset.trendAsset);
-      if (item) window.dispatchEvent(new CustomEvent("atlas:trend-selected", { detail: item }));
-    }));
-  } catch (error) {
-    if (feed.querySelector(".trend-row")) {
-      feed.dataset.stale = "true";
-      return;
-    }
-    feed.innerHTML = `<div class="intel-empty"><b>Cálculo atualizando</b><span>${error.message}</span><button type="button" data-retry-trends>Tentar novamente</button></div>`;
-    feed.querySelector("[data-retry-trends]")?.addEventListener("click", loadTrends);
-  }
+  } catch (error) { console.warn("Atlas central radar", error); }
 }
-
-tabs.forEach(tab => tab.addEventListener("click", () => {
-  tabs.forEach(item => item.classList.toggle("active", item === tab));
-  panels.forEach(panel => { panel.hidden = panel.dataset.intelPanel !== tab.dataset.intelTab; });
-}));
 
 loadNews();
 loadTrends();

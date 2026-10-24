@@ -24,15 +24,44 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
   const trendDirection = directionOf(trend.direction);
   const trendConfidence = confidenceOf(trend.confidence);
   const liveDirection = directionOf(live.direction);
+  const liveConfidence = confidenceOf(live.confidence);
   const directional = ["BUY", "SELL"].includes(trendDirection);
   const visualAgrees = live.source === "screen-capture" && liveDirection === trendDirection;
+  const visualDirectional = live.source === "screen-capture" && ["BUY", "SELL"].includes(liveDirection) && live.chartDetected !== false;
   const setupVerified = isFiveMinutes(timeframe) && isFiveMinutes(expiration);
   const localEntryBlocked = directional && visualAgrees && live.entryBlocked === true;
   const entryConfirmed = directional && visualAgrees && setupVerified && !localEntryBlocked;
+  const combinedConfidence = entryConfirmed
+    ? confidenceOf(trendConfidence * .45 + liveConfidence * .55)
+    : trendConfidence;
   const localTiming = entryConfirmed ? live.entryTiming : "WAIT_CONFIRMATION";
   const side = trendDirection === "BUY" ? "alta" : trendDirection === "SELL" ? "baixa" : "neutra";
 
   if (!directional) {
+    const visualOpportunity = visualDirectional
+      && setupVerified
+      && liveConfidence >= 72
+      && (live.urgentReversal === true || Math.abs(Number(live.score) || 0) >= .38);
+    if (visualOpportunity) {
+      const visualSide = liveDirection === "BUY" ? "compra" : "venda";
+      const visualConfidence = confidenceOf(liveConfidence * .82 + trendConfidence * .18);
+      return {
+        ...trend,
+        ...live,
+        direction: liveDirection,
+        confidence: visualConfidence,
+        signalKind: "entry",
+        entryConfirmed: true,
+        setupVerified: true,
+        factors: [
+          `As velas confirmaram uma oportunidade de ${visualSide} mesmo com o radar central ainda neutro.`,
+          ...(Array.isArray(live.factors) ? live.factors : []),
+          "Gráfico e expiração foram confirmados em 5 minutos."
+        ],
+        reason: `Sinal visual de ${visualSide} confirmado por força, sequência e deslocamento das velas.`,
+        source: "market-radar-5m"
+      };
+    }
     return {
       ...live,
       ...trend,
@@ -67,7 +96,7 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
     ...live,
     ...trend,
     direction: trendDirection,
-    confidence: trendConfidence,
+    confidence: combinedConfidence,
     signalKind: entryConfirmed ? "entry" : "trend",
     entryConfirmed,
     entryTiming: localTiming,

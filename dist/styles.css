@@ -257,6 +257,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .signal-card.trend-only .entry-guidance-icon { border-color: rgba(87,151,255,.42); background: rgba(87,151,255,.11); color: #9fc3ff; }
 .signal-card.trend-only .entry-guidance small { color: #9fc3ff; }
 .signal-card.trend-only h1 { font-size: 20px; }
+.intel-section-label { color: #8fa8c8; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 @keyframes entryGuidancePulse { 0%, 100% { outline: 0 solid transparent; } 50% { outline: 3px solid var(--guidance-glow); } }
 @media (prefers-reduced-motion: reduce) { .entry-guidance { animation: none; } }
 .signal-copy p { max-width: 480px; margin: 6px 0 0; overflow: hidden; color: #9aacc1; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }

@@ -27,6 +27,8 @@ const setupWarningTracker = createSetupWarningTracker();
 const analysisCache = createAssetAnalysisCache();
 let displayedAnalysis = null;
 let setupWarningRenderKey = "";
+let dismissedReadingIssueKey = "";
+let readingIssueTimer = null;
 let radarUpdatedAt = null;
 let state = {
   version: null,
@@ -240,14 +242,27 @@ function renderSetupWarnings(force = false) {
   const host = $("setupWarnings");
   if (!host) return;
   const issues = setupWarningTracker.update(state);
-  if (state.readingIssue) {
+  const readingIssueKey = state.readingIssue ? `${state.asset || "unknown"}|${state.readingIssue}` : "";
+  if (!readingIssueKey) {
+    dismissedReadingIssueKey = "";
+    clearTimeout(readingIssueTimer);
+    readingIssueTimer = null;
+  } else if (readingIssueKey !== dismissedReadingIssueKey) {
     issues.push({
       id: "reading",
       title: "Leitura visual incompleta",
       message: state.readingIssue,
       detail: "O Atlas manteve a última análise válida e continuará tentando automaticamente.",
-      dismissible: false
+      dismissible: true
     });
+    if (!readingIssueTimer) {
+      readingIssueTimer = setTimeout(() => {
+        dismissedReadingIssueKey = readingIssueKey;
+        readingIssueTimer = null;
+        setupWarningRenderKey = "";
+        renderSetupWarnings(true);
+      }, 8000);
+    }
   }
   const renderKey = `${state.asset || ""}|${issues.map(issue => `${issue.id}:${issue.detail}`).join("|")}`;
   if (!force && renderKey === setupWarningRenderKey) return;
@@ -1082,6 +1097,11 @@ if ("speechSynthesis" in window) {
 $("setupWarnings")?.addEventListener("click", event => {
   const button = event.target.closest("[data-setup-warning-dismiss]");
   if (!button) return;
+  if (button.dataset.setupWarningDismiss === "reading") {
+    dismissedReadingIssueKey = state.readingIssue ? `${state.asset || "unknown"}|${state.readingIssue}` : "";
+    clearTimeout(readingIssueTimer);
+    readingIssueTimer = null;
+  }
   setupWarningTracker.dismiss(button.dataset.setupWarningDismiss, state.asset);
   setupWarningRenderKey = "";
   renderSetupWarnings(true);

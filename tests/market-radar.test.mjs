@@ -15,6 +15,8 @@ test("o radar do servidor calcula compra e venda antes da tela ser aberta", () =
   assert.equal(rising.direction, "BUY");
   assert.equal(falling.direction, "SELL");
   assert.equal(rising.timeframe, "5m");
+  assert.ok(rising.confidence >= 75);
+  assert.ok(falling.confidence >= 75);
 });
 
 test("o radar ignora intervalos vazios de Forex em vez de convertê-los em preço zero", () => {
@@ -28,7 +30,7 @@ test("o radar ignora intervalos vazios de Forex em vez de convertê-los em preç
 
 test("o radar central cobre criptos, Forex e ações exibidos pela Hezilex", () => {
   const assets = new Set(HEZILEX_INSTRUMENTS.map(item => item.asset));
-  for (const asset of ["BNB", "BITCOIN", "STELLAR", "EUR/USD", "AUD/JPY", "GBP/USD", "APPLE", "NETFLIX", "META", "TESLA", "MICROSOFT"]) {
+  for (const asset of ["BNB", "XPL", "BITCOIN", "STELLAR", "EUR/USD", "AUD/JPY", "GBP/USD", "APPLE", "NETFLIX", "META", "TESLA", "MICROSOFT"]) {
     assert.ok(assets.has(asset), `${asset} precisa existir no radar central`);
   }
 });

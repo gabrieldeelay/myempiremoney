@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#061326" />
   <title>Atlas | Assistente de operações</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=3.10.0" />
+  <link rel="stylesheet" href="/styles.css?v=3.11.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -97,17 +97,13 @@
           <div><small>VALOR 1%</small><strong id="riskAmount">—</strong></div>
         </div>
 
-        <div class="market-intel" aria-label="Notícias e tendências de mercado">
+        <div class="market-intel" aria-label="Notícias do mercado">
           <div class="intel-head">
             <div><span>Radar Atlas</span><small>Informação nova sem atrapalhar o gráfico.</small></div>
-            <div class="intel-tabs" role="tablist">
-              <button class="active" type="button" data-intel-tab="news">Notícias</button>
-              <button type="button" data-intel-tab="trends">Tendências</button>
-            </div>
+            <span class="intel-section-label">Notícias</span>
           </div>
           <div class="intel-stage">
-            <div class="intel-feed" id="newsFeed" data-intel-panel="news"><span class="intel-loading">Buscando notícias do mercado…</span></div>
-            <div class="intel-feed" id="trendsFeed" data-intel-panel="trends" hidden><span class="intel-loading">Calculando as tendências em 5M…</span></div>
+            <div class="intel-feed" id="newsFeed"><span class="intel-loading">Buscando notícias do mercado…</span></div>
           </div>
         </div>
 
@@ -193,8 +189,8 @@
   <canvas id="screenReaderCanvas" hidden></canvas>
 
   <script type="module" src="/modules/app-guard.js?v=3.2.0"></script>
-  <script type="module" src="/modules/app.js?v=3.10.0"></script>
-  <script type="module" src="/modules/insights.js?v=3.10.2"></script>
-  <script type="module" src="/modules/screen-reader.js?v=3.10.0"></script>
+  <script type="module" src="/modules/app.js?v=3.11.0"></script>
+  <script type="module" src="/modules/insights.js?v=3.11.0"></script>
+  <script type="module" src="/modules/screen-reader.js?v=3.11.0"></script>
 </body>
 </html>

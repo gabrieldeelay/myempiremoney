@@ -24,6 +24,10 @@ test("reconhece o ativo mesmo com erro comum do OCR", () => {
   assert.equal(fuzzyMatchAsset("CHAINLINK"), "CHAINLINK");
   assert.equal(fuzzyMatchAsset("CAD JPY"), "CAD/JPY");
   assert.equal(fuzzyMatchAsset("AUD/JPY"), "AUD/JPY");
+  assert.equal(fuzzyMatchAsset("8N8"), "BNB");
+  assert.equal(fuzzyMatchAsset("BN8"), "BNB");
+  assert.equal(fuzzyMatchAsset("XP1"), "XPL");
+  assert.equal(fuzzyMatchAsset("XPI"), "XPL");
 });
 
 test("reconhece todo o catálogo de nomes usado no radar da Hezilex", () => {
