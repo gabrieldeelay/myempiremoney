@@ -19,6 +19,7 @@ const screenReader = await readFile(new URL("../dist/modules/screen-reader.js", 
 const analysisPolicy = await readFile(new URL("../dist/modules/analysis-policy.js", import.meta.url), "utf8");
 const assetCache = await readFile(new URL("../dist/modules/asset-analysis-cache.js", import.meta.url), "utf8");
 const signalStability = await readFile(new URL("../dist/modules/signal-stability.js", import.meta.url), "utf8");
+const candleCycle = await readFile(new URL("../dist/modules/candle-cycle.js", import.meta.url), "utf8");
 const localTts = await readFile(new URL("../dist/modules/vozz-piper.js", import.meta.url), "utf8");
 const server = await readFile(new URL("../app.js", import.meta.url), "utf8");
 
@@ -85,6 +86,16 @@ assert.match(styles, /--probable:\s*#c7a2ff/, "leituras prováveis devem usar um
 assert.match(styles, /\.signal-more:hover \.signal-tooltip/, "os fundamentos devem aparecer ao passar o mouse em Ler mais");
 assert.match(styles, /@keyframes trade-buy-flash/, "compras devem produzir glow verde");
 assert.match(styles, /@keyframes trade-sell-flash/, "vendas devem produzir glow vermelho");
+assert.match(candleCycle, /America\/Sao_Paulo/, "o relógio visual deve seguir explicitamente o horário de Brasília");
+assert.match(candleCycle, /FIVE_MINUTE_CANDLE_MS/, "a animação deve acompanhar ciclos exatos de cinco minutos");
+assert.match(app, /createSaoPauloCandleClock/, "o painel deve animar o começo de cada nova vela");
+assert.match(app, /lastVisualEffect\.tone === tone/, "a virada da vela não pode duplicar uma animação idêntica do sinal");
+assert.match(html, /id="signalCycle"[^>]*aria-live="polite"/, "a nova vela deve ser informada de forma acessível");
+assert.match(styles, /\.trade-flash\.possible-buy/, "possível compra deve usar um flash ciano próprio");
+assert.match(styles, /\.trade-flash\.possible-sell/, "possível venda deve usar um flash laranja próprio");
+assert.match(styles, /\.signal-card\.possible-buy h1/, "possível compra deve usar ciano no indicador");
+assert.match(styles, /\.signal-card\.possible-sell h1/, "possível venda deve usar laranja no indicador");
+assert.match(styles, /@keyframes signalCardRefresh/, "todo novo ciclo deve atualizar suavemente o card do sinal");
 assert.match(app, /new ResizeObserver\(\(\) => requestAnimationFrame\(keepRobotInViewport\)\)/, "o robô deve ser reposicionado quando o balão mudar de tamanho");
 assert.match(app, /characterBefore\.left - characterAfter\.left/, "minimizar deve preservar a posição visual do personagem");
 assert.match(styles, /max-height:\s*calc\(100dvh - 24px\)/, "o balão deve permanecer dentro da altura visível");

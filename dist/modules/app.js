@@ -4,6 +4,7 @@ import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.12.1";
 import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.1";
 import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.5";
 import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
+import { createSaoPauloCandleClock, signalEffectTone } from "./candle-cycle.js?v=3.13.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -29,6 +30,11 @@ const analysisCache = createAssetAnalysisCache();
 let displayedAnalysis = null;
 let setupWarningRenderKey = "";
 let radarUpdatedAt = null;
+let lastSignalVisualSignature = "";
+let currentSignalTone = "neutral";
+let signalVisualTimer = null;
+let signalCycleTimer = null;
+let lastVisualEffect = { at: 0, reason: "", tone: "" };
 const screenRevisionGuard = createScreenRevisionGuard();
 let state = {
   version: null,
@@ -132,6 +138,44 @@ function currentAnalysis() {
   return displayedAnalysis || effectiveAnalysis();
 }
 
+function triggerSignalVisual(tone, reason = "signal", cycle = null) {
+  const card = $("signalCard");
+  const flash = $("tradeFlash");
+  const cycleBadge = $("signalCycle");
+  const now = Date.now();
+  const repeatedAtBoundary = now - lastVisualEffect.at < 1200
+    && lastVisualEffect.tone === tone
+    && lastVisualEffect.reason !== reason;
+
+  if (cycle && cycleBadge) {
+    clearTimeout(signalCycleTimer);
+    $("signalCycleTime").textContent = cycle.label;
+    cycleBadge.title = `Nova vela de 5 minutos · horário de Brasília (${cycle.timeZone})`;
+    cycleBadge.hidden = false;
+    cycleBadge.classList.remove("show");
+    void cycleBadge.offsetWidth;
+    cycleBadge.classList.add("show");
+    signalCycleTimer = setTimeout(() => {
+      cycleBadge.classList.remove("show");
+      cycleBadge.hidden = true;
+    }, 2800);
+  }
+
+  if (repeatedAtBoundary) return;
+  lastVisualEffect = { at: now, reason, tone };
+  clearTimeout(signalVisualTimer);
+  card.classList.remove("signal-refresh", "candle-refresh");
+  if (flash) flash.className = "trade-flash";
+  void card.offsetWidth;
+  card.classList.add("signal-refresh");
+  if (reason === "cycle") card.classList.add("candle-refresh");
+  if (flash && tone !== "neutral") flash.classList.add(tone);
+  signalVisualTimer = setTimeout(() => {
+    card.classList.remove("signal-refresh", "candle-refresh");
+    if (flash) flash.className = "trade-flash";
+  }, 1800);
+}
+
 function renderSignal(analysis = effectiveAnalysis()) {
   const direction = String(analysis?.direction || "WAIT").toUpperCase();
   const confidence = Math.round(Number(analysis?.confidence) || 0);
@@ -197,6 +241,8 @@ function renderSignal(analysis = effectiveAnalysis()) {
   card.classList.toggle("buy", finalDirection === "BUY");
   card.classList.toggle("sell", finalDirection === "SELL");
   card.classList.toggle("probable", possible);
+  card.classList.toggle("possible-buy", possible && finalDirection === "BUY");
+  card.classList.toggle("possible-sell", possible && finalDirection === "SELL");
   card.classList.toggle("expired", entryBlocked);
   card.classList.toggle("observing", watchingReversal);
   card.classList.toggle("trend-only", trendOnly && !possible);
@@ -249,6 +295,16 @@ function renderSignal(analysis = effectiveAnalysis()) {
     entry.textContent = item;
     return entry;
   }));
+
+  currentSignalTone = signalEffectTone(finalDirection, possible);
+  card.dataset.signalTone = currentSignalTone;
+  const visibleAsset = state.asset || analysis?.previewAsset || selectedRadarAsset || "";
+  const visualSignature = `${visibleAsset}|${currentSignalTone}|${timingCode}`;
+  const isSignal = currentSignalTone !== "neutral";
+  if (isSignal && visualSignature !== lastSignalVisualSignature) {
+    triggerSignalVisual(currentSignalTone, "signal");
+  }
+  lastSignalVisualSignature = visualSignature;
 }
 
 function renderSetupWarnings(force = false) {
@@ -1176,6 +1232,14 @@ addEventListener("pointermove", event => {
 
 robot.init();
 renderConnection(false);
+const candleClock = createSaoPauloCandleClock({
+  onCycle: cycle => triggerSignalVisual(currentSignalTone, "cycle", cycle)
+});
+candleClock.start();
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) candleClock.sync();
+});
+addEventListener("pageshow", () => candleClock.sync());
 setInterval(verifyExtension, 2500);
 function refreshReadingFeedback() {
   const inspectedAt = state.lastInspectionAt ? new Date(state.lastInspectionAt).getTime() : 0;

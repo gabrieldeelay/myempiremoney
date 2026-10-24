@@ -14,6 +14,8 @@
   --red: #ff5d65;
   --amber: #a9c8ff;
   --probable: #c7a2ff;
+  --possible-buy: #39d7ff;
+  --possible-sell: #ff9f43;
 }
 
 * { box-sizing: border-box; }
@@ -58,6 +60,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .trade-flash { position: fixed; z-index: 9998; inset: 0; pointer-events: none; opacity: 0; }
 .trade-flash.buy { animation: trade-buy-flash 1.05s ease-out both; }
 .trade-flash.sell { animation: trade-sell-flash 1.05s ease-out both; }
+.trade-flash.possible-buy { animation: trade-possible-buy-flash 1.2s ease-out both; }
+.trade-flash.possible-sell { animation: trade-possible-sell-flash 1.2s ease-out both; }
 .trade-flash.danger, .trade-flash.critical { animation-duration: 1.5s; }
 
 .topbar {
@@ -193,7 +197,23 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   background: linear-gradient(120deg, rgba(75, 143, 255, .055), transparent 44%), var(--surface);
 }
 
-.signal-card { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-right: 1px solid var(--line); }
+.signal-card { --signal-accent: #5797ff; --signal-rgb: 87,151,255; position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-right: 1px solid var(--line); }
+.signal-card.buy { --signal-accent: var(--green); --signal-rgb: 49,214,155; }
+.signal-card.sell { --signal-accent: var(--red); --signal-rgb: 255,93,101; }
+.signal-card.possible-buy { --signal-accent: var(--possible-buy); --signal-rgb: 57,215,255; }
+.signal-card.possible-sell { --signal-accent: var(--possible-sell); --signal-rgb: 255,159,67; }
+.signal-card.signal-refresh { animation: signalCardRefresh 1.55s cubic-bezier(.18,.72,.22,1) both; }
+.signal-card.signal-refresh .signal-copy { animation: signalCopyRefresh .62s cubic-bezier(.18,.72,.22,1) both; }
+.signal-card.signal-refresh .signal-icon { animation: signalIconRefresh .82s cubic-bezier(.18,.72,.22,1) both !important; }
+.signal-cycle { position: absolute; z-index: 5; top: 9px; right: 13px; display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 1px solid rgba(var(--signal-rgb),.3); border-radius: 999px; background: rgba(3,12,25,.88); color: var(--signal-accent); box-shadow: 0 0 16px rgba(var(--signal-rgb),.1); font-size: 8px; font-weight: 950; letter-spacing: .08em; pointer-events: none; opacity: 0; transform: translateY(-5px) scale(.96); }
+.signal-cycle[hidden] { display: none; }
+.signal-cycle i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 9px currentColor; }
+.signal-cycle time { color: #dce9f9; font-variant-numeric: tabular-nums; }
+.signal-cycle.show { animation: signalCycleBadge 2.8s ease both; }
+@keyframes signalCardRefresh { 0% { background: rgba(var(--signal-rgb),.18); box-shadow: inset 4px 0 0 rgba(var(--signal-rgb),.95), inset 0 0 50px rgba(var(--signal-rgb),.16); } 42% { background: rgba(var(--signal-rgb),.07); box-shadow: inset 2px 0 0 rgba(var(--signal-rgb),.7), inset 0 0 28px rgba(var(--signal-rgb),.08); } 100% { background: transparent; box-shadow: inset 0 0 0 rgba(var(--signal-rgb),0); } }
+@keyframes signalCopyRefresh { 0% { opacity: .5; transform: translateY(7px); filter: blur(2px); } 100% { opacity: 1; transform: none; filter: none; } }
+@keyframes signalIconRefresh { 0% { transform: scale(.78) rotate(-7deg); box-shadow: 0 0 0 rgba(var(--signal-rgb),0); } 45% { transform: scale(1.1); box-shadow: 0 0 24px rgba(var(--signal-rgb),.42); } 100% { transform: none; } }
+@keyframes signalCycleBadge { 0% { opacity: 0; transform: translateY(-5px) scale(.96); } 12%, 72% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-3px); } }
 .signal-card.scanning::after { position: absolute; right: 18px; bottom: 7px; left: 18px; height: 2px; overflow: hidden; border-radius: 999px; background: rgba(87,151,255,.1); content: ""; }
 .signal-card.scanning::before { position: absolute; z-index: 1; bottom: 7px; left: 18px; width: 24%; height: 2px; border-radius: 999px; background: linear-gradient(90deg, transparent, #5797ff, #8a74ff, transparent); content: ""; animation: atlasScanning 1.6s ease-in-out infinite; }
 @keyframes atlasScanning { from { transform: translateX(-100%); } to { transform: translateX(420%); } }
@@ -275,6 +295,16 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .signal-card.sell .signal-icon { animation: sell-glow 1.9s ease-in-out infinite; }
 .signal-card.probable .signal-icon { border-color: rgba(199,162,255,.34); background: rgba(199,162,255,.1); color: var(--probable); animation: probable-glow 2.1s ease-in-out infinite; }
 .signal-card.probable h1 { color: var(--probable); font-size: 22px; }
+.signal-card.possible-buy .signal-icon { border-color: rgba(57,215,255,.38); background: rgba(57,215,255,.1); color: var(--possible-buy); }
+.signal-card.possible-buy h1 { color: var(--possible-buy); }
+.signal-card.possible-buy .entry-guidance { --guidance-glow: rgba(57,215,255,.24); border-color: rgba(57,215,255,.4); background: linear-gradient(135deg, rgba(57,215,255,.14), rgba(57,215,255,.035)); box-shadow: inset 3px 0 0 var(--possible-buy); }
+.signal-card.possible-buy .entry-guidance-icon { border-color: rgba(57,215,255,.44); background: rgba(57,215,255,.11); color: #96eaff; }
+.signal-card.possible-buy .entry-guidance small { color: #86e7ff; }
+.signal-card.possible-sell .signal-icon { border-color: rgba(255,159,67,.4); background: rgba(255,159,67,.11); color: var(--possible-sell); }
+.signal-card.possible-sell h1 { color: var(--possible-sell); }
+.signal-card.possible-sell .entry-guidance { --guidance-glow: rgba(255,159,67,.24); border-color: rgba(255,159,67,.42); background: linear-gradient(135deg, rgba(255,159,67,.15), rgba(255,159,67,.035)); box-shadow: inset 3px 0 0 var(--possible-sell); }
+.signal-card.possible-sell .entry-guidance-icon { border-color: rgba(255,159,67,.46); background: rgba(255,159,67,.12); color: #ffc38b; }
+.signal-card.possible-sell .entry-guidance small { color: #ffbd7d; }
 .signal-card.expired .signal-icon { border-color: rgba(255,179,71,.38); background: rgba(255,179,71,.1); color: #ffd18a; animation: stabilityPulse 1.8s ease-in-out infinite; }
 .signal-card.expired h1 { color: #ffd18a; font-size: 20px; }
 .signal-card.observing .signal-icon { border-color: rgba(255,179,71,.38); background: rgba(255,179,71,.1); color: #ffd18a; animation: stabilityPulse 1.8s ease-in-out infinite; }
@@ -431,6 +461,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 @keyframes robot-aura { 0% { opacity: .5; transform: scale(.9); } 75%, 100% { opacity: 0; transform: scale(1.18); } }
 @keyframes trade-buy-flash { 0% { opacity: .95; background: radial-gradient(circle at 50% 55%, rgba(42, 235, 146, .14), transparent 58%); box-shadow: inset 0 0 120px 18px rgba(42, 235, 146, .55), inset 0 0 0 2px rgba(88, 255, 177, .75); } 100% { opacity: 0; background: transparent; box-shadow: inset 0 0 8px rgba(42, 235, 146, 0); } }
 @keyframes trade-sell-flash { 0% { opacity: .95; background: radial-gradient(circle at 50% 55%, rgba(255, 68, 93, .15), transparent 58%); box-shadow: inset 0 0 120px 18px rgba(255, 68, 93, .58), inset 0 0 0 2px rgba(255, 111, 130, .78); } 100% { opacity: 0; background: transparent; box-shadow: inset 0 0 8px rgba(255, 68, 93, 0); } }
+@keyframes trade-possible-buy-flash { 0% { opacity: .88; background: radial-gradient(circle at 50% 58%, rgba(57,215,255,.12), transparent 60%); box-shadow: inset 0 0 105px 14px rgba(57,215,255,.42), inset 0 0 0 2px rgba(115,232,255,.65); } 100% { opacity: 0; background: transparent; box-shadow: inset 0 0 8px rgba(57,215,255,0); } }
+@keyframes trade-possible-sell-flash { 0% { opacity: .88; background: radial-gradient(circle at 50% 58%, rgba(255,159,67,.12), transparent 60%); box-shadow: inset 0 0 105px 14px rgba(255,159,67,.42), inset 0 0 0 2px rgba(255,190,128,.66); } 100% { opacity: 0; background: transparent; box-shadow: inset 0 0 8px rgba(255,159,67,0); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
