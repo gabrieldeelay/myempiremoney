@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#061326" />
   <title>Atlas | Assistente de operações</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=3.15.0" />
+  <link rel="stylesheet" href="/styles.css?v=3.16.0" />
 </head>
 <body>
   <div class="app-shell">
@@ -63,8 +63,15 @@
           <div class="signal-cycle" id="signalCycle" role="status" aria-live="polite" hidden>
             <i aria-hidden="true"></i><span>NOVA VELA</span><time id="signalCycleTime">—</time>
           </div>
-          <section class="signal-pane signal-pane-current" aria-labelledby="currentCandleTitle">
-            <div class="signal-pane-title"><i aria-hidden="true"></i><span id="currentCandleTitle">NESTA VELA</span></div>
+          <div class="signal-tabs" role="tablist" aria-label="Momento da entrada">
+            <button class="signal-tab active" id="currentSignalTab" type="button" role="tab" aria-selected="true" aria-controls="currentSignalPane" data-signal-tab="current">
+              <span class="signal-tab-dot" aria-hidden="true"></span><span id="currentCandleTitle">NESTA VELA</span>
+            </button>
+            <button class="signal-tab" id="nextSignalTab" type="button" role="tab" aria-selected="false" aria-controls="nextSignalPane" data-signal-tab="next">
+              <span class="signal-tab-dot" aria-hidden="true"></span><span id="nextCandleTitle">PRÓXIMA VELA</span>
+            </button>
+          </div>
+          <section class="signal-pane signal-pane-current active" id="currentSignalPane" role="tabpanel" aria-labelledby="currentSignalTab">
             <div class="signal-pane-body">
               <div class="signal-icon" id="signalIcon">—</div>
               <div class="signal-copy">
@@ -97,8 +104,7 @@
             </div>
           </section>
 
-          <section class="signal-pane signal-pane-next" id="nextSignalPane" aria-labelledby="nextCandleTitle">
-            <div class="signal-pane-title"><i aria-hidden="true"></i><span id="nextCandleTitle">PRÓXIMA VELA</span></div>
+          <section class="signal-pane signal-pane-next" id="nextSignalPane" role="tabpanel" aria-labelledby="nextSignalTab" hidden>
             <div class="signal-pane-body">
               <div class="signal-icon next-signal-icon" id="nextSignalIcon">—</div>
               <div class="signal-copy next-signal-copy">
@@ -173,6 +179,11 @@
     <div><small>MOVIMENTO EXTREMO</small><strong id="extremeAlertLabel">POSSÍVEL COMPRA</strong><p id="extremeAlertDetail">Aguarde confirmação técnica.</p></div>
     <button type="button" id="extremeAlertClose" aria-label="Fechar alerta">×</button>
   </aside>
+  <aside class="signal-alert" id="signalAlert" role="status" aria-live="assertive" hidden>
+    <span class="signal-alert-icon" id="signalAlertIcon">↗</span>
+    <div><small id="signalAlertMoment">SINAL · NESTA VELA</small><strong id="signalAlertLabel">COMPRA · 70%</strong><p id="signalAlertDetail">O Atlas encontrou uma oportunidade.</p></div>
+    <button type="button" id="signalAlertClose" aria-label="Fechar alerta">×</button>
+  </aside>
   <aside class="setup-warning-stack" id="setupWarnings" aria-label="Avisos de configuração" aria-live="assertive" hidden></aside>
 
   <div class="install-modal" id="installModal" hidden>
@@ -221,7 +232,7 @@
   <canvas id="screenReaderCanvas" hidden></canvas>
 
   <script type="module" src="/modules/app-guard.js?v=3.2.0"></script>
-  <script type="module" src="/modules/app.js?v=3.15.0"></script>
+  <script type="module" src="/modules/app.js?v=3.16.0"></script>
   <script type="module" src="/modules/insights.js?v=3.11.0"></script>
   <script type="module" src="/modules/screen-reader.js?v=3.15.0"></script>
 </body>

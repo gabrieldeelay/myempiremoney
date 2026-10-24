@@ -4,8 +4,9 @@ import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.12.1";
 import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.1";
 import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.5";
 import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
-import { createSaoPauloCandleClock, signalEffectTone } from "./candle-cycle.js?v=3.13.0";
+import { createSaoPauloCandleClock, saoPauloFiveMinuteCycle, signalEffectTone } from "./candle-cycle.js?v=3.13.0";
 import { composeDualSignalViews, signalLabel } from "./dual-signal.js?v=3.15.0";
+import { createSignalCandleLock } from "./signal-candle-lock.js?v=3.16.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -38,6 +39,12 @@ let signalCycleTimer = null;
 let lastVisualEffect = { at: 0, reason: "", tone: "" };
 let extremeAlertTimer = null;
 let lastExtremeAlertSignature = "";
+let activeSignalPane = localStorage.getItem("atlas-active-signal-pane") === "next" ? "next" : "current";
+let signalAlertTimer = null;
+let signalAlertActive = false;
+const signalAlertQueue = [];
+const lastSignalAlertSignature = new Map();
+const signalCandleLock = createSignalCandleLock();
 const screenRevisionGuard = createScreenRevisionGuard();
 let state = {
   version: null,
@@ -195,9 +202,73 @@ function renderNextSignal(view = {}) {
   $("nextConfidenceBadge").textContent = `${confidence}% CONFIANÇA`;
   $("nextSignalStability").textContent = direction === "WAIT"
     ? "AGUARDANDO DIREÇÃO"
-    : possible ? "CENÁRIO EM FORMAÇÃO" : "DIREÇÃO CONFIRMADA";
+    : view.heldByCandle ? "MANTIDO ATÉ O FIM DA VELA" : possible ? "CENÁRIO EM FORMAÇÃO" : "DIREÇÃO CONFIRMADA";
   $("nextSignalStability").className = `signal-stability ${direction === "WAIT" ? "waiting" : possible ? "checking" : "stable"}`;
   $("nextAnalysisReason").textContent = view.reason || "A direção provável será atualizada pela última vela fechada.";
+}
+
+function setSignalTab(pane = "current", focus = false) {
+  const nextPane = pane === "next" ? "next" : "current";
+  activeSignalPane = nextPane;
+  localStorage.setItem("atlas-active-signal-pane", nextPane);
+  ["current", "next"].forEach(name => {
+    const selected = name === nextPane;
+    const tab = $(`${name}SignalTab`);
+    const panel = $(`${name}SignalPane`);
+    if (!tab || !panel) return;
+    tab.classList.toggle("active", selected);
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    panel.classList.toggle("active", selected);
+    panel.hidden = !selected;
+  });
+  if (focus) $(`${nextPane}SignalTab`)?.focus();
+}
+
+function updateSignalTab(pane, view = {}) {
+  const tab = $(`${pane}SignalTab`);
+  if (!tab) return;
+  const direction = String(view.direction || "WAIT").toUpperCase();
+  const hasSignal = ["BUY", "SELL"].includes(direction);
+  tab.classList.toggle("has-signal", hasSignal);
+  tab.dataset.tone = signalEffectTone(direction, Boolean(view.possible));
+  tab.title = hasSignal
+    ? `${signalLabel(view)} · ${Math.round(Number(view.confidence) || 0)}% de confiança`
+    : "Nenhum sinal confirmado nesta análise";
+}
+
+function drainSignalAlerts() {
+  if (signalAlertActive || signalAlertQueue.length === 0) return;
+  const item = signalAlertQueue.shift();
+  const host = $("signalAlert");
+  if (!host) return;
+  signalAlertActive = true;
+  host.className = `signal-alert ${item.tone}`;
+  host.dataset.pane = item.pane;
+  $("signalAlertIcon").textContent = item.view.direction === "BUY" ? "↗" : "↘";
+  $("signalAlertMoment").textContent = `NOVO SINAL · ${item.pane === "current" ? "NESTA VELA" : "PRÓXIMA VELA"}`;
+  $("signalAlertLabel").textContent = `${signalLabel(item.view)} · ${Math.round(Number(item.view.confidence) || 0)}%`;
+  $("signalAlertDetail").textContent = item.pane === "current"
+    ? "Oportunidade durante a vela atual. Confira a orientação antes de entrar."
+    : "Cenário projetado para a próxima vela. Aguarde o fechamento da atual.";
+  host.hidden = false;
+  clearTimeout(signalAlertTimer);
+  signalAlertTimer = setTimeout(() => {
+    host.hidden = true;
+    signalAlertActive = false;
+    setTimeout(drainSignalAlerts, 220);
+  }, 4600);
+}
+
+function queueSignalAlert(pane, view = {}, cycleKey = "") {
+  const direction = String(view.direction || "WAIT").toUpperCase();
+  if (!["BUY", "SELL"].includes(direction)) return;
+  const asset = state.asset || selectedRadarAsset || "ATIVO";
+  const signature = `${asset}|${cycleKey}|${direction}|${Boolean(view.possible)}`;
+  if (lastSignalAlertSignature.get(pane) === signature) return;
+  lastSignalAlertSignature.set(pane, signature);
+  signalAlertQueue.push({ pane, view: { ...view, direction }, tone: signalEffectTone(direction, Boolean(view.possible)) });
+  drainSignalAlerts();
 }
 
 function showExtremeMovementAlert(view = {}) {
@@ -223,13 +294,20 @@ function showExtremeMovementAlert(view = {}) {
 }
 
 function renderSignal(centralAnalysis = effectiveAnalysis()) {
-  const views = composeDualSignalViews({
+  const composedViews = composeDualSignalViews({
     live: state.analysis || {},
     central: centralAnalysis || {},
     trend: trendForAsset(),
     timeframe: state.timeframe,
     expiration: state.expiration
   });
+  const signalAsset = state.asset || centralAnalysis?.previewAsset || selectedRadarAsset || "";
+  const cycleKey = saoPauloFiveMinuteCycle().key;
+  const views = {
+    ...composedViews,
+    current: signalCandleLock.resolve({ asset: signalAsset, pane: "current", cycleKey, view: composedViews.current }),
+    next: signalCandleLock.resolve({ asset: signalAsset, pane: "next", cycleKey, view: composedViews.next })
+  };
   const analysis = {
     ...views.current,
     signalKind: views.current.direction === "WAIT" ? "no-opportunity" : "entry",
@@ -324,7 +402,7 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
     const initializing = analysis?.stability === "initializing";
     const reversal = analysis?.setup === "INTRACANDLE_REVERSAL";
     const stretched = analysis?.setup === "STRETCHED_CANDLE";
-    stability.textContent = trendOnly ? "SINAL PARA PRÓXIMA VELA" : noOpportunity ? "MERCADO SEM VANTAGEM" : reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "CONFIRME A REJEIÇÃO" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
+    stability.textContent = analysis.heldByCandle ? "MANTIDO ATÉ O FIM DA VELA" : trendOnly ? "SINAL PARA PRÓXIMA VELA" : noOpportunity ? "MERCADO SEM VANTAGEM" : reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "CONFIRME A REJEIÇÃO" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
     stability.className = `signal-stability ${trendOnly || checking || initializing || stretched ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
   }
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
@@ -354,6 +432,11 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
     triggerSignalVisual(currentSignalTone, "signal");
   }
   lastSignalVisualSignature = visualSignature;
+  const currentTabView = { ...analysis, direction: finalDirection, confidence, possible };
+  updateSignalTab("current", currentTabView);
+  updateSignalTab("next", views.next);
+  queueSignalAlert("current", currentTabView, cycleKey);
+  queueSignalAlert("next", views.next, cycleKey);
   if (views.setupVerified) showExtremeMovementAlert(views.current);
 }
 
@@ -1209,6 +1292,24 @@ $("extremeAlertClose")?.addEventListener("click", () => {
   $("extremeAlert").hidden = true;
 });
 
+$("signalAlertClose")?.addEventListener("click", () => {
+  clearTimeout(signalAlertTimer);
+  $("signalAlert").hidden = true;
+  signalAlertActive = false;
+  setTimeout(drainSignalAlerts, 120);
+});
+
+document.querySelector(".signal-tabs")?.addEventListener("click", event => {
+  const tab = event.target.closest("[data-signal-tab]");
+  if (tab) setSignalTab(tab.dataset.signalTab, true);
+});
+
+document.querySelector(".signal-tabs")?.addEventListener("keydown", event => {
+  if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+  event.preventDefault();
+  setSignalTab(activeSignalPane === "current" ? "next" : "current", true);
+});
+
 addEventListener("atlas:trends", event => {
   marketTrends = Array.isArray(event.detail?.items) ? event.detail.items : [];
   radarUpdatedAt = event.detail?.updatedAt || new Date().toISOString();
@@ -1287,6 +1388,7 @@ addEventListener("pointermove", event => {
 
 robot.init();
 renderConnection(false);
+setSignalTab(activeSignalPane);
 const candleClock = createSaoPauloCandleClock({
   onCycle: cycle => triggerSignalVisual(currentSignalTone, "cycle", cycle)
 });
