@@ -18,6 +18,7 @@ const extensionBackground = await readFile(new URL("../extension/background.js",
 const screenReader = await readFile(new URL("../dist/modules/screen-reader.js", import.meta.url), "utf8");
 const analysisPolicy = await readFile(new URL("../dist/modules/analysis-policy.js", import.meta.url), "utf8");
 const assetCache = await readFile(new URL("../dist/modules/asset-analysis-cache.js", import.meta.url), "utf8");
+const signalStability = await readFile(new URL("../dist/modules/signal-stability.js", import.meta.url), "utf8");
 const localTts = await readFile(new URL("../dist/modules/vozz-piper.js", import.meta.url), "utf8");
 const server = await readFile(new URL("../app.js", import.meta.url), "utf8");
 
@@ -144,12 +145,15 @@ assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
 assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desaparecer automaticamente quando a leitura começar");
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
-assert.match(screenReader, /screen-vision\.js\?v=3\.12\.0/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
+assert.match(screenReader, /screen-vision\.js\?v=3\.12\.1/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.9\.5/, "o painel deve carregar a direção travada sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
-assert.match(screenReader, /setup-warning-state\.js\?v=3\.10\.0/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
-assert.match(screenReader, /left: \.58, width: \.3/, "a leitura da expiração deve cobrir o controle responsivo em telas estreitas e largas");
+assert.match(screenReader, /setup-warning-state\.js\?v=3\.12\.1/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
+assert.match(screenReader, /left: \.65, width: \.18/, "a expiração deve ser lida sem misturar o contador regressivo com o valor de cinco minutos");
+assert.match(screenReader, /activeTab\.height \* \.5/, "o recorte da expiração deve ficar abaixo do contador regressivo");
+assert.match(screenReader, /lastSetupOcrAt = \{ timeframe: 0, expiration: 0 \}/, "gráfico e expiração devem possuir relógios de OCR independentes");
+assert.match(screenReader, /lastSetupOcrAt\[kind\]/, "ler o gráfico não pode impedir a leitura da expiração no mesmo ciclo");
 assert.match(screenReader, /asset: asset \|\| lastAsset/, "uma falha momentânea do OCR não pode apagar o ativo e o sinal atuais");
 assert.doesNotMatch(screenReader, /if \(tabMoved\) \{\s*lastAsset = null/, "uma oscilação visual da aba não pode apagar um ativo válido");
 assert.match(app, /Identificando ativo/, "a captura ativa não pode ser apresentada como logout enquanto o OCR localiza o ativo");
@@ -187,7 +191,10 @@ assert.match(styles, /\.signal-card\.scanning::before/, "a análise em andamento
 assert.match(insights, /payload\.signals \|\| payload\.items/, "o painel deve receber do servidor a leitura de todos os ativos monitorados");
 assert.match(insights, /setInterval\(loadTrends, 5000\)/, "o radar do servidor deve atualizar o painel em intervalos curtos");
 assert.match(analysisPolicy, /A direção só é publicada quando o servidor central confirma o mesmo sinal para todos\./, "o cliente não pode inventar uma direção diferente da leitura central");
-assert.match(app, /identifiedAnalysis\.source === "market-radar-5m"/, "um sinal central deve aparecer sem esperar nova confirmação local");
+assert.match(app, /createSignalStabilizer\(\{ initialConfirmMs: 0, initialHits: 1 \}\)/, "o primeiro sinal central deve aparecer sem atraso");
+assert.doesNotMatch(app, /identifiedAnalysis\.source === "market-radar-5m"/, "o radar central não pode contornar o bloqueio por vela");
+assert.match(signalStability, /analysis\.signalKind === "no-opportunity"/, "sem oportunidade só deve substituir um sinal após o fechamento da vela");
+assert.match(signalStability, /minimumSignalConfidence = options\.minimumSignalConfidence \?\? 50/, "o estabilizador deve aceitar possíveis sinais a partir de cinquenta por cento");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");
 assert.match(screenReader, /setupChecked:\s*Boolean\(setup\.timeframe && setup\.expiration\)/, "os avisos devem esperar a leitura conjunta do gráfico e da expiração");
@@ -195,6 +202,8 @@ assert.match(html, /id="setupWarnings"/, "o painel deve reservar uma área próp
 assert.doesNotMatch(app, /state\.setupChecked === true/, "um gráfico em 1m deve gerar aviso mesmo que a expiração ainda não tenha sido reconhecida");
 assert.match(screenReader, /readingIssue/, "falhas de ativo, gráfico ou configuração devem ser informadas ao usuário");
 assert.doesNotMatch(app, /Leitura visual incompleta/, "falhas transitórias da leitura não devem abrir um aviso persistente");
+assert.doesNotMatch(app, /AGUARDANDO ENTRADA|SEM ENTRADA AINDA/, "uma direção válida deve informar possível compra ou venda e o momento da vela");
+assert.match(app, /SINAL PARA PRÓXIMA VELA/, "uma leitura direcional ainda não imediata deve continuar sendo uma indicação clara");
 assert.doesNotMatch(app, /state\.readingIssue/, "falhas transitórias da leitura não devem ocupar a área de avisos");
 assert.doesNotMatch(html, />Tendências</, "a aba de tendências não deve mais aparecer na interface");
 assert.doesNotMatch(insights, /trend-row/, "ativos do radar central não devem mais ser exibidos como uma lista clicável");

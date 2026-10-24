@@ -16,6 +16,14 @@ test("confirma o primeiro sinal antes de publicá-lo", () => {
   assert.equal(confirmed.stability, "stable");
 });
 
+test("aceita imediatamente possível compra ou venda a partir de cinquenta por cento", () => {
+  const filter = createSignalStabilizer({ initialConfirmMs: 0, initialHits: 1 });
+  const possible = filter.update({ direction: "SELL", confidence: 54, signalKind: "trend" }, "STELLAR");
+  assert.equal(possible.direction, "SELL");
+  assert.equal(possible.confidence, 54);
+  assert.equal(possible.stability, "stable");
+});
+
 test("não troca o sinal por oscilações rápidas da vela aberta", () => {
   let clock = 0;
   const filter = createSignalStabilizer({
@@ -37,7 +45,8 @@ test("não troca o sinal por oscilações rápidas da vela aberta", () => {
   clock = 2600;
   const noisy = filter.update(buy, "SOLANA");
   assert.equal(noisy.direction, "SELL");
-  assert.equal(noisy.stability, "checking");
+  assert.equal(noisy.stability, "stable");
+  assert.equal(noisy.candleLocked, true);
 });
 
 test("aceita a direção contrária somente depois de persistência e tempo mínimo", () => {
@@ -59,6 +68,12 @@ test("aceita a direção contrária somente depois de persistência e tempo mín
   clock = 2000;
   assert.equal(filter.update(buy, "CARDANO").direction, "SELL");
   clock = 3100;
+  assert.equal(filter.update(buy, "CARDANO").direction, "SELL");
+  clock = 300100;
+  assert.equal(filter.update(buy, "CARDANO").direction, "SELL");
+  clock = 301200;
+  assert.equal(filter.update(buy, "CARDANO").direction, "SELL");
+  clock = 302300;
   const switched = filter.update(buy, "CARDANO");
   assert.equal(switched.direction, "BUY");
   assert.equal(switched.stability, "stable");
@@ -89,9 +104,9 @@ test("encerra a entrada sem apagar imediatamente a direção que havia sido conf
     reason: "queda esticada"
   }, "LITECOIN");
   assert.equal(blocked.direction, "SELL");
-  assert.equal(blocked.setup, "STRETCHED_CANDLE");
-  assert.equal(blocked.entryBlocked, true);
-  assert.equal(blocked.stability, "checking");
+  assert.equal(blocked.entryBlocked, undefined);
+  assert.equal(blocked.stability, "stable");
+  assert.equal(blocked.candleLocked, true);
 });
 
 test("mantém a direção confirmada mesmo quando leituras seguintes voltam para aguardar", () => {
@@ -101,7 +116,8 @@ test("mantém a direção confirmada mesmo quando leituras seguintes voltam para
   clock = 90000;
   const held = filter.update({ direction: "WAIT", confidence: 44 }, "AUD/JPY");
   assert.equal(held.direction, "SELL");
-  assert.equal(held.stability, "checking");
+  assert.equal(held.stability, "stable");
+  assert.equal(held.candleLocked, true);
 });
 
 test("não reabre na mesma vela um ponto de entrada que já foi bloqueado", () => {
@@ -210,6 +226,24 @@ test("mantém uma venda confirmada até o fim da vela de cinco minutos", () => {
   assert.equal(stretched.direction, "SELL");
   assert.equal(stretched.entryBlocked, undefined);
   assert.equal(stretched.candleLocked, true);
+});
+
+test("mantém possível compra até o fim da vela antes de aceitar sem oportunidade", () => {
+  let clock = 61000;
+  const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
+  const possibleBuy = { direction: "BUY", confidence: 63, signalKind: "trend", entryConfirmed: false };
+  const noOpportunity = { direction: "WAIT", confidence: 46, signalKind: "no-opportunity" };
+
+  assert.equal(filter.update(possibleBuy, "BNB").direction, "BUY");
+  clock = 299900;
+  const held = filter.update(noOpportunity, "BNB");
+  assert.equal(held.direction, "BUY");
+  assert.equal(held.candleLocked, true);
+
+  clock = 300100;
+  const released = filter.update(noOpportunity, "BNB");
+  assert.equal(released.direction, "WAIT");
+  assert.equal(released.signalKind, "no-opportunity");
 });
 
 test("confirma reversão intravela rapidamente sem publicar um único quadro isolado", () => {

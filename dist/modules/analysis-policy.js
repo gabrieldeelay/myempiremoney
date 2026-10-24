@@ -110,15 +110,35 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
     };
   }
 
+  if (combinedConfidence < 50) {
+    return {
+      ...live,
+      ...trend,
+      direction: "WAIT",
+      confidence: combinedConfidence,
+      signalKind: "no-opportunity",
+      entryConfirmed: false,
+      entryTiming: "WAIT_CONFIRMATION",
+      entryBlocked: false,
+      factors: [
+        `A direção calculada ficou em ${combinedConfidence}%, abaixo do mínimo operacional de 50%.`,
+        trend.reason || "Os indicadores ainda não entregaram força suficiente.",
+        "A análise terminou normalmente e continuará sendo atualizada na próxima leitura."
+      ],
+      reason: "Sem oportunidade segura agora. A leitura ficou abaixo de 50% de confiança.",
+      source: "market-radar-5m"
+    };
+  }
+
   const localContext = entryConfirmed
     ? "A leitura visual confirmou a direção e o gráfico e a expiração estão em 5 minutos."
     : localEntryBlocked
       ? "A direção permanece válida, mas o ponto seguro desta vela já passou."
       : !visualAgrees
-        ? "A direção do mercado está definida, mas a tela ainda não confirmou um ponto de entrada."
+        ? `Há possível ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela; a leitura visual atualizará o momento.`
         : !setupVerified
           ? "A direção está confirmada, mas o Atlas ainda precisa validar gráfico e expiração em 5 minutos."
-          : "A direção está definida, mas o ponto de entrada ainda não foi confirmado.";
+          : `Há possível ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela.`;
 
   return {
     ...live,
@@ -139,7 +159,7 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
     ],
     reason: entryConfirmed
       ? `Sinal de entrada confirmado: ${trend.reason || `direção de ${side}`}. ${localContext}`
-      : `Direção de ${side} no Radar Atlas 5M. ${localContext}`,
+      : `Possível ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela. ${localContext}`,
     source: "market-radar-5m"
   };
 }

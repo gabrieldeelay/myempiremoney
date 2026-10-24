@@ -1,8 +1,8 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.9.5";
-import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.9.8";
-import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.0";
-import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.0";
+import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.12.1";
+import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.1";
+import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.5";
 import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
@@ -23,7 +23,7 @@ let toastTimer = null;
 let lastLoginState = null;
 let marketTrends = [];
 let selectedRadarAsset = null;
-const signalStabilizer = createSignalStabilizer();
+const signalStabilizer = createSignalStabilizer({ initialConfirmMs: 0, initialHits: 1 });
 const setupWarningTracker = createSetupWarningTracker();
 const analysisCache = createAssetAnalysisCache();
 let displayedAnalysis = null;
@@ -230,7 +230,7 @@ function renderSignal(analysis = effectiveAnalysis()) {
     const initializing = analysis?.stability === "initializing";
     const reversal = analysis?.setup === "INTRACANDLE_REVERSAL";
     const stretched = analysis?.setup === "STRETCHED_CANDLE";
-    stability.textContent = trendOnly ? "AGUARDANDO ENTRADA" : noOpportunity ? "MERCADO SEM VANTAGEM" : reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "CONFIRME A REJEIÇÃO" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
+    stability.textContent = trendOnly ? "SINAL PARA PRÓXIMA VELA" : noOpportunity ? "MERCADO SEM VANTAGEM" : reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "CONFIRME A REJEIÇÃO" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
     stability.className = `signal-stability ${trendOnly || checking || initializing || stretched ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
   }
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
@@ -852,9 +852,7 @@ function renderState(next = {}, source = "extension") {
   renderSetupWarnings();
 
   const identifiedAnalysis = analysisForIdentifiedAsset();
-  displayedAnalysis = identifiedAnalysis.source === "market-radar-5m"
-    ? { ...identifiedAnalysis, stability: "stable" }
-    : signalStabilizer.update(identifiedAnalysis, state.asset);
+  displayedAnalysis = signalStabilizer.update(identifiedAnalysis, state.asset);
   renderSignal(displayedAnalysis);
   const visibleAsset = state.assetPending ? "Identificando ativo" : state.asset || identifiedAnalysis.previewAsset || selectedRadarAsset;
   if (visibleAsset) $("agentAsset").textContent = visibleAsset;
@@ -1113,7 +1111,7 @@ addEventListener("atlas:trends", event => {
   const readyAnalysis = state.asset
     ? effectiveAnalysis()
     : { ...composeCentralAnalysis({ trend: trendForAsset(preferredAsset) }), previewAsset: preferredAsset };
-  displayedAnalysis = { ...readyAnalysis, stability: "stable" };
+  displayedAnalysis = signalStabilizer.update(readyAnalysis, state.asset || preferredAsset);
   renderSignal(displayedAnalysis);
   $("agentAsset").textContent = preferredAsset;
   const pulse = $("monitorPulse");

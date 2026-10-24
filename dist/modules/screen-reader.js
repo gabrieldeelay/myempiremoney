@@ -1,6 +1,6 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.12.0";
-import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.10.0";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.12.1";
+import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.12.1";
 
 const ASSET_OCR_INTERVAL_MS = 450;
 const READING_ISSUE_AFTER_MS = 6500;
@@ -24,7 +24,7 @@ let lastAsset = null;
 let lastOcrAt = 0;
 let lastTabCenter = null;
 let missedAssetReads = 0;
-let lastSetupOcrAt = 0;
+let lastSetupOcrAt = { timeframe: 0, expiration: 0 };
 let lastTimeframe = null;
 let lastExpiration = null;
 let captureStartedAt = 0;
@@ -39,6 +39,7 @@ function resetSetupReadings() {
   expirationReading.reset();
   lastTimeframe = null;
   lastExpiration = null;
+  lastSetupOcrAt = { timeframe: 0, expiration: 0 };
 }
 
 function setStatus(label, kind = "") {
@@ -129,11 +130,15 @@ function prepareSetupCrop(kind, activeTab) {
   const frame = frameBounds();
   const region = kind === "timeframe"
     ? { left: .045, width: .23 }
-    : { left: .58, width: .3 };
+    // Keep the expiration crop below the countdown. A wide crop could read
+    // 00:41 as "1 min" even while the actual control visibly showed 5 min.
+    : { left: .65, width: .18 };
   const cropLeft = Math.max(0, Math.round(frame.x + frame.width * region.left));
-  const cropTop = Math.max(0, Math.round(activeTab?.y ? activeTab.y + 4 : frame.y + frame.height * .18));
+  const cropTop = Math.max(0, Math.round(activeTab?.y
+    ? activeTab.y + (kind === "expiration" ? activeTab.height * .5 : 4)
+    : frame.y + frame.height * (kind === "expiration" ? .235 : .18)));
   const cropWidth = Math.min(canvas.width - cropLeft, Math.round(frame.width * region.width));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * .085));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * (kind === "expiration" ? .052 : .085)));
   const scale = 4;
   ocrCanvas.width = Math.max(1, cropWidth * scale);
   ocrCanvas.height = Math.max(1, cropHeight * scale);
@@ -144,11 +149,11 @@ function prepareSetupCrop(kind, activeTab) {
 }
 
 async function readSetupValue(kind, activeTab) {
-  if (ocrBusy || Date.now() - lastSetupOcrAt < 700 || !canvas.width) {
+  if (ocrBusy || Date.now() - lastSetupOcrAt[kind] < 700 || !canvas.width) {
     return kind === "timeframe" ? lastTimeframe : lastExpiration;
   }
   ocrBusy = true;
-  lastSetupOcrAt = Date.now();
+  lastSetupOcrAt[kind] = Date.now();
   try {
     const reader = await ensureOcrWorker();
     await reader.setParameters({
@@ -395,7 +400,7 @@ async function startReading() {
     missedAssetReads = 0;
     missedChartReads = 0;
     lastOcrAt = 0;
-    lastSetupOcrAt = 0;
+    lastSetupOcrAt = { timeframe: 0, expiration: 0 };
     showActivationPrompt(false);
     stream.getVideoTracks()[0]?.addEventListener("ended", () => stopReading("Compartilhamento encerrado"), { once: true });
     setButtons("Encerrar leitura");

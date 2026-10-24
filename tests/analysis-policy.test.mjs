@@ -10,12 +10,12 @@ const buyTrend = {
   reason: "EMA9 acima da EMA21"
 };
 
-test("a direção aparece imediatamente sem fingir que já existe ponto de entrada", () => {
+test("uma possível entrada aparece imediatamente com momento definido", () => {
   const analysis = composeCentralAnalysis({ trend: buyTrend });
   assert.equal(analysis.direction, "BUY");
   assert.equal(analysis.signalKind, "trend");
   assert.equal(analysis.entryConfirmed, false);
-  assert.match(analysis.reason, /Direção de alta/);
+  assert.match(analysis.reason, /Possível compra para a próxima vela/);
 });
 
 test("uma oportunidade válida entre 50 e 69 conserva o momento da entrada", () => {
@@ -89,6 +89,13 @@ test("uma análise neutra termina como sem oportunidade em vez de carregar indef
   assert.equal(analysis.direction, "WAIT");
   assert.equal(analysis.signalKind, "no-opportunity");
   assert.match(analysis.reason, /Sem oportunidade segura agora/);
+});
+
+test("uma direção abaixo de cinquenta por cento termina como sem oportunidade", () => {
+  const analysis = composeCentralAnalysis({ trend: { ...buyTrend, confidence: 47 } });
+  assert.equal(analysis.direction, "WAIT");
+  assert.equal(analysis.signalKind, "no-opportunity");
+  assert.match(analysis.reason, /abaixo de 50%/);
 });
 
 test("o destaque inicial prioriza uma direção clara em vez de um ativo neutro", () => {

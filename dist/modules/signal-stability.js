@@ -34,6 +34,7 @@ export function createSignalStabilizer(options = {}) {
   const minHoldMs = options.minHoldMs ?? 35000;
   const observationGraceMs = options.observationGraceMs ?? 15000;
   const candleDurationMs = options.candleDurationMs ?? 300000;
+  const minimumSignalConfidence = options.minimumSignalConfidence ?? 50;
   const initialHits = options.initialHits ?? 3;
   const switchHits = options.switchHits ?? 7;
 
@@ -75,8 +76,10 @@ export function createSignalStabilizer(options = {}) {
   }
 
   function lockStableCandle(analysis, timestamp) {
-    const candleX = Number(analysis?.technical?.lastCandle?.centerX);
-    stableCandleBucket = Number.isFinite(candleX) && candleDurationMs > 0
+    // Every published BUY/SELL, including a server-side possible signal,
+    // belongs to the current 5-minute candle. Visual candle coordinates are
+    // useful evidence, but must not be required to keep the signal stable.
+    stableCandleBucket = candleDurationMs > 0
       ? Math.floor(timestamp / candleDurationMs)
       : null;
   }
@@ -166,6 +169,18 @@ export function createSignalStabilizer(options = {}) {
       return { ...stable, stability: "stable", transition: null, candleLocked: true };
     }
 
+    // A completed "no opportunity" analysis may replace a previous signal
+    // only after its 5-minute candle has closed. Before that point the lock
+    // above preserves POSSÍVEL/COMPRA/VENDA without flickering.
+    if (analysis.direction === "WAIT" && analysis.signalKind === "no-opportunity") {
+      stable = null;
+      candidate = null;
+      entryBlock = null;
+      observation = null;
+      stableCandleBucket = null;
+      return { ...analysis, stability: "stable", transition: null };
+    }
+
     if (analysis.setup === "STRETCHED_CANDLE") {
       candidate = null;
       if (stable && analysis.blockedDirection === stable.direction) {
@@ -212,12 +227,12 @@ export function createSignalStabilizer(options = {}) {
         candidate = null;
         return blockedView(analysis);
       }
-      entryOpportunityRenewed = analysis.direction === stable?.direction && analysis.confidence >= 62;
+      entryOpportunityRenewed = analysis.direction === stable?.direction && analysis.confidence >= minimumSignalConfidence;
       entryBlock = null;
     }
 
     if (!stable) {
-      if (analysis.direction === "WAIT" || analysis.confidence < 62) {
+      if (analysis.direction === "WAIT" || analysis.confidence < minimumSignalConfidence) {
         candidate = null;
         if (observationStillRelevant(analysis, timestamp)) return observationView();
         observation = null;
@@ -262,7 +277,7 @@ export function createSignalStabilizer(options = {}) {
     const stableAge = timestamp - stable.since;
     const requiredMs = switchConfirmMs;
     const requiredHits = switchHits;
-    const confidenceEnough = nextCandidate.analysis.confidence >= 62;
+    const confidenceEnough = nextCandidate.analysis.confidence >= minimumSignalConfidence;
     const confirmed = stableAge >= minHoldMs
       && candidateAge >= requiredMs
       && nextCandidate.hits >= requiredHits
