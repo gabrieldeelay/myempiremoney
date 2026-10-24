@@ -17,6 +17,15 @@ test("o radar do servidor calcula compra e venda antes da tela ser aberta", () =
   assert.equal(rising.timeframe, "5m");
 });
 
+test("o radar ignora intervalos vazios de Forex em vez de convertê-los em preço zero", () => {
+  const values = Array.from({ length: 80 }, (_, index) => 1.1 + index * .0001);
+  values.splice(30, 0, null, null);
+  const result = analyzeCandles("EURUSD=X", candles(values));
+  assert.ok(result.price > 1);
+  assert.ok(Number.isFinite(result.confidence));
+  assert.ok(Number.isFinite(result.score));
+});
+
 test("o radar central cobre criptos, Forex e ações exibidos pela Hezilex", () => {
   const assets = new Set(HEZILEX_INSTRUMENTS.map(item => item.asset));
   for (const asset of ["BNB", "BITCOIN", "STELLAR", "EUR/USD", "AUD/JPY", "GBP/USD", "APPLE", "NETFLIX", "META", "TESLA", "MICROSOFT"]) {
