@@ -20,8 +20,16 @@ function paint(image, x0, y0, x1, y1, color) {
 test("reconhece o ativo mesmo com erro comum do OCR", () => {
   assert.equal(fuzzyMatchAsset("PSARDANG"), "CARDANO");
   assert.equal(fuzzyMatchAsset("ETHEREUM"), "ETHEREUM");
+  assert.equal(fuzzyMatchAsset("BNB"), "BNB");
+  assert.equal(fuzzyMatchAsset("CHAINLINK"), "CHAINLINK");
   assert.equal(fuzzyMatchAsset("CAD JPY"), "CAD/JPY");
   assert.equal(fuzzyMatchAsset("AUD/JPY"), "AUD/JPY");
+});
+
+test("reconhece todo o catálogo de nomes usado no radar da Hezilex", () => {
+  for (const asset of ["BITCOIN", "ETHEREUM", "SOLANA", "CARDANO", "LITECOIN", "AVAX", "DOGE", "SUI", "XRP", "XPL", "STELLAR", "BNB", "TRON", "POLKADOT", "CHAINLINK", "BITCOIN CASH", "META", "TESLA", "MICROSOFT", "APPLE", "NETFLIX"]) {
+    assert.equal(fuzzyMatchAsset(asset), asset);
+  }
 });
 
 test("reconhece pares de moedas mesmo com uma letra confundida pelo OCR", () => {

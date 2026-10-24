@@ -138,13 +138,15 @@ assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
 assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desaparecer automaticamente quando a leitura começar");
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
-assert.match(screenReader, /screen-vision\.js\?v=3\.9\.7/, "a leitura deve carregar o reconhecimento atualizado de Forex sem usar cache antigo");
+assert.match(screenReader, /screen-vision\.js\?v=3\.9\.11/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.9\.5/, "o painel deve carregar a direção travada sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
 assert.match(screenReader, /setup-warning-state\.js\?v=3\.9\.8/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
 assert.match(screenReader, /left: \.78, width: \.21/, "a leitura da expiração deve mirar o controle à direita, não o centro do gráfico");
 assert.match(screenReader, /asset: asset \|\| lastAsset/, "uma falha momentânea do OCR não pode apagar o ativo e o sinal atuais");
+assert.doesNotMatch(screenReader, /if \(tabMoved\) \{\s*lastAsset = null/, "uma oscilação visual da aba não pode apagar um ativo válido");
+assert.match(app, /Identificando ativo/, "a captura ativa não pode ser apresentada como logout enquanto o OCR localiza o ativo");
 assert.match(app, /finalDirection === "BUY" \? "COMPRA" : "VENDA"/, "a direção confirmada deve continuar visível mesmo depois que o ponto daquela vela passar");
 assert.match(app, /A direção continua vendedora\. O ponto desta vela passou; aguarde uma nova entrada\./, "a venda deve permanecer visível sem incentivar uma entrada atrasada");
 assert.match(styles, /\.signal-card\.expired/, "um sinal encerrado deve ter um estado visual próprio");
@@ -171,7 +173,9 @@ assert.match(app, /source: "market-radar-5m"\s*\n\s*};\s*\n}\s*\n\s*function ana
 assert.match(app, /Analisando \$\{asset\} · leitura há \$\{ageSeconds\}s/, "a tela deve mostrar atividade e idade da última leitura enquanto ainda não há sinal");
 assert.match(styles, /\.signal-card\.scanning::before/, "a análise em andamento deve ter feedback visual contínuo");
 assert.match(insights, /payload\.signals \|\| payload\.items/, "o painel deve receber do servidor a leitura de todos os ativos monitorados");
-assert.match(insights, /setInterval\(loadTrends, 20000\)/, "o radar do servidor deve atualizar o painel em intervalos curtos");
+assert.match(insights, /setInterval\(loadTrends, 5000\)/, "o radar do servidor deve atualizar o painel em intervalos curtos");
+assert.match(app, /A direção só é publicada quando o servidor central confirma o mesmo sinal para todos\./, "o cliente não pode inventar uma direção diferente da leitura central");
+assert.match(app, /identifiedAnalysis\.source === "market-radar-5m"/, "um sinal central deve aparecer sem esperar nova confirmação local");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");
 assert.match(screenReader, /setupChecked:\s*Boolean\(setup\.timeframe && setup\.expiration\)/, "os avisos devem esperar a leitura conjunta do gráfico e da expiração");

@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.9.7";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.9.11";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.9.8";
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
@@ -243,10 +243,7 @@ async function inspectFrame() {
       && Math.abs(tabCenter - lastTabCenter) > Math.max(18, canvas.width * .025);
     if (tabCenter != null) lastTabCenter = tabCenter;
     if (tabMoved) {
-      lastAsset = null;
       missedAssetReads = 0;
-      reversalTracker.reset();
-      resetSetupReadings();
     }
     let visible = {};
     if (tabMoved || !lastAsset) visible = await readVisibleText(activeTab, true);

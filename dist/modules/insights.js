@@ -33,7 +33,7 @@ async function loadNews() {
 async function loadTrends() {
   const feed = document.querySelector("#trendsFeed");
   try {
-    const response = await fetch("/api/trends");
+    const response = await fetch("/api/trends", { cache: "no-store" });
     const payload = await response.json();
     if (!response.ok || !payload.items?.length) throw new Error(payload.error || "Sem tendências no momento.");
     feed.innerHTML = payload.items.map((item, index) => `<button type="button" class="trend-row ${item.direction.toLowerCase()}" data-trend-asset="${item.asset}" aria-label="Ver leitura de ${item.asset}"><span class="trend-rank">0${index + 1}</span><span><b>${item.asset}</b><small>RSI ${item.rsi} · ${item.timeframe}</small></span><strong>${item.direction === "BUY" ? "COMPRA" : item.direction === "SELL" ? "VENDA" : "AGUARDAR"}<small>${item.confidence}%</small></strong></button>`).join("");
@@ -56,4 +56,4 @@ tabs.forEach(tab => tab.addEventListener("click", () => {
 loadNews();
 loadTrends();
 setInterval(loadNews, 180000);
-setInterval(loadTrends, 20000);
+setInterval(loadTrends, 5000);

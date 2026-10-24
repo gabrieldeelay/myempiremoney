@@ -78,56 +78,41 @@ function effectiveAnalysis() {
   const trend = trendForAsset();
   const liveDirection = String(live.direction || "WAIT").toUpperCase();
   const trendDirection = String(trend?.direction || "WAIT").toUpperCase();
-  if (!trend) return live;
-  if (live.source === "screen-capture") {
-    if (live.setup === "STRETCHED_CANDLE") return live;
-    if (liveDirection === "WAIT") {
-      return {
-        ...live,
-        ...trend,
-        direction: trendDirection,
-        confidence: Math.min(74, Math.round(Number(trend.confidence) || 0)),
-        reason: `Radar 5M confirma ${trendDirection === "BUY" ? "pressão compradora" : trendDirection === "SELL" ? "pressão vendedora" : "indecisão"}. ${trend.reason || ""}`.trim(),
-        source: "visual-radar"
-      };
-    }
-    if (trendDirection !== "WAIT" && trendDirection !== liveDirection) {
-      if (["EXHAUSTION_REVERSAL", "INTRACANDLE_REVERSAL"].includes(live.setup)) {
-        return {
-          ...live,
-          confidence: Math.max(62, Number(live.confidence || 0) - 8),
-          reason: `${live.reason} O Radar 5M segue no lado oposto, então esta é uma leitura de correção curta.`,
-          factors: [
-            ...(live.factors || []),
-            `O Radar 5M aponta ${trendDirection === "BUY" ? "compra" : "venda"}; por isso a correção recebe confiança menor.`
-          ],
-          source: "visual-radar"
-        };
-      }
-      return {
-        ...live,
-        direction: "WAIT",
-        confidence: Math.max(48, Math.min(68, Math.round((Number(live.confidence) + Number(trend.confidence)) / 2) || 50)),
-        reason: `Divergência: as velas sugerem ${liveDirection === "BUY" ? "compra" : "venda"}, mas o Radar 5M indica ${trendDirection === "BUY" ? "compra" : "venda"}. Melhor aguardar confirmação.`,
-        source: "visual-radar"
-      };
-    }
-    if (trendDirection === liveDirection) {
-      return {
-        ...live,
-        confidence: Math.min(92, Math.round((Number(live.confidence) * .55) + (Number(trend.confidence) * .45))),
-        reason: `${live.reason} Radar 5M confirma o movimento.`,
-        source: "visual-radar"
-      };
-    }
-    return live;
+  if (!trend) {
+    return {
+      ...live,
+      direction: "WAIT",
+      confidence: 0,
+      reason: "Sincronizando este ativo com o Radar Atlas 5M.",
+      factors: ["A direção só é publicada quando o servidor central confirma o mesmo sinal para todos."],
+      source: "market-radar-loading"
+    };
   }
-  if (liveDirection !== "WAIT" && Number(live.confidence) > 0) return live;
+  const directional = ["BUY", "SELL"].includes(trendDirection);
+  const visualAgrees = live.source === "screen-capture" && liveDirection === trendDirection;
+  const localEntryBlocked = directional && visualAgrees && live.entryBlocked === true;
+  const localTiming = directional && visualAgrees && !localEntryBlocked ? live.entryTiming : "NEXT_CANDLE";
+  const side = trendDirection === "BUY" ? "compra" : trendDirection === "SELL" ? "venda" : "aguardar";
+  const localContext = visualAgrees
+    ? "A leitura da tela confirma a mesma direção e ajuda a escolher o momento da entrada."
+    : directional
+      ? "A tela ainda não confirmou o ponto; a direção central permanece a mesma para todos."
+      : "O servidor ainda não encontrou vantagem técnica suficiente.";
   return {
     ...live,
     ...trend,
-    direction: String(trend.direction || "WAIT").toUpperCase(),
-    reason: `Radar 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}`,
+    direction: trendDirection,
+    confidence: Math.round(Number(trend.confidence) || 0),
+    entryTiming: localTiming,
+    entryBlocked: localEntryBlocked,
+    setup: visualAgrees ? live.setup : null,
+    technical: live.technical,
+    factors: [
+      `Direção central de ${side} calculada na última vela de 5 minutos já fechada.`,
+      trend.reason || "EMA9, EMA21, RSI e momentum calculados no servidor.",
+      localContext
+    ],
+    reason: `Radar Atlas 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}. ${localContext}`,
     source: "market-radar-5m"
   };
 }
@@ -789,7 +774,8 @@ function renderState(next = {}, source = "extension") {
   const previousSetup = displayedAnalysis?.setup || "";
   const previousOperationKey = state.manualOperation?.key;
   const previousUiEventKey = state.uiEvent?.key;
-  const normalizedAsset = "asset" in next ? normalizeAssetName(next.asset) : state.asset;
+  const nextAsset = "asset" in next ? normalizeAssetName(next.asset) : state.asset;
+  const normalizedAsset = source === "screen" && !nextAsset ? state.asset : nextAsset;
   const normalizedOperation = next.manualOperation
     ? { ...next.manualOperation, asset: normalizeAssetName(next.manualOperation.asset) || normalizedAsset }
     : next.manualOperation;
@@ -812,7 +798,10 @@ function renderState(next = {}, source = "extension") {
   $("riskAmount").textContent = formatMoney(state.risk.baseAmount);
   renderSetupWarnings();
 
-  displayedAnalysis = signalStabilizer.update(analysisForIdentifiedAsset(), state.asset);
+  const identifiedAnalysis = analysisForIdentifiedAsset();
+  displayedAnalysis = identifiedAnalysis.source === "market-radar-5m"
+    ? { ...identifiedAnalysis, stability: "stable" }
+    : signalStabilizer.update(identifiedAnalysis, state.asset);
   renderSignal(displayedAnalysis);
 
   const pulse = $("monitorPulse");
@@ -821,9 +810,17 @@ function renderState(next = {}, source = "extension") {
   pulse.classList.toggle("live", Boolean(fresh));
   pulse.textContent = fresh ? "Analisando agora" : "Conectado · aguardando dados";
   const loggedIn = marketReady();
+  const visualIdentificationActive = screenReaderReady && state.monitoring === true;
   const justLoggedIn = loggedIn && lastLoginState !== true;
   robot.pruneQueue();
   if (!loggedIn) {
+    if (visualIdentificationActive) {
+      $("agentAsset").textContent = "Identificando ativo";
+      $("analysisReason").textContent = "A leitura está ativa. Estou localizando o nome e o gráfico do ativo selecionado.";
+      pulse.classList.add("live");
+      pulse.textContent = "Lendo a tela agora";
+      return;
+    }
     $("agentAsset").textContent = "Faça login";
     $("analysisReason").textContent = "Entre na Hezilex para eu começar a análise de verdade.";
     pulse.classList.remove("live");
@@ -1035,7 +1032,7 @@ $("setupWarnings")?.addEventListener("click", event => {
 addEventListener("atlas:trends", event => {
   marketTrends = Array.isArray(event.detail?.items) ? event.detail.items : [];
   if (state.asset && trendForAsset(state.asset)) {
-    displayedAnalysis = signalStabilizer.update(effectiveAnalysis(), state.asset);
+    displayedAnalysis = { ...effectiveAnalysis(), stability: "stable" };
     renderSignal(displayedAnalysis);
   }
 });

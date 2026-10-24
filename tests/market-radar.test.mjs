@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { analyzeCandles } = require("../lib/market-radar");
+const { HEZILEX_INSTRUMENTS, analyzeCandles } = require("../lib/market-radar");
 
 function candles(values) {
   return values.map((close, index) => [index, close, close, close, close, 1]);
@@ -15,4 +15,11 @@ test("o radar do servidor calcula compra e venda antes da tela ser aberta", () =
   assert.equal(rising.direction, "BUY");
   assert.equal(falling.direction, "SELL");
   assert.equal(rising.timeframe, "5m");
+});
+
+test("o radar central cobre criptos, Forex e ações exibidos pela Hezilex", () => {
+  const assets = new Set(HEZILEX_INSTRUMENTS.map(item => item.asset));
+  for (const asset of ["BNB", "BITCOIN", "STELLAR", "EUR/USD", "AUD/JPY", "GBP/USD", "APPLE", "NETFLIX", "META", "TESLA", "MICROSOFT"]) {
+    assert.ok(assets.has(asset), `${asset} precisa existir no radar central`);
+  }
 });

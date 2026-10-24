@@ -1,7 +1,9 @@
 const ASSETS = [
   "BITCOIN", "ETHEREUM", "SOLANA", "CARDANO", "LITECOIN", "AVAX", "DOGE", "SUI",
-  "XRP", "XPL", "STELLAR", "META", "TESLA", "MICROSOFT", "APPLE", "NETFLIX"
+  "XRP", "XPL", "STELLAR", "BNB", "TRON", "POLKADOT", "CHAINLINK", "BITCOIN CASH",
+  "META", "TESLA", "MICROSOFT", "APPLE", "NETFLIX"
 ];
+const ASSETS_BY_LENGTH = [...ASSETS].sort((left, right) => right.length - left.length);
 
 const FIAT = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "NZD", "CHF"];
 
@@ -52,13 +54,14 @@ export function fuzzyMatchAsset(value = "") {
       if (left !== right && compact.includes(`${left}${right}`)) return `${left}/${right}`;
     }
   }
-  for (const asset of ASSETS) {
-    if (asset.length <= 3 ? tokens.includes(asset) : compact.includes(asset)) return asset;
+  for (const asset of ASSETS_BY_LENGTH) {
+    const compactAsset = asset.replace(/[^A-Z]/g, "");
+    if (compactAsset.length <= 3 ? tokens.includes(compactAsset) : compact.includes(compactAsset)) return asset;
   }
 
   let best = null;
   for (const token of tokens) {
-    for (const asset of ASSETS) {
+    for (const asset of ASSETS_BY_LENGTH) {
       if (asset.length <= 3) continue;
       const variants = [token];
       if (token.length > asset.length) {
