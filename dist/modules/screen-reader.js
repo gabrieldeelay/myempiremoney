@@ -1,8 +1,8 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.11.0";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.12.0";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.10.0";
 
-const ASSET_OCR_INTERVAL_MS = 900;
+const ASSET_OCR_INTERVAL_MS = 450;
 const READING_ISSUE_AFTER_MS = 6500;
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
@@ -29,7 +29,8 @@ let lastTimeframe = null;
 let lastExpiration = null;
 let captureStartedAt = 0;
 let missedChartReads = 0;
-const timeframeReading = createMinuteReadingStabilizer();
+let assetRevision = 0;
+const timeframeReading = createMinuteReadingStabilizer({ immediateInitialMismatch: true });
 const expirationReading = createMinuteReadingStabilizer();
 const reversalTracker = createIntracandleReversalTracker();
 
@@ -73,10 +74,13 @@ function analyzeCandles() {
 }
 
 function prepareOcrCrop(tab, textOnly = false) {
-  const cropTop = Math.max(0, Math.round(tab.y - tab.height * 1.08));
+  // `tab.y` is the blue underline, not the top of the tab. Keep the crop inside
+  // the selected tab so nearby labels (for example APPLE in the asset list) can
+  // never replace the selected ticker.
+  const cropTop = Math.max(0, Math.round(tab.y - tab.height * .82));
   const cropLeft = Math.max(0, Math.round(tab.x + tab.width * (textOnly ? .12 : .02)));
   const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * (textOnly ? .86 : .97)));
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .9));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .68));
   const scale = 4;
   const source = document.createElement("canvas");
   source.width = cropWidth;
@@ -139,9 +143,9 @@ function prepareSetupCrop(kind, activeTab) {
   ocrContext.drawImage(canvas, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, ocrCanvas.width, ocrCanvas.height);
 }
 
-async function readSetupValues(activeTab) {
+async function readSetupValue(kind, activeTab) {
   if (ocrBusy || Date.now() - lastSetupOcrAt < 700 || !canvas.width) {
-    return { timeframe: lastTimeframe, expiration: lastExpiration };
+    return kind === "timeframe" ? lastTimeframe : lastExpiration;
   }
   ocrBusy = true;
   lastSetupOcrAt = Date.now();
@@ -151,22 +155,21 @@ async function readSetupValues(activeTab) {
       tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
       tessedit_char_whitelist: "015mMINin :"
     });
-    prepareSetupCrop("timeframe", activeTab);
-    const timeframeResult = await reader.recognize(ocrCanvas);
-    prepareSetupCrop("expiration", activeTab);
-    const expirationResult = await reader.recognize(ocrCanvas);
-    const timeframeMinutes = timeframeReading.update(minuteFromOcr(timeframeResult?.data?.text));
-    const expirationMinutes = expirationReading.update(minuteFromOcr(expirationResult?.data?.text));
-    lastTimeframe = timeframeMinutes == null ? null : `${timeframeMinutes}m`;
-    lastExpiration = expirationMinutes == null ? null : `${expirationMinutes} min`;
-    return { timeframe: lastTimeframe, expiration: lastExpiration };
+    prepareSetupCrop(kind, activeTab);
+    const result = await reader.recognize(ocrCanvas);
+    const minutes = (kind === "timeframe" ? timeframeReading : expirationReading)
+      .update(minuteFromOcr(result?.data?.text));
+    const value = minutes == null ? null : `${minutes}${kind === "timeframe" ? "m" : " min"}`;
+    if (kind === "timeframe") lastTimeframe = value;
+    else lastExpiration = value;
+    return value;
   } catch (error) {
     console.warn("Atlas setup OCR", error);
-    const timeframeMinutes = timeframeReading.update(null);
-    const expirationMinutes = expirationReading.update(null);
-    lastTimeframe = timeframeMinutes == null ? null : `${timeframeMinutes}m`;
-    lastExpiration = expirationMinutes == null ? null : `${expirationMinutes} min`;
-    return { timeframe: lastTimeframe, expiration: lastExpiration };
+    const minutes = (kind === "timeframe" ? timeframeReading : expirationReading).update(null);
+    const value = minutes == null ? null : `${minutes}${kind === "timeframe" ? "m" : " min"}`;
+    if (kind === "timeframe") lastTimeframe = value;
+    else lastExpiration = value;
+    return value;
   } finally {
     ocrBusy = false;
   }
@@ -215,7 +218,9 @@ async function readVisibleText(activeTab, force = false) {
       const fallbackText = fallbackResult?.data?.text || "";
       const fallbackAsset = fuzzyMatchAsset(fallbackText);
       text = `${text} ${fallbackText}`;
-      asset = fallbackAsset || asset || fuzzyMatchAsset(text);
+      // A fallback exists to rescue difficult short tickers. It must never
+      // overwrite a ticker that the tighter first crop already recognized.
+      asset = asset || fallbackAsset || fuzzyMatchAsset(text);
     }
     missedAssetReads = asset ? 0 : missedAssetReads + 1;
     return {
@@ -252,10 +257,32 @@ async function inspectFrame() {
     if (tabCenter != null) lastTabCenter = tabCenter;
     if (tabMoved) {
       missedAssetReads = 0;
+      lastAsset = null;
+      assetRevision += 1;
+      reversalTracker.reset();
+      resetSetupReadings();
+      window.dispatchEvent(new CustomEvent("atlas:screen-state", {
+        detail: {
+          bridge: "screen-capture",
+          monitoring: true,
+          asset: null,
+          assetPending: true,
+          assetRevision,
+          timeframe: null,
+          expiration: null,
+          chartDetected: false,
+          analysis: { direction: "WAIT", confidence: 0, reason: "Identificando o ativo selecionado.", source: "screen-capture" },
+          lastInspectionAt: new Date().toISOString()
+        }
+      }));
     }
+    // Timeframe comes first: a visible 1m must be detected before the heavier
+    // asset/expiration work, especially just after switching tabs.
+    const timeframe = await readSetupValue("timeframe", activeTab);
     const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
     const detectedNewAsset = Boolean(visible.recognizedAsset && visible.recognizedAsset !== lastAsset);
     if (detectedNewAsset) {
+      if (!tabMoved) assetRevision += 1;
       reversalTracker.reset();
       resetSetupReadings();
     }
@@ -266,6 +293,8 @@ async function inspectFrame() {
           bridge: "screen-capture",
           monitoring: true,
           asset: lastAsset,
+          assetPending: false,
+          assetRevision,
           timeframe: null,
           expiration: null,
           chartDetected: Boolean(rawAnalysis?.chartDetected),
@@ -275,8 +304,9 @@ async function inspectFrame() {
         }
       }));
     }
-    const setup = await readSetupValues(activeTab);
-    const analysis = reversalTracker.update(rawAnalysis, lastAsset);
+    const expiration = await readSetupValue("expiration", activeTab);
+    const setup = { timeframe, expiration };
+    const analysis = lastAsset ? reversalTracker.update(rawAnalysis, lastAsset) : null;
     missedChartReads = analysis?.chartDetected ? 0 : missedChartReads + 1;
     const readingAge = Date.now() - captureStartedAt;
     const readingIssue = readingAge < READING_ISSUE_AFTER_MS
@@ -296,6 +326,8 @@ async function inspectFrame() {
         bridge: "screen-capture",
         monitoring: true,
         asset: lastAsset,
+        assetPending: !lastAsset,
+        assetRevision,
         timeframe: setup.timeframe,
         expiration: setup.expiration,
         timeframeChecked: Boolean(setup.timeframe),
@@ -312,7 +344,7 @@ async function inspectFrame() {
           timeframe: Boolean(setup.timeframe),
           expiration: Boolean(setup.expiration)
         },
-        analysis: analysis || { direction: "WAIT", confidence: 0, reason: "Preparando a leitura visual.", source: "screen-capture" },
+        analysis: analysis || { direction: "WAIT", confidence: 0, reason: lastAsset ? "Preparando a leitura visual." : "Identificando o ativo selecionado.", source: "screen-capture" },
         lastInspectionAt: new Date().toISOString()
       }
     }));

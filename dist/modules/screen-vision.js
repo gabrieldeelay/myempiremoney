@@ -252,6 +252,12 @@ export function classifyCandleSequence(bodies = []) {
   const extremeBreak = last.direction === "BUY"
     ? (previousExtremeClose - lastClose) / averagePreviousHeight
     : (lastClose - previousExtremeClose) / averagePreviousHeight;
+  const referenceLevel = last.direction === "BUY"
+    ? Math.min(...previous.map(body => body.y0))
+    : Math.max(...previous.map(body => body.y1));
+  const lastExtreme = last.direction === "BUY" ? last.y0 : last.y1;
+  const levelDistance = Math.abs(lastExtreme - referenceLevel) / averagePreviousHeight;
+  const levelTouch = levelDistance <= .35 || extremeBreak >= .18;
   const recentSameSide = previous.slice(-4).filter(body => body.direction === last.direction).length;
   const impulseStretch = spikeRatio >= 1.35
     && closeStretch >= .55
@@ -265,13 +271,19 @@ export function classifyCandleSequence(bodies = []) {
     && spikeRatio >= 1.65
     && closeStretch >= .9
     && extremeBreak >= -.05;
-  const stretchedCandle = impulseStretch || matureRunStretch || extremeBodyStretch;
+  const levelExhaustion = levelTouch
+    && spikeRatio >= 1.28
+    && closeStretch >= .48
+    && recentSameSide >= 1;
+  const stretchedCandle = impulseStretch || matureRunStretch || extremeBodyStretch || levelExhaustion;
   const technical = {
     lastCandle: { direction: last.direction, centerX: last.centerX, width: last.width, height: last.height },
     averagePreviousHeight,
     spikeRatio,
     closeStretch,
-    extremeBreak
+    extremeBreak,
+    levelDistance,
+    levelTouch
   };
   if (stretchedCandle) {
     const reversalDirection = last.direction === "BUY" ? "SELL" : "BUY";
@@ -292,6 +304,7 @@ export function classifyCandleSequence(bodies = []) {
       factors: [
         `A última vela é ${spikeRatio.toFixed(1)}x maior que a média recente.`,
         `O preço avançou ${Math.max(0, extremeBreak).toFixed(1)} corpos médios além do extremo recente.`,
+        `O movimento alcançou uma região recente de ${last.direction === "BUY" ? "resistência" : "suporte"}.`,
         `A pressão ${stretchedSide} está esticada; entrar em ${blockedSide} agora seria perseguir um movimento atrasado.`,
         `O Atlas só considerará ${correctionSide} nesta vela se o corpo rejeitar parte relevante do movimento ou trocar de direção.`
       ],

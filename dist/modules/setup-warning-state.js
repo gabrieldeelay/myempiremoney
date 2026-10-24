@@ -13,6 +13,7 @@ export function minuteFromOcr(value) {
 export function createMinuteReadingStabilizer(options = {}) {
   const requiredHits = options.requiredHits ?? 2;
   const warningHits = options.warningHits ?? 6;
+  const immediateInitialMismatch = options.immediateInitialMismatch === true;
   const staleAfterMs = options.staleAfterMs ?? 15000;
   const now = typeof options.now === "function" ? options.now : () => Date.now();
   let stable = null;
@@ -44,6 +45,11 @@ export function createMinuteReadingStabilizer(options = {}) {
     if (value !== candidate) {
       candidate = value;
       candidateHits = 1;
+      if (stable == null && value === 1 && immediateInitialMismatch) {
+        stable = value;
+        candidate = null;
+        candidateHits = 0;
+      }
       return stable;
     }
     candidateHits += 1;

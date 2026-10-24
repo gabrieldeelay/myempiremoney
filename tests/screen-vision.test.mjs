@@ -26,6 +26,7 @@ test("reconhece o ativo mesmo com erro comum do OCR", () => {
   assert.equal(fuzzyMatchAsset("AUD/JPY"), "AUD/JPY");
   assert.equal(fuzzyMatchAsset("8N8"), "BNB");
   assert.equal(fuzzyMatchAsset("BN8"), "BNB");
+  assert.equal(fuzzyMatchAsset("BMB"), "BNB");
   assert.equal(fuzzyMatchAsset("XP1"), "XPL");
   assert.equal(fuzzyMatchAsset("XPI"), "XPL");
 });
@@ -93,6 +94,7 @@ test("vela compradora esticada bloqueia uma compra atrasada sem presumir revers�
   assert.equal(result.reversalDirection, "SELL");
   assert.equal(result.entryTiming, "WAIT_CONFIRMATION");
   assert.ok(result.factors.some(item => item.includes("maior que a média")));
+  assert.ok(result.factors.some(item => item.includes("resistência")));
 });
 
 test("rejeição mensurável após vela vendedora esticada confirma possível compra na vela atual", () => {
@@ -139,6 +141,7 @@ test("deslocamento acumulado bloqueia venda tardia mesmo sem uma última vela is
   assert.equal(result.setup, "STRETCHED_CANDLE");
   assert.equal(result.blockedDirection, "SELL");
   assert.equal(result.reversalDirection, "BUY");
+  assert.ok(result.factors.some(item => item.includes("suporte")));
 });
 
 test("linha horizontal colorida não vira vela nem sinal", () => {

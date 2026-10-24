@@ -10,12 +10,46 @@ const buyTrend = {
   reason: "EMA9 acima da EMA21"
 };
 
-test("a tendência aparece imediatamente sem fingir que já existe ponto de entrada", () => {
+test("a direção aparece imediatamente sem fingir que já existe ponto de entrada", () => {
   const analysis = composeCentralAnalysis({ trend: buyTrend });
   assert.equal(analysis.direction, "BUY");
   assert.equal(analysis.signalKind, "trend");
   assert.equal(analysis.entryConfirmed, false);
-  assert.match(analysis.reason, /Tendência de alta/);
+  assert.match(analysis.reason, /Direção de alta/);
+});
+
+test("uma oportunidade válida entre 50 e 69 conserva o momento da entrada", () => {
+  const analysis = composeCentralAnalysis({
+    trend: { ...buyTrend, confidence: 58 },
+    live: { direction: "BUY", confidence: 64, source: "screen-capture", entryTiming: "NEXT_CANDLE" },
+    timeframe: "5m",
+    expiration: "5 min"
+  });
+  assert.equal(analysis.signalKind, "entry");
+  assert.equal(analysis.entryConfirmed, true);
+  assert.equal(analysis.entryTiming, "NEXT_CANDLE");
+  assert.ok(analysis.confidence >= 50 && analysis.confidence < 70);
+});
+
+test("rejeição técnica confirmada pode superar a direção anterior sem virar palpite", () => {
+  const analysis = composeCentralAnalysis({
+    trend: { ...buyTrend, confidence: 82 },
+    live: {
+      direction: "SELL",
+      confidence: 80,
+      source: "screen-capture",
+      chartDetected: true,
+      setup: "INTRACANDLE_REVERSAL",
+      urgentReversal: true,
+      entryTiming: "CURRENT_CANDLE"
+    },
+    timeframe: "5m",
+    expiration: "5 min"
+  });
+  assert.equal(analysis.direction, "SELL");
+  assert.equal(analysis.signalKind, "entry");
+  assert.equal(analysis.entryTiming, "CURRENT_CANDLE");
+  assert.ok(analysis.confidence >= 70);
 });
 
 test("a tendência vira sinal somente quando tela, gráfico e expiração estão alinhados", () => {

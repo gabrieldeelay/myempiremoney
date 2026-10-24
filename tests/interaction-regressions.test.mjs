@@ -78,8 +78,8 @@ assert.match(html, /id="entryGuidance"[^>]*role="status"[^>]*aria-live="polite"/
 assert.match(html, /id="galeBadge"/, "a leitura deve exibir o limite de gale calculado");
 assert.match(html, /id="analysisDetails"/, "o painel deve explicar os fatores que fomentam a leitura");
 assert.match(app, /confidence >= 87 \? "SEM GALE"/, "confiança muito alta deve ser apresentada sem gale");
-assert.match(app, /confidence >= 75 \? "ATÉ GALE 1" : "ATÉ GALE 2"/, "leitura duvidosa deve limitar a exposição ao gale 2");
-assert.match(app, /probable \? "PROVÁVEL " : ""/, "leituras de menor confiança devem ser marcadas como prováveis");
+assert.match(app, /possible \? "ATÉ GALE 2"/, "leitura possível deve limitar a exposição ao gale 2");
+assert.match(app, /possible \? "POSSÍVEL " : ""/, "leituras de menor confiança devem ser marcadas como possíveis");
 assert.match(styles, /--probable:\s*#c7a2ff/, "leituras prováveis devem usar uma cor própria");
 assert.match(styles, /\.signal-more:hover \.signal-tooltip/, "os fundamentos devem aparecer ao passar o mouse em Ler mais");
 assert.match(styles, /@keyframes trade-buy-flash/, "compras devem produzir glow verde");
@@ -102,6 +102,10 @@ assert.match(app, /this\.voiceQueue = \[spokenText\]/, "uma nova mensagem não p
 assert.match(app, /if \(moves % 3 === 0\)/, "o robô deve reclamar a cada terceira movimentação");
 assert.doesNotMatch(app, /robot\.speak\("dragged", \{ count: moves \}/, "a reclamação não deve dizer quantas vezes o robô foi movido");
 assert.match(app, /"NESTA VELA"/, "a indicação da vela atual deve permanecer curta no design");
+assert.match(app, /"PRÓXIMA VELA"/, "a indicação para a vela seguinte deve continuar evidente");
+assert.doesNotMatch(app, /`TENDÊNCIA DE/, "o indicador principal não deve exibir a palavra tendência");
+assert.match(app, /confidence >= 70/, "compra e venda confirmadas exigem pelo menos setenta por cento");
+assert.match(app, /confidence >= 50/, "leituras entre cinquenta e sessenta e nove por cento devem continuar visíveis como possíveis");
 assert.match(app, /Nesta vela: espere a queda perder força e o preço reagir para cima antes de entrar\./, "a compra por reversão deve explicar qual reação esperar");
 assert.match(app, /Nesta vela: espere a alta perder força e o preço reagir para baixo antes de entrar\./, "a venda por reversão deve explicar qual reação esperar");
 assert.match(app, /Não entre agora\. Aguarde a vela atual fechar; o sinal é para a próxima\./, "a orientação da próxima vela deve impedir uma entrada antecipada");
@@ -110,7 +114,7 @@ assert.match(styles, /@keyframes entryTimingPulse/, "a indicação do momento da
 assert.match(styles, /@keyframes entryGuidancePulse/, "a orientação principal deve pulsar suavemente para permanecer visível");
 assert.match(styles, /\.signal-card\.buy \.entry-guidance/, "o aviso destacado deve acompanhar a cor de compra");
 assert.match(styles, /\.signal-card\.sell \.entry-guidance/, "o aviso destacado deve acompanhar a cor de venda");
-assert.match(app, /NÃO ENTRE AGORA/, "uma vela esticada deve impedir que o sinal antigo incentive uma entrada atrasada");
+assert.match(app, /CONFIRME A REJEIÇÃO/, "uma vela esticada deve pedir confirmação antes de incentivar a reversão");
 assert.match(app, /REVERSÃO TÉCNICA/, "uma rejeição confirmada deve ficar claramente identificada");
 assert.match(app, /Possível reversão para \$\{side\} nesta vela/, "uma reversão intravela deve gerar um alerta adicional");
 assert.match(localTts, /pt_BR-faber-medium-uint8\.onnx/, "a voz local deve usar o modelo masculino Faber em português brasileiro");
@@ -140,7 +144,7 @@ assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
 assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desaparecer automaticamente quando a leitura começar");
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
-assert.match(screenReader, /screen-vision\.js\?v=3\.11\.0/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
+assert.match(screenReader, /screen-vision\.js\?v=3\.12\.0/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.9\.5/, "o painel deve carregar a direção travada sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
@@ -166,7 +170,10 @@ assert.match(screenReader, /max - min < 70/, "o OCR deve remover as cores do íc
 assert.match(screenReader, /setInterval\(inspectFrame, 850\)/, "a troca da aba ativa deve ser percebida em menos de um segundo");
 assert.match(styles, /@keyframes screenReaderPromptPulse/, "o aviso de ativação deve chamar atenção sem cobrir o gráfico inteiro");
 assert.match(screenReader, /readVisibleText\(activeTab, tabMoved \|\| !lastAsset\)/, "mudar a aba deve priorizar uma leitura imediata do novo ativo");
-assert.match(screenReader, /ASSET_OCR_INTERVAL_MS = 900/, "o ativo deve ser reconfirmado continuamente mesmo quando a linha da aba não se move");
+assert.match(screenReader, /ASSET_OCR_INTERVAL_MS = 450/, "o ativo deve ser reconfirmado rapidamente mesmo quando a linha da aba não se move");
+assert.match(screenReader, /assetPending:\s*true/, "a troca de aba deve apagar imediatamente o ativo anterior enquanto o novo é identificado");
+assert.match(screenReader, /assetRevision/, "cada troca de ativo deve ter uma revisão própria");
+assert.match(app, /screenRevisionGuard\.accepts/, "leituras atrasadas de um ativo anterior devem ser descartadas");
 assert.match(screenReader, /Tesseract\.PSM\.SPARSE_TEXT/, "uma segunda passagem deve recuperar rótulos Forex pequenos que falharam na primeira leitura");
 assert.match(screenReader, /resetSetupReadings\(\)/, "trocar de ativo deve obrigar uma nova leitura do gráfico e da expiração");
 assert.match(screenReader, /detectedNewAsset/, "uma mudança reconhecida pelo OCR deve invalidar a configuração do ativo anterior");

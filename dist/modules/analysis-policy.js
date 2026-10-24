@@ -30,12 +30,40 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
   const visualDirectional = live.source === "screen-capture" && ["BUY", "SELL"].includes(liveDirection) && live.chartDetected !== false;
   const setupVerified = isFiveMinutes(timeframe) && isFiveMinutes(expiration);
   const localEntryBlocked = directional && visualAgrees && live.entryBlocked === true;
-  const entryConfirmed = directional && visualAgrees && setupVerified && !localEntryBlocked;
+  const validVisualOpportunity = visualAgrees && setupVerified && !localEntryBlocked && liveConfidence >= 50;
+  const entryConfirmed = directional && validVisualOpportunity;
   const combinedConfidence = entryConfirmed
     ? confidenceOf(trendConfidence * .45 + liveConfidence * .55)
     : trendConfidence;
   const localTiming = entryConfirmed ? live.entryTiming : "WAIT_CONFIRMATION";
   const side = trendDirection === "BUY" ? "alta" : trendDirection === "SELL" ? "baixa" : "neutra";
+
+  const confirmedReversal = visualDirectional
+    && setupVerified
+    && live.setup === "INTRACANDLE_REVERSAL"
+    && live.urgentReversal === true
+    && liveConfidence >= 70;
+  if (confirmedReversal && liveDirection !== trendDirection) {
+    const reversalSide = liveDirection === "BUY" ? "compra" : "venda";
+    const reversalConfidence = confidenceOf(liveConfidence * .86 + Math.min(trendConfidence, 55) * .14);
+    return {
+      ...trend,
+      ...live,
+      direction: liveDirection,
+      confidence: reversalConfidence,
+      signalKind: "entry",
+      entryConfirmed: true,
+      entryTiming: "CURRENT_CANDLE",
+      setupVerified: true,
+      factors: [
+        `A tela confirmou rejeição técnica para ${reversalSide} após um movimento extremo.`,
+        ...(Array.isArray(live.factors) ? live.factors : []),
+        "A reversão visual prevalece apenas nesta oportunidade; não presume que toda vela extrema irá inverter."
+      ],
+      reason: `Rejeição técnica confirmada: ${reversalSide} nesta vela, aguardando o melhor ponto de entrada.`,
+      source: "market-radar-5m"
+    };
+  }
 
   if (!directional) {
     const visualOpportunity = visualDirectional
@@ -105,13 +133,13 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
     technical: live.technical,
     setupVerified,
     factors: [
-      `Tendência de ${side} calculada na última vela de 5 minutos já fechada.`,
+      `Direção de ${side} calculada na última vela de 5 minutos já fechada.`,
       trend.reason || "EMA9, EMA21, RSI e momentum calculados no servidor.",
       localContext
     ],
     reason: entryConfirmed
-      ? `Sinal de entrada confirmado: ${trend.reason || `tendência de ${side}`}. ${localContext}`
-      : `Tendência de ${side} no Radar Atlas 5M. ${localContext}`,
+      ? `Sinal de entrada confirmado: ${trend.reason || `direção de ${side}`}. ${localContext}`
+      : `Direção de ${side} no Radar Atlas 5M. ${localContext}`,
     source: "market-radar-5m"
   };
 }

@@ -48,6 +48,13 @@ test("trocar de ativo descarta o 5m confirmado do ativo anterior", () => {
   assert.equal(reading.update(1), 1);
 });
 
+test("pode confirmar 1m já na primeira leitura ao abrir ou trocar o ativo", () => {
+  const reading = createMinuteReadingStabilizer({ immediateInitialMismatch: true });
+  assert.equal(reading.update(1), 1);
+  reading.reset();
+  assert.equal(reading.update(1), 1);
+});
+
 test("avisa quando gráfico e expiração não estão em cinco minutos", () => {
   const tracker = createSetupWarningTracker();
   const issues = tracker.update({ asset: "BITCOIN", timeframe: "1m", expiration: "1 min" });

@@ -1,7 +1,8 @@
 import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.9.5";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.9.8";
-import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.10.0";
+import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.0";
+import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.0";
 import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
@@ -28,6 +29,7 @@ const analysisCache = createAssetAnalysisCache();
 let displayedAnalysis = null;
 let setupWarningRenderKey = "";
 let radarUpdatedAt = null;
+const screenRevisionGuard = createScreenRevisionGuard();
 let state = {
   version: null,
   asset: null,
@@ -40,7 +42,8 @@ let state = {
   manualOperation: null,
   uiEvent: null,
   lastInspectionAt: null,
-  readingIssue: null
+  readingIssue: null,
+  assetPending: false
 };
 
 function formatRobotMessage(value) {
@@ -91,6 +94,17 @@ function effectiveAnalysis() {
 }
 
 function analysisForIdentifiedAsset() {
+  if (state.monitoring === true && state.assetPending === true) {
+    return {
+      direction: "WAIT",
+      confidence: 0,
+      signalKind: "syncing",
+      entryConfirmed: false,
+      reason: "Identificando o ativo selecionado. Nenhum sinal anterior será reutilizado.",
+      factors: ["A leitura atual só será publicada depois que o ativo desta imagem for confirmado."],
+      source: "asset-identification"
+    };
+  }
   if (state.asset) return effectiveAnalysis();
   const fallbackAsset = selectedRadarAsset
     || normalizeAssetName(analysisCache.lastAsset())
@@ -128,24 +142,27 @@ function renderSignal(analysis = effectiveAnalysis()) {
   const watchingReversal = !entryBlocked
     && analysis?.setup === "STRETCHED_CANDLE"
     && ["BUY", "SELL"].includes(analysis?.reversalDirection);
-  const actionable = directional && confidence >= 62 && !entryBlocked && !trendOnly && analysis?.entryConfirmed !== false;
-  const probable = actionable && confidence < 75;
+  const validOpportunity = directional && !entryBlocked && !trendOnly && analysis?.entryConfirmed !== false;
+  const actionable = validOpportunity && confidence >= 70;
   const finalDirection = entryBlocked && directional
     ? direction
     : trendOnly
       ? direction
-    : actionable
+    : validOpportunity
       ? direction
       : watchingReversal
         ? analysis.reversalDirection
         : "WAIT";
-  const gale = !actionable ? "NÃO ENTRAR" : confidence >= 87 ? "SEM GALE" : confidence >= 75 ? "ATÉ GALE 1" : "ATÉ GALE 2";
-  const timingCode = entryBlocked || watchingReversal || trendOnly || noOpportunity || finalDirection === "WAIT"
+  const possible = ["BUY", "SELL"].includes(finalDirection)
+    && confidence >= 50
+    && (!actionable || watchingReversal || trendOnly || entryBlocked);
+  const gale = actionable ? (confidence >= 87 ? "SEM GALE" : "ATÉ GALE 1") : possible ? "ATÉ GALE 2" : "NÃO ENTRAR";
+  const timingCode = entryBlocked || noOpportunity || finalDirection === "WAIT"
     ? "WAIT_CONFIRMATION"
+    : watchingReversal ? "CURRENT_CANDLE"
+    : trendOnly ? "NEXT_CANDLE"
     : analysis?.entryTiming === "CURRENT_CANDLE" ? "CURRENT_CANDLE" : "NEXT_CANDLE";
-  const timing = trendOnly
-    ? "SEM ENTRADA AINDA"
-    : noOpportunity
+  const timing = noOpportunity
       ? "SEM OPORTUNIDADE"
       : timingCode === "CURRENT_CANDLE" ? "NESTA VELA" : timingCode === "NEXT_CANDLE" ? "PRÓXIMA VELA" : "AGUARDE CONFIRMAÇÃO";
   const reversalSetup = analysis?.setup === "INTRACANDLE_REVERSAL";
@@ -159,8 +176,8 @@ function renderSignal(analysis = effectiveAnalysis()) {
         : "Alta forte detectada. Espere a vela reagir para baixo antes de considerar venda."
     : trendOnly
       ? finalDirection === "BUY"
-        ? "O mercado está em tendência de alta, mas ainda não existe um ponto seguro de compra."
-        : "O mercado está em tendência de baixa, mas ainda não existe um ponto seguro de venda."
+        ? "A pressão está compradora. Aguarde a vela atual fechar e confirme a entrada na próxima."
+        : "A pressão está vendedora. Aguarde a vela atual fechar e confirme a entrada na próxima."
     : noOpportunity
       ? "Não entre agora. A análise terminou e não encontrou vantagem técnica suficiente."
     : timingCode === "CURRENT_CANDLE"
@@ -179,27 +196,25 @@ function renderSignal(analysis = effectiveAnalysis()) {
   const card = $("signalCard");
   card.classList.toggle("buy", finalDirection === "BUY");
   card.classList.toggle("sell", finalDirection === "SELL");
-  card.classList.toggle("probable", probable);
+  card.classList.toggle("probable", possible);
   card.classList.toggle("expired", entryBlocked);
   card.classList.toggle("observing", watchingReversal);
-  card.classList.toggle("trend-only", trendOnly);
+  card.classList.toggle("trend-only", trendOnly && !possible);
   card.classList.toggle("scanning", finalDirection === "WAIT" && dataReady() && !noOpportunity);
-  if ($("signalKicker")) $("signalKicker").textContent = trendOnly
-    ? "DIREÇÃO DO MERCADO"
-    : noOpportunity
+  if ($("signalKicker")) $("signalKicker").textContent = noOpportunity
       ? "ANÁLISE CONCLUÍDA"
-      : actionable || entryBlocked || watchingReversal ? "SINAL DE ENTRADA" : "LEITURA ATUAL";
+      : directional || watchingReversal ? "SINAL DE ENTRADA" : "LEITURA ATUAL";
   $("analysisDirection").textContent = entryBlocked
     ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
     : watchingReversal
       ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
     : trendOnly
-      ? `TENDÊNCIA DE ${finalDirection === "BUY" ? "ALTA" : "BAIXA"}`
+      ? `POSSÍVEL ${finalDirection === "BUY" ? "COMPRA" : "VENDA"}`
     : noOpportunity
       ? "SEM OPORTUNIDADE"
     : finalDirection === "BUY"
-    ? `${probable ? "PROVÁVEL " : ""}COMPRA`
-    : finalDirection === "SELL" ? `${probable ? "PROVÁVEL " : ""}VENDA` : "AGUARDAR";
+    ? `${possible ? "POSSÍVEL " : ""}COMPRA`
+    : finalDirection === "SELL" ? `${possible ? "POSSÍVEL " : ""}VENDA` : "AGUARDAR";
   $("signalIcon").textContent = finalDirection === "BUY" ? "↗" : finalDirection === "SELL" ? "↘" : "—";
   $("confidenceBadge").textContent = `${confidence}% CONFIANÇA`;
   const timingBadge = $("entryTiming");
@@ -215,7 +230,7 @@ function renderSignal(analysis = effectiveAnalysis()) {
     const initializing = analysis?.stability === "initializing";
     const reversal = analysis?.setup === "INTRACANDLE_REVERSAL";
     const stretched = analysis?.setup === "STRETCHED_CANDLE";
-    stability.textContent = trendOnly ? "DIREÇÃO DO MERCADO" : noOpportunity ? "MERCADO SEM VANTAGEM" : reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "NÃO ENTRE AGORA" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
+    stability.textContent = trendOnly ? "AGUARDANDO ENTRADA" : noOpportunity ? "MERCADO SEM VANTAGEM" : reversal && finalDirection !== "WAIT" ? "REVERSÃO TÉCNICA" : stretched && entryBlocked ? "DIREÇÃO MANTIDA" : stretched ? "CONFIRME A REJEIÇÃO" : checking ? "MUDANÇA EM CONFIRMAÇÃO" : initializing ? "CONFIRMANDO LEITURA" : finalDirection === "WAIT" && dataReady() ? "ANÁLISE AO VIVO" : finalDirection === "WAIT" ? "SEM SINAL CONFIRMADO" : "SINAL ESTÁVEL";
     stability.className = `signal-stability ${trendOnly || checking || initializing || stretched ? "checking" : finalDirection === "WAIT" ? "waiting" : "stable"}`;
   }
   $("analysisReason").textContent = analysis?.reason || "Sem confirmação suficiente.";
@@ -320,17 +335,17 @@ const robot = {
     connect: ["Agora sim: gráfico falando, eu julgando.", "Dados ao vivo. Acabaram as desculpas criativas.", "Mercado localizado. A calma continua desaparecida.", "Tudo conectado. Respira antes de inventar moda."],
     asset: ["{asset} na tela. Novo ativo, velhos impulsos.", "Trocou para {asset}. Curiosidade ou plano? Vou fingir que é plano.", "Analisando {asset}. Ele não sabe que você chegou.", "{asset} selecionado. Deixa a vela terminar o raciocínio.", "Chegamos em {asset}. Primeiro eu leio, depois você inventa coragem.", "{asset} entrou no radar. Ainda não confunda movimento com oportunidade.", "Mudança registrada: agora é {asset}. O mercado não precisa saber da sua pressa.", "Abriu {asset}. Vou conferir o contexto antes que seu dedo dê opinião."],
     buy: ["Compra no radar. Convicção não é licença para exagerar.", "Sinal comprador. O botão continua sendo problema seu.", "Os compradores acordaram. Não precisa acordar a ganância.", "Compra com {confidence}% de confiança. Ainda não é casamento.", "O gráfico apontou para cima. Seu ego não precisa acompanhar.", "{asset} inclina para compra em {confidence}%. É leitura, não passe livre para aumentar a mão.", "Fluxo comprador em {asset}. A parte difícil agora é não transformar sinal em torcida.", "A pressão está para cima em {asset}. Confirmação primeiro, comemoração nunca antes.", "{asset} favorece compra. Seu trabalho é respeitar o risco, não impressionar a vela."],
-    sell: ["Venda no radar. Até a queda merece confirmação.", "Sinal vendedor. Drama no gráfico, calma no dedo.", "Os vendedores chegaram. Elegantes como uma porta batendo.", "Venda com {confidence}% de confiança. Sem heroísmo, por favor.", "O gráfico olhou para baixo. Não empurra.", "{asset} inclina para venda em {confidence}%. Tendência não é convite para perder a medida.", "Pressão vendedora em {asset}. O cenário caiu; seu juízo não precisa ir junto.", "{asset} está pesando para baixo. Espera a confirmação antes de bancar o vidente.", "Venda favorecida em {asset}. Risco pequeno, ego menor ainda."],
+    sell: ["Venda no radar. Até a queda merece confirmação.", "Sinal vendedor. Drama no gráfico, calma no dedo.", "Os vendedores chegaram. Elegantes como uma porta batendo.", "Venda com {confidence}% de confiança. Sem heroísmo, por favor.", "O gráfico olhou para baixo. Não empurra.", "{asset} inclina para venda em {confidence}%. Direção não é convite para perder a medida.", "Pressão vendedora em {asset}. O cenário caiu; seu juízo não precisa ir junto.", "{asset} está pesando para baixo. Espera a confirmação antes de bancar o vidente.", "Venda favorecida em {asset}. Risco pequeno, ego menor ainda."],
     wait: ["Nada claro ainda. Parabéns por quase não fazer besteira.", "Aguardar também é posição. A mais barata, inclusive.", "Mercado indeciso. Finalmente alguém combinando com ele.", "Sem sinal decente. O tédio está protegendo seu saldo.", "Hoje o melhor clique pode ser nenhum. Revolucionário.", "{asset} ainda não escolheu lado. Você também não precisa escolher no chute.", "O gráfico está conversando sozinho. Interromper com uma entrada seria falta de educação.", "Sem confirmação em {asset}. A pressa continua sem indicador próprio.", "Por enquanto, ficar fora tem a melhor relação entre paz e prejuízo."],
     timeframe: ["Gráfico em 5M. Agora a vela tem tempo de terminar a frase.", "Cinco minutos no gráfico. Menos ruído, menos novela.", "5M ajustado. Um pequeno passo para o gráfico, um salto para a paciência."],
     expiration: ["Expiração em 5M. Pelo menos o relógio sabe o plano.", "Cinco minutos de expiração. Cronômetro civilizado.", "Expiração alinhada. Agora não culpe o relógio."],
     risk: ["Um por cento. Finalmente uma ideia com juízo.", "Risco em 1%. Seu saldo agradeceu em silêncio.", "Valor calculado em 1%. A ganância perdeu essa rodada."],
     all: ["5M, 5M e 1%. Organização: conceito raro, porém bonito.", "Tudo alinhado. Agora falta só não improvisar.", "Configuração pronta. O caos foi adiado com sucesso."],
     open: ["**Decisão difícil de avaliar** sem confirmação clara. Em {asset}, o risco precisa compensar a dúvida.", "O contexto de {asset} ainda está _incompleto_. Melhor manter a exposição pequena.", "Sem direção confirmada, essa ideia fica **difícil de defender**. Proteja o capital.", "O cenário ainda não entregou vantagem clara. Aqui, tamanho de mão importa mais que convicção."],
-    buyAligned: ["[[good:Boa escolha.]] O cenário favorecia **compra** em {asset}; agora preserve o risco.", "[[good:Leitura coerente.]] A força compradora de {asset} sustentava essa decisão.", "[[good:Opção bem alinhada.]] Tendência e momento apontavam para **compra** em {asset}.", "[[good:Fazia sentido.]] Em {asset}, o lado comprador tinha o argumento mais forte."],
-    sellAligned: ["[[good:Boa escolha.]] O cenário favorecia **venda** em {asset}; agora preserve o risco.", "[[good:Leitura coerente.]] A pressão vendedora de {asset} sustentava essa decisão.", "[[good:Opção bem alinhada.]] Tendência e momento apontavam para **venda** em {asset}.", "[[good:Fazia sentido.]] Em {asset}, o lado vendedor tinha o argumento mais forte."],
-    buyAgainstSell: ["[[bad:Escolha fraca.]] O cenário favorecia **venda** em {asset}; contrariar o fluxo aumenta o risco.", "[[bad:Pouco convincente.]] A pressão de {asset} estava vendedora, sem apoio técnico para o outro lado.", "[[bad:Contexto desfavorável.]] Em {asset}, tendência e momento apontavam para **venda**.", "[[bad:Risco elevado.]] A leitura de {asset} estava no sentido oposto e pedia cautela."],
-    sellAgainstBuy: ["[[bad:Escolha fraca.]] O cenário favorecia **compra** em {asset}; contrariar o fluxo aumenta o risco.", "[[bad:Pouco convincente.]] A força de {asset} estava compradora, sem apoio técnico para o outro lado.", "[[bad:Contexto desfavorável.]] Em {asset}, tendência e momento apontavam para **compra**.", "[[bad:Risco elevado.]] A leitura de {asset} estava no sentido oposto e pedia cautela."],
+    buyAligned: ["[[good:Boa escolha.]] O cenário favorecia **compra** em {asset}; agora preserve o risco.", "[[good:Leitura coerente.]] A força compradora de {asset} sustentava essa decisão.", "[[good:Opção bem alinhada.]] Direção e momento apontavam para **compra** em {asset}.", "[[good:Fazia sentido.]] Em {asset}, o lado comprador tinha o argumento mais forte."],
+    sellAligned: ["[[good:Boa escolha.]] O cenário favorecia **venda** em {asset}; agora preserve o risco.", "[[good:Leitura coerente.]] A pressão vendedora de {asset} sustentava essa decisão.", "[[good:Opção bem alinhada.]] Direção e momento apontavam para **venda** em {asset}.", "[[good:Fazia sentido.]] Em {asset}, o lado vendedor tinha o argumento mais forte."],
+    buyAgainstSell: ["[[bad:Escolha fraca.]] O cenário favorecia **venda** em {asset}; contrariar o fluxo aumenta o risco.", "[[bad:Pouco convincente.]] A pressão de {asset} estava vendedora, sem apoio técnico para o outro lado.", "[[bad:Contexto desfavorável.]] Em {asset}, direção e momento apontavam para **venda**.", "[[bad:Risco elevado.]] A leitura de {asset} estava no sentido oposto e pedia cautela."],
+    sellAgainstBuy: ["[[bad:Escolha fraca.]] O cenário favorecia **compra** em {asset}; contrariar o fluxo aumenta o risco.", "[[bad:Pouco convincente.]] A força de {asset} estava compradora, sem apoio técnico para o outro lado.", "[[bad:Contexto desfavorável.]] Em {asset}, direção e momento apontavam para **compra**.", "[[bad:Risco elevado.]] A leitura de {asset} estava no sentido oposto e pedia cautela."],
     buyWithoutSignal: ["[[bad:Entrada precipitada.]] Faltava confirmação para **compra** em {asset}.", "[[bad:Argumento fraco.]] O cenário de {asset} ainda estava neutro; esperar era mais sólido.", "[[bad:Sem vantagem clara.]] A compra precisava de confirmação que o gráfico ainda não entregou.", "[[bad:Decisão apressada.]] Em {asset}, a leitura ainda recomendava _ficar de fora_."],
     sellWithoutSignal: ["[[bad:Entrada precipitada.]] Faltava confirmação para **venda** em {asset}.", "[[bad:Argumento fraco.]] O cenário de {asset} ainda estava neutro; esperar era mais sólido.", "[[bad:Sem vantagem clara.]] A venda precisava de confirmação que o gráfico ainda não entregou.", "[[bad:Decisão apressada.]] Em {asset}, a leitura ainda recomendava _ficar de fora_."],
     exposureDanger: ["[[bad:Mão pesada.]] {count} entradas já somam **{exposure}**, cerca de {risk}% do saldo.", "[[bad:Reduz a mão.]] Você acumulou {exposure} em poucos minutos; isso já virou risco, não convicção.", "[[bad:Exposição subindo.]] {count} entradas juntas estão grandes demais para um saldo de {balance}."],
@@ -787,7 +802,8 @@ function renderState(next = {}, source = "extension") {
   const previousOperationKey = state.manualOperation?.key;
   const previousUiEventKey = state.uiEvent?.key;
   const nextAsset = "asset" in next ? normalizeAssetName(next.asset) : state.asset;
-  const normalizedAsset = source === "screen" && !nextAsset ? state.asset : nextAsset;
+  const explicitlyPendingAsset = source === "screen" && next.assetPending === true;
+  const normalizedAsset = explicitlyPendingAsset ? null : source === "screen" && !nextAsset ? state.asset : nextAsset;
   const assetChanged = Boolean(normalizedAsset && normalizedAsset !== previousAsset);
   const cached = assetChanged ? analysisCache.state(normalizedAsset) : null;
   const currentTrend = trendForAsset(normalizedAsset);
@@ -813,17 +829,23 @@ function renderState(next = {}, source = "extension") {
     chartDetected: next.chartDetected ?? (assetChanged ? cached?.chartDetected ?? false : state.chartDetected),
     lastInspectionAt: next.lastInspectionAt ?? (assetChanged ? cached?.lastInspectionAt ?? null : state.lastInspectionAt),
     ...(normalizedOperation ? { manualOperation: normalizedOperation } : {}),
-    analysis: assetChanged
+    analysis: explicitlyPendingAsset
+      ? { direction: "WAIT", confidence: 0, reason: "Identificando o ativo selecionado.", source: "screen-capture" }
+      : assetChanged
       ? { ...(restoredAnalysis || { direction: "WAIT", confidence: 0 }) }
       : { ...state.analysis, ...(restoredAnalysis || {}) },
     risk: { ...state.risk, ...(next.risk || {}) },
     defaults: { ...state.defaults, ...(next.defaults || {}) }
   };
   if (source === "screen") screenReaderReady = true;
+  if (explicitlyPendingAsset) {
+    signalStabilizer.reset("");
+    displayedAnalysis = null;
+  }
   else extensionReady = true;
   renderConnection(dataReady());
 
-  $("agentAsset").textContent = state.asset || selectedRadarAsset || "Localizando";
+  $("agentAsset").textContent = state.assetPending ? "Identificando ativo" : state.asset || selectedRadarAsset || "Localizando";
   $("agentTimeframe").textContent = state.timeframe || (state.defaults.timeframe ? "5m" : "—");
   $("agentExpiration").textContent = state.expiration || (state.defaults.expiration ? "5 min" : "—");
   $("riskAmount").textContent = formatMoney(state.risk.baseAmount);
@@ -834,7 +856,7 @@ function renderState(next = {}, source = "extension") {
     ? { ...identifiedAnalysis, stability: "stable" }
     : signalStabilizer.update(identifiedAnalysis, state.asset);
   renderSignal(displayedAnalysis);
-  const visibleAsset = state.asset || identifiedAnalysis.previewAsset || selectedRadarAsset;
+  const visibleAsset = state.assetPending ? "Identificando ativo" : state.asset || identifiedAnalysis.previewAsset || selectedRadarAsset;
   if (visibleAsset) $("agentAsset").textContent = visibleAsset;
   if (state.asset && !usingCachedAnalysis) {
     analysisCache.rememberState(state.asset, {
@@ -1112,12 +1134,12 @@ addEventListener("atlas:trend-selected", event => {
     signalKind: String(trend.direction || "WAIT").toUpperCase() === "WAIT" ? "no-opportunity" : "trend",
     entryConfirmed: false,
     entryTiming: "WAIT_CONFIRMATION",
-    reason: `Radar 5M: ${trend.reason || "tendência calculada com EMA9, EMA21, RSI e momentum"}`,
+    reason: `Radar 5M: ${trend.reason || "direção calculada com EMA9, EMA21, RSI e momentum"}`,
     source: "market-radar-5m"
   });
   $("monitorPulse").classList.add("live");
   $("monitorPulse").textContent = "Radar 5M selecionado";
-  showToast(`${selectedRadarAsset}: tendência de ${trend.direction === "BUY" ? "ALTA" : trend.direction === "SELL" ? "BAIXA" : "MERCADO NEUTRO"} no Radar 5M.`, "info", 5000);
+  showToast(`${selectedRadarAsset}: ${trend.direction === "BUY" ? "POSSÍVEL COMPRA" : trend.direction === "SELL" ? "POSSÍVEL VENDA" : "MERCADO NEUTRO"} no Radar 5M.`, "info", 5000);
 });
 
 addEventListener("atlas:screen-started", () => {
@@ -1131,7 +1153,9 @@ addEventListener("atlas:screen-started", () => {
 
 addEventListener("atlas:screen-state", event => {
   screenReaderReady = true;
-  renderState(event.detail || {}, "screen");
+  const detail = event.detail || {};
+  if (!screenRevisionGuard.accepts(detail)) return;
+  renderState(detail, "screen");
 });
 
 addEventListener("atlas:screen-stopped", () => {
@@ -1175,7 +1199,7 @@ function refreshReadingFeedback() {
   const analysis = currentAnalysis();
   const direction = String(analysis?.direction || "WAIT").toUpperCase();
   pulse.textContent = analysis?.signalKind === "trend"
-    ? `Tendência de ${direction === "BUY" ? "alta" : "baixa"} em ${asset} · buscando ponto de entrada`
+    ? `Possível ${direction === "BUY" ? "compra" : "venda"} em ${asset} · buscando confirmação`
     : analysis?.signalKind === "no-opportunity"
       ? `${asset} sem oportunidade segura · radar atualizado`
     : direction === "WAIT"
