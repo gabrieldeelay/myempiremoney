@@ -5,7 +5,7 @@ import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.1";
 import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.5";
 import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
 import { createSaoPauloCandleClock, saoPauloFiveMinuteCycle, signalEffectTone } from "./candle-cycle.js?v=3.13.0";
-import { composeDualSignalViews, signalLabel } from "./dual-signal.js?v=3.15.0";
+import { composeDualSignalViews, signalLabel } from "./dual-signal.js?v=3.16.1";
 import { createSignalCandleLock } from "./signal-candle-lock.js?v=3.16.0";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
@@ -44,6 +44,7 @@ let signalAlertTimer = null;
 let signalAlertActive = false;
 const signalAlertQueue = [];
 const lastSignalAlertSignature = new Map();
+const lastAutoTabSignalSignature = new Map();
 const signalCandleLock = createSignalCandleLock();
 const screenRevisionGuard = createScreenRevisionGuard();
 let state = {
@@ -198,7 +199,7 @@ function renderNextSignal(view = {}) {
   pane.classList.toggle("possible-sell", direction === "SELL" && possible);
   pane.classList.toggle("waiting", direction === "WAIT");
   $("nextSignalIcon").textContent = direction === "BUY" ? "↗" : direction === "SELL" ? "↘" : "—";
-  $("nextAnalysisDirection").textContent = direction === "WAIT" ? "SEM DIREÇÃO" : signalLabel(view);
+  $("nextAnalysisDirection").textContent = direction === "WAIT" ? "ANALISANDO..." : signalLabel(view);
   $("nextConfidenceBadge").textContent = `${confidence}% CONFIANÇA`;
   $("nextSignalStability").textContent = direction === "WAIT"
     ? "AGUARDANDO DIREÇÃO"
@@ -235,6 +236,24 @@ function updateSignalTab(pane, view = {}) {
   tab.title = hasSignal
     ? `${signalLabel(view)} · ${Math.round(Number(view.confidence) || 0)}% de confiança`
     : "Nenhum sinal confirmado nesta análise";
+}
+
+function autoSelectSignalTab(views = {}, cycleKey = "") {
+  const asset = state.asset || selectedRadarAsset || "ATIVO";
+  const freshSignals = ["current", "next"].flatMap(pane => {
+    const view = views[pane] || {};
+    const direction = String(view.direction || "WAIT").toUpperCase();
+    if (!["BUY", "SELL"].includes(direction)) {
+      lastAutoTabSignalSignature.delete(pane);
+      return [];
+    }
+    const signature = `${asset}|${cycleKey}|${direction}|${Boolean(view.possible)}`;
+    if (lastAutoTabSignalSignature.get(pane) === signature) return [];
+    lastAutoTabSignalSignature.set(pane, signature);
+    return [{ pane, view }];
+  });
+  const selected = freshSignals.find(item => item.pane === "current") || freshSignals[0];
+  if (selected && selected.pane !== activeSignalPane) setSignalTab(selected.pane);
 }
 
 function drainSignalAlerts() {
@@ -386,7 +405,9 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
   card.classList.toggle("trend-only", trendOnly && !possible);
   card.classList.toggle("scanning", finalDirection === "WAIT" && dataReady() && !noOpportunity);
   if ($("signalKicker")) $("signalKicker").textContent = "ENTRADA DURANTE A FORMAÇÃO";
-  $("analysisDirection").textContent = signalLabel({ direction: finalDirection, possible });
+  $("analysisDirection").textContent = finalDirection === "WAIT"
+    ? "ANALISANDO..."
+    : signalLabel({ direction: finalDirection, possible });
   $("signalIcon").textContent = finalDirection === "BUY" ? "↗" : finalDirection === "SELL" ? "↘" : "—";
   $("confidenceBadge").textContent = `${confidence}% CONFIANÇA`;
   const timingBadge = $("entryTiming");
@@ -435,6 +456,7 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
   const currentTabView = { ...analysis, direction: finalDirection, confidence, possible };
   updateSignalTab("current", currentTabView);
   updateSignalTab("next", views.next);
+  autoSelectSignalTab({ current: currentTabView, next: views.next }, cycleKey);
   queueSignalAlert("current", currentTabView, cycleKey);
   queueSignalAlert("next", views.next, cycleKey);
   if (views.setupVerified) showExtremeMovementAlert(views.current);

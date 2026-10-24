@@ -162,8 +162,8 @@ assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve c
 assert.match(app, /signal-stability\.js\?v=3\.14\.0/, "o painel deve carregar o alerta de reversão sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
 assert.match(screenReader, /setup-warning-state\.js\?v=3\.15\.0/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
-assert.match(screenReader, /left: \.65, width: \.18/, "a expiração deve ser lida sem misturar o contador regressivo com o valor de cinco minutos");
-assert.match(screenReader, /Math\.max\(19, frame\.height \* \.028\)/, "o recorte da expiração deve ficar abaixo do contador regressivo");
+assert.match(screenReader, /left: \.78, width: \.16/, "a expiração deve ser lida sem misturar o contador regressivo com o valor de cinco minutos");
+assert.match(screenReader, /Math\.max\(28, frame\.height \* \.06\)/, "o recorte da expiração deve ficar abaixo do contador regressivo");
 assert.match(screenReader, /requiredHits: 3, warningHits: 7/, "a expiração deve exigir leituras independentes antes de gerar aviso");
 assert.match(screenReader, /lastSetupOcrAt = \{ timeframe: 0, expiration: 0 \}/, "gráfico e expiração devem possuir relógios de OCR independentes");
 assert.match(screenReader, /lastSetupOcrAt\[kind\]/, "ler o gráfico não pode impedir a leitura da expiração no mesmo ciclo");
@@ -213,11 +213,16 @@ assert.match(signalStability, /minimumSignalConfidence = options\.minimumSignalC
 assert.match(html, /id="currentCandleTitle">NESTA VELA</, "o painel deve reservar uma análise própria para a vela atual");
 assert.match(html, /id="nextCandleTitle">PRÓXIMA VELA</, "o painel deve reservar uma análise própria para a próxima vela");
 assert.match(html, /id="nextConfidenceBadge"/, "a próxima vela deve ter probabilidade independente");
+assert.match(app, /function autoSelectSignalTab/, "uma aba deve abrir automaticamente quando recebe um sinal novo");
+assert.match(app, /freshSignals\.find\(item => item\.pane === "current"\)/, "quando as duas abas recebem sinal juntas, a vela atual deve ter prioridade");
+assert.doesNotMatch(html, /SEM DIREÇÃO|SEM ENTRADA/, "todo estado neutro visível deve usar o nome único ANALISANDO");
 assert.match(html, /id="extremeAlert"[^>]*aria-live="assertive"/, "movimentos extremos devem abrir um alerta temporário acessível");
 assert.match(app, /setTimeout\(\(\) => \{ host\.hidden = true; \}, 5600\)/, "o alerta extremo deve desaparecer automaticamente");
 assert.match(dualSignal, /const nextSource = trend \|\| central/, "a próxima vela deve usar a direção central sem substituir a leitura intravela");
 assert.doesNotMatch(screenReader, /timeframe:\s*"5m"/, "a leitura visual não pode inventar que o gráfico já está em 5M");
 assert.match(screenReader, /expiration:\s*setup\.expiration/, "a leitura visual deve identificar a expiração exibida na Hezilex");
+assert.match(screenReader, /left: \.78, width: \.16/, "a expiração deve ser lida apenas no controle à direita, sem incluir o gráfico");
+assert.match(screenReader, /Math\.max\(28, frame\.height \* \.06\)/, "o recorte da expiração deve ficar abaixo do contador regressivo");
 assert.match(screenReader, /setupChecked:\s*Boolean\(setup\.timeframe && setup\.expiration\)/, "os avisos devem esperar a leitura conjunta do gráfico e da expiração");
 assert.match(html, /id="setupWarnings"/, "o painel deve reservar uma área própria para os avisos de 5 minutos");
 assert.doesNotMatch(app, /state\.setupChecked === true/, "um gráfico em 1m deve gerar aviso mesmo que a expiração ainda não tenha sido reconhecida");

@@ -106,7 +106,7 @@ export function composeDualSignalViews({ live = {}, central = {}, trend = null, 
 
 export function signalLabel(view = {}) {
   const direction = directionOf(view.direction);
-  if (direction === "WAIT") return "SEM ENTRADA";
+  if (direction === "WAIT") return "ANALISANDO...";
   const side = direction === "BUY" ? "COMPRA" : "VENDA";
   return `${view.possible ? "POSSÍVEL " : ""}${side}`;
 }

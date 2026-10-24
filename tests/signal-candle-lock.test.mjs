@@ -11,6 +11,15 @@ test("mantém o sinal quando a leitura volta a aguardar na mesma vela", () => {
   assert.equal(held.heldByCandle, true);
 });
 
+test("mantém também um possível sinal até o fechamento da vela", () => {
+  const lock = createSignalCandleLock();
+  lock.resolve({ asset: "BNB", pane: "current", cycleKey: "10:00", view: { direction: "SELL", confidence: 58, possible: true } });
+  const held = lock.resolve({ asset: "BNB", pane: "current", cycleKey: "10:00", view: { direction: "WAIT", confidence: 0 } });
+  assert.equal(held.direction, "SELL");
+  assert.equal(held.possible, true);
+  assert.equal(held.heldByCandle, true);
+});
+
 test("não troca a direção confirmada no meio da mesma vela", () => {
   const lock = createSignalCandleLock();
   lock.resolve({ asset: "EUR/USD", pane: "next", cycleKey: "10:00", view: { direction: "SELL", confidence: 65, possible: true } });

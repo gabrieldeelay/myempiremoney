@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { composeDualSignalViews, signalLabel } from "../dist/modules/dual-signal.js";
 
+test("unifica todo estado neutro como analisando", () => {
+  assert.equal(signalLabel({ direction: "WAIT" }), "ANALISANDO...");
+});
+
 test("separa uma possível compra intravela de uma venda para a próxima vela", () => {
   const result = composeDualSignalViews({
     live: {

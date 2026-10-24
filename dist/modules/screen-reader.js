@@ -132,17 +132,18 @@ function prepareSetupCrop(kind, activeTab) {
   const frame = frameBounds();
   const region = kind === "timeframe"
     ? { left: .045, width: .23 }
-    // Keep the expiration crop below the countdown. A wide crop could read
-    // 00:41 as "1 min" even while the actual control visibly showed 5 min.
-    : { left: .65, width: .18 };
+    // Expiration is the narrow control at the far right of the chart. Keeping
+    // this crop tight prevents the changing countdown above it from becoming
+    // a false "1 min" reading.
+    : { left: .78, width: .16 };
   const cropLeft = Math.max(0, Math.round(frame.x + frame.width * region.left));
   const cropTop = Math.max(0, Math.round(activeTab?.y
-    ? activeTab.y + (kind === "expiration" ? Math.max(19, frame.height * .028) : 4)
+    ? activeTab.y + (kind === "expiration" ? Math.max(28, frame.height * .06) : 4)
     : frame.y + frame.height * (kind === "expiration" ? .235 : .18)));
   const cropWidth = Math.min(canvas.width - cropLeft, Math.round(frame.width * region.width));
   // The narrow expiration strip contains the selected "5 min" row but not
   // the countdown rendered above it. Timeframe keeps the larger tab crop.
-  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * (kind === "expiration" ? .034 : .085)));
+  const cropHeight = Math.min(canvas.height - cropTop, Math.round(frame.height * (kind === "expiration" ? .05 : .085)));
   const scale = 4;
   ocrCanvas.width = Math.max(1, cropWidth * scale);
   ocrCanvas.height = Math.max(1, cropHeight * scale);
