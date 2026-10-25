@@ -29,3 +29,9 @@ test("interface possui canal administrativo e proteção por ativo", () => {
   assert.match(app, /normalizeAssetName\(activeAdminSignal\.asset\) === normalizeAssetName\(asset\)/);
   assert.match(app, /setInterval\(\(\) => pollAdminSignal\(\), 1000\)/);
 });
+
+test("a criação usa o relógio UTC do MySQL e não serializa o fuso do servidor", () => {
+  const source = fs.readFileSync(new URL("../lib/manual-signals.js", import.meta.url), "utf8");
+  assert.match(source, /UTC_TIMESTAMP\(3\).*DATE_ADD\(UTC_TIMESTAMP\(3\)/s);
+  assert.match(source, /starts_at>DATE_ADD\(UTC_TIMESTAMP\(3\), INTERVAL 5 SECOND\)/);
+});

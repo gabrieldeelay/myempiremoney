@@ -96,6 +96,21 @@ function adminSignalView(signal) {
   };
 }
 
+function adminSignalWaitingView(signal) {
+  const timing = signal?.timing === "NEXT_CANDLE" ? "PRÓXIMA VELA" : "NESTA VELA";
+  return {
+    direction: "WAIT",
+    confidence: 0,
+    possible: false,
+    actionable: false,
+    entryConfirmed: false,
+    signalKind: "admin-broadcast-waiting",
+    source: "admin-broadcast",
+    reason: `Existe um sinal oficial ativo em ${timing}. A leitura automática está pausada até o fim da vela.`,
+    factors: ["O sinal manual tem prioridade total sobre qualquer leitura automática."]
+  };
+}
+
 function matchingAdminSignal(asset = state.asset) {
   if (!activeAdminSignal || new Date(activeAdminSignal.expiresAt).getTime() <= Date.now()) return null;
   return normalizeAssetName(activeAdminSignal.asset) === normalizeAssetName(asset) ? activeAdminSignal : null;
@@ -408,7 +423,9 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
   const adminSignal = matchingAdminSignal(signalAsset);
   if (adminSignal) {
     const pane = adminSignal.timing === "NEXT_CANDLE" ? "next" : "current";
+    const otherPane = pane === "current" ? "next" : "current";
     views[pane] = adminSignalView(adminSignal);
+    views[otherPane] = adminSignalWaitingView(adminSignal);
   }
   const analysis = {
     ...views.current,
