@@ -74,17 +74,6 @@ function formatRobotMessage(value) {
     .replace(/_(.+?)_/g, "<em>$1</em>");
 }
 
-function formatRobotSpeech(value) {
-  return String(value || "")
-    .replace(/\[\[(?:good|bad):(.+?)\]\]/g, "$1")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/_(.+?)_/g, "$1")
-    .replace(/\b5M\b/gi, "cinco minutos")
-    .replace(/\b1%\b/g, "um por cento")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function marketReady() {
   return Boolean(state.asset || state.chartDetected || state.account?.id || state.account?.verified || (state.balance != null && state.balanceConfidence));
 }
@@ -528,17 +517,11 @@ const robot = {
     if (saved != null) return saved !== "0";
     return localStorage.getItem("atlas-robot-sound") !== "0";
   })(),
-  audioContext: null,
-  soundReady: false,
+  catalog: new Map(),
   voiceQueue: [],
   voiceSpeaking: false,
   activeVoiceText: "",
-  narratorVoice: null,
   voiceAudio: null,
-  voiceObjectUrl: "",
-  localNarrator: null,
-  localNarratorPromise: null,
-  localNarratorRetryAfter: 0,
   phrases: {
     waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
     noaccess: ["A Hezilex abriu. Agora ative a leitura visual para eu interpretar as velas sem extensão.", "O gráfico está na tela, mas a leitura visual ainda está desligada. Clique em ‘Ativar leitura’ e escolha esta aba.", "Sem extensão, eu leio a imagem da aba. Só falta você autorizar o compartilhamento da tela."],
@@ -598,9 +581,6 @@ const robot = {
       this.voiceAudio.removeAttribute("src");
       this.voiceAudio = null;
     }
-    if (this.voiceObjectUrl) URL.revokeObjectURL(this.voiceObjectUrl);
-    this.voiceObjectUrl = "";
-    window.speechSynthesis?.cancel();
     clearTimeout(this.speechTimer);
     $("robotOverlay").classList.remove("talking");
   },
@@ -619,106 +599,24 @@ const robot = {
   },
   unlockSound() {
     if (!this.soundEnabled) return;
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-    this.audioContext ||= new AudioContextClass();
-    this.audioContext.resume?.();
-    this.soundReady = true;
-    this.prepareLocalNarrator().catch(() => {});
-  },
-  selectNarratorVoice() {
-    if (!("speechSynthesis" in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
-    const maleNames = /antonio|antônio|daniel|felipe|ricardo|thiago|paulo|joão|joao|rafael|luciano|male|masculin/i;
-    const scored = voices.map(voice => {
-      const language = String(voice.lang || "").toLowerCase();
-      const label = `${voice.name} ${voice.voiceURI}`;
-      let score = language === "pt-br" ? 120 : language.startsWith("pt") ? 80 : 0;
-      if (maleNames.test(label)) score += 65;
-      if (/natural|neural|online/i.test(label)) score += 18;
-      if (/microsoft|google/i.test(label)) score += 8;
-      return { voice, score };
-    }).filter(item => item.score >= 80).sort((a, b) => b.score - a.score);
-    this.narratorVoice = scored[0]?.voice || null;
-    return this.narratorVoice;
+    this.drainNarration();
   },
   canNarrate() {
-    return this.soundEnabled && ("Audio" in window || ("speechSynthesis" in window && "SpeechSynthesisUtterance" in window));
+    return this.soundEnabled && "Audio" in window;
   },
-  enqueueNarration(line) {
-    if (!this.canNarrate()) return false;
-    const spokenText = formatRobotSpeech(line);
-    if (!spokenText || spokenText === this.activeVoiceText || spokenText === this.voiceQueue.at(-1)) return true;
-    if (this.voiceSpeaking) this.voiceQueue = [spokenText];
-    else this.voiceQueue.push(spokenText);
+  enqueueNarration(line, audioUrl) {
+    if (!this.canNarrate() || !audioUrl) return false;
+    if (line === this.activeVoiceText || this.voiceQueue.some(item => item.audioUrl === audioUrl)) return true;
+    this.voiceQueue.push({ line, audioUrl });
+    if (this.voiceQueue.length > 6) this.voiceQueue = this.voiceQueue.slice(-6);
     this.drainNarration();
     return true;
   },
-  playBrowserNarration(spokenText, finish) {
-    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-      finish();
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance(spokenText);
-    const voice = this.narratorVoice || this.selectNarratorVoice();
-    if (voice) utterance.voice = voice;
-    utterance.lang = "pt-BR";
-    utterance.rate = .96;
-    utterance.pitch = .82;
-    utterance.volume = .92;
-    utterance.onend = finish;
-    utterance.onerror = finish;
-    window.speechSynthesis.speak(utterance);
-  },
-  async prepareLocalNarrator() {
-    if (this.localNarrator) return this.localNarrator;
-    if (this.localNarratorPromise) return this.localNarratorPromise;
-    if (Date.now() < this.localNarratorRetryAfter) throw new Error("Voz local temporariamente indisponível");
-    this.localNarratorPromise = import("./vozz-piper.js?v=3.7.3")
-      .then(({ Piper }) => Piper.carregar({
-        dispositivo: "wasm",
-        cdn: "https://cdn.jsdelivr.net/gh/Pedro21062014/vozz@178ff1640f950426790ea3b7257b15a1aa1238ea"
-      }))
-      .then(narrator => {
-        this.localNarrator = narrator;
-        return narrator;
-      })
-      .catch(error => {
-        this.localNarratorRetryAfter = Date.now() + 60000;
-        throw error;
-      })
-      .finally(() => { this.localNarratorPromise = null; });
-    return this.localNarratorPromise;
-  },
-  async playNaturalNarration(spokenText, finish) {
-    try {
-      const narrator = await this.prepareLocalNarrator();
-      const generated = await narrator.falar(spokenText, { velocidade: .98, maxFonemas: 200 });
-      const blob = generated.paraBlob();
-      if (!blob.size || !this.soundEnabled) return finish();
-      this.voiceObjectUrl = URL.createObjectURL(blob);
-      const audio = new Audio(this.voiceObjectUrl);
-      this.voiceAudio = audio;
-      audio.volume = .92;
-      audio.onended = finish;
-      audio.onerror = () => {
-        audio.onended = null;
-        this.voiceAudio = null;
-        if (this.voiceObjectUrl) URL.revokeObjectURL(this.voiceObjectUrl);
-        this.voiceObjectUrl = "";
-        this.playBrowserNarration(spokenText, finish);
-      };
-      await audio.play();
-    } catch (error) {
-      if (!this.soundEnabled) finish();
-      else this.playBrowserNarration(spokenText, finish);
-    }
-  },
   drainNarration() {
     if (!this.canNarrate() || this.voiceSpeaking || !this.voiceQueue.length) return;
-    const spokenText = this.voiceQueue.shift();
+    const item = this.voiceQueue.shift();
     this.voiceSpeaking = true;
-    this.activeVoiceText = spokenText;
+    this.activeVoiceText = item.line;
     $("robotOverlay").classList.add("talking");
     let finished = false;
     const finish = () => {
@@ -729,30 +627,33 @@ const robot = {
         this.voiceAudio.onerror = null;
         this.voiceAudio = null;
       }
-      if (this.voiceObjectUrl) URL.revokeObjectURL(this.voiceObjectUrl);
-      this.voiceObjectUrl = "";
       this.voiceSpeaking = false;
       this.activeVoiceText = "";
       if (this.soundEnabled && this.voiceQueue.length) this.drainNarration();
       else $("robotOverlay").classList.remove("talking");
     };
-    this.playNaturalNarration(spokenText, finish);
+    const audio = new Audio(item.audioUrl);
+    this.voiceAudio = audio;
+    audio.volume = .94;
+    audio.onended = finish;
+    audio.onerror = finish;
+    audio.play().catch(finish);
   },
-  playSound(context) {
-    if (!this.soundEnabled || !this.soundReady || !this.audioContext) return;
-    const audio = this.audioContext;
-    const positive = ["buyAligned", "sellAligned", "win", "protectionReady", "protectionTaken"].includes(context);
-    const negative = ["buyAgainstSell", "sellAgainstBuy", "buyWithoutSignal", "sellWithoutSignal", "loss", "error", "protectionEarly", "exposureDanger", "exposureCritical"].includes(context);
-    const oscillator = audio.createOscillator();
-    const gain = audio.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(positive ? 660 : negative ? 330 : 480, audio.currentTime);
-    gain.gain.setValueAtTime(.0001, audio.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.035, audio.currentTime + .018);
-    gain.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + .18);
-    oscillator.connect(gain).connect(audio.destination);
-    oscillator.start();
-    oscillator.stop(audio.currentTime + .19);
+  async loadCatalog() {
+    try {
+      const response = await fetch("/api/robot-speeches", { headers: { Accept: "application/json" }, cache: "no-store" });
+      if (!response.ok) throw new Error("Catálogo de falas indisponível");
+      const payload = await response.json();
+      this.catalog = new Map();
+      for (const speech of payload.speeches || []) {
+        if (!speech?.context || !speech?.audioUrl) continue;
+        const list = this.catalog.get(speech.context) || [];
+        list.push(speech);
+        this.catalog.set(speech.context, list);
+      }
+    } catch {
+      this.catalog = new Map();
+    }
   },
   contextStillValid(context) {
     if (context === "loggedout") return !marketReady();
@@ -767,8 +668,9 @@ const robot = {
   },
   speak(context, values = {}, force = false, interrupt = false) {
     if (!force && this.lastContext === context) return;
-    const source = this.phrases[context] || this.phrases.live;
-    const candidates = source.map(line => line
+    const source = this.catalog.get(context) || [];
+    if (!source.length) return;
+    const candidates = source.map(speech => ({ ...speech, line: speech.phrase
       .replaceAll("{asset}", normalizeAssetName(values.asset || state.asset) || "ESSE ATIVO")
       .replaceAll("{confidence}", Math.round(Number(values.confidence ?? state.analysis.confidence) || 0))
       .replaceAll("{amount}", formatMoney(values.amount))
@@ -777,8 +679,8 @@ const robot = {
       .replaceAll("{risk}", Math.round(Number(values.risk) || 0))
       .replaceAll("{count}", Math.round(Number(values.count) || 1))
       .replaceAll("{direction}", values.direction === "SELL" ? "VENDA" : "COMPRA")
-      .replaceAll("{reason}", String(values.reason || state.analysis.reason || "sem confirmação suficiente")));
-    const variants = candidates.map((line, index) => ({ line, key: `${context}:${index}` }));
+      .replaceAll("{reason}", String(values.reason || state.analysis.reason || "sem confirmação suficiente")) }));
+    const variants = candidates.map(item => ({ ...item, key: item.id }));
     let available = variants.filter(item => !this.used.has(item.key) && item.line !== this.lastLine);
     if (!available.length) {
       [...this.used].filter(key => key.startsWith(`${context}:`)).forEach(key => this.used.delete(key));
@@ -792,12 +694,13 @@ const robot = {
     if (this.used.size > 180) this.used = new Set([...this.used].slice(-90));
     localStorage.setItem("atlas-robot-variants-v2", JSON.stringify([...this.used]));
     this.lastContext = context;
-    this.sayText(line, context, interrupt);
+    this.sayText(line, context, interrupt, selected.audioUrl);
   },
-  sayText(line, context = this.currentContext, interrupt = false) {
+  sayText(line, context = this.currentContext, interrupt = false, audioUrl = "") {
+    if (!audioUrl) return;
     const now = Date.now();
     if (!interrupt && now < this.visibleUntil) {
-      this.queue = [{ line, context }];
+      this.queue = [{ line, context, audioUrl }];
       this.scheduleQueue();
       return;
     }
@@ -807,8 +710,7 @@ const robot = {
     this.updateQuestions(context);
     $("robotLine").innerHTML = formatRobotMessage(line);
     $("robotOverlay").classList.add("talking");
-    this.playSound(context);
-    const narrating = this.enqueueNarration(line);
+    const narrating = this.enqueueNarration(line, audioUrl);
     this.visibleUntil = now + this.holdMs;
     clearTimeout(this.speechTimer);
     if (!narrating) this.speechTimer = setTimeout(() => $("robotOverlay").classList.remove("talking"), 1900);
@@ -823,7 +725,7 @@ const robot = {
     this.queueTimer = setTimeout(() => {
       this.pruneQueue();
       const next = this.queue.shift();
-      if (next) this.sayText(next.line, next.context, true);
+      if (next) this.sayText(next.line, next.context, true, next.audioUrl);
     }, delay);
   },
   commentOnOperation(operation) {
@@ -884,21 +786,11 @@ const robot = {
   },
   answer(question) {
     if (!dataReady()) {
-      const replies = {
-        cantread: "A leitura visual ainda está desligada. Sem a imagem das velas, eu não vou fingir que analisei.",
-        fixread: "Clique em ‘Ativar leitura’ no topo e escolha esta mesma aba. Não precisa instalar extensão.",
-        reallylive: "Agora, não. Quando a leitura visual estiver ativa, o topo vai mostrar ‘Leitura visual ao vivo’."
-      };
-      this.sayText(replies[question] || replies.cantread, this.currentContext, true);
+      this.speak("noaccess", {}, true, true);
       return;
     }
     if (!marketReady()) {
-      const replies = {
-        loginseen: "Um moço fuçando o aplicativo sem fazer login. Por enquanto, essa é toda a análise técnica disponível.",
-        nologin: "Não, né, mano. Sem login eu não tenho ativo, velas nem saldo. Aí seria palpite fantasiado de análise.",
-        next: "Faz login na Hezilex. Quando o gráfico abrir, eu começo a analisar sozinho, sem você apertar mais nada."
-      };
-      this.sayText(replies[question] || replies.loginseen, this.currentContext, true);
+      this.speak("loggedout", {}, true, true);
       return;
     }
     const analysis = currentAnalysis();
@@ -927,7 +819,9 @@ const robot = {
         : `${state.asset || selectedRadarAsset || "O ativo"} favorece ${label}, com ${Math.round(Number(analysis.confidence) || 0)}%: ${shortReason}.`,
       missing: direction === "WAIT" ? `Falta confirmação: ${shortReason}. Quando fechar, eu mudo o sinal sozinho.` : `O sinal já apareceu para ${label}. Agora falta você decidir sem pressa.`
     };
-    this.sayText(replies[question] || replies.seen, this.currentContext, true);
+    const setupContext = question === "why5m" ? "timeframe" : state.defaults?.timeframe && state.defaults?.expiration ? "all" : !state.defaults?.timeframe ? "timeframe" : "expiration";
+    const replyContext = question === "risk" ? "risk" : question === "setup" || question === "why5m" ? setupContext : direction === "BUY" ? "buy" : direction === "SELL" ? "sell" : "wait";
+    this.speak(replyContext, { asset: state.asset, confidence: analysis.confidence, amount: state.risk.baseAmount }, true, true);
   },
   toggleQuestions() {
     if ($("robotOverlay").classList.contains("minimized")) {
@@ -939,15 +833,15 @@ const robot = {
     $("robotOverlay").classList.toggle("questions-open", !panel.hidden);
     requestAnimationFrame(keepRobotInViewport);
   },
-  init() {
+  async init() {
     const storedPreference = localStorage.getItem("atlas-robot-minimized");
     const minimized = storedPreference === "1" || (storedPreference == null && matchMedia("(max-width: 720px)").matches);
     $("robotOverlay").classList.toggle("minimized", minimized);
     $("robotToggle").textContent = minimized ? "+" : "−";
     $("robotToggle").setAttribute("aria-expanded", String(!minimized));
     this.syncAudioControls();
-    this.selectNarratorVoice();
     restoreRobotPosition();
+    await this.loadCatalog();
     this.speak("waiting", {}, true);
   },
   toggle() {
@@ -1297,10 +1191,6 @@ addEventListener("pointerdown", () => {
   robot.unlockSound();
   robot.drainNarration();
 }, { capture: true, once: true });
-if ("speechSynthesis" in window) {
-  window.speechSynthesis.addEventListener?.("voiceschanged", () => robot.selectNarratorVoice());
-}
-
 $("setupWarnings")?.addEventListener("click", event => {
   const button = event.target.closest("[data-setup-warning-dismiss]");
   if (!button) return;

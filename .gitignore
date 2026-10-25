@@ -9,6 +9,7 @@ work/
 !.env.example
 node_modules/
 deploy-temp/
+storage/robot-audio/
 atlas-mysql*.zip
 
 .env*.local

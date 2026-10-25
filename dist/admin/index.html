@@ -6,7 +6,7 @@
   <title>Painel administrativo | Atlas</title>
   <link rel="icon" href="/favicon.svg">
   <link rel="stylesheet" href="/account.css?v=3.3.0">
-  <link rel="stylesheet" href="/admin.css?v=3.4.0">
+  <link rel="stylesheet" href="/admin.css?v=3.8.0">
 </head>
 <body>
   <main class="account-page" id="adminLogin">
@@ -29,6 +29,7 @@
           <button type="button" data-admin-tab="payments"><i>↗</i><span>Pagamentos</span></button>
           <button type="button" data-admin-tab="sales"><i>◇</i><span>Oferta e cupons</span></button>
           <button type="button" data-admin-tab="content"><i>✦</i><span>Conteúdo</span></button>
+          <button type="button" data-admin-tab="speeches"><i>◖</i><span>Configuração de Falas</span></button>
           <button type="button" data-admin-tab="integrations"><i>↗</i><span>Integrações</span></button>
           <button type="button" data-admin-tab="security"><i>⌁</i><span>Segurança</span></button>
         </nav>
@@ -82,9 +83,25 @@
             <div class="content-grid"><section class="admin-card"><h2>Textos da apresentação</h2><div class="field"><label for="eyebrow">Chamada curta</label><input id="eyebrow"></div><div class="field"><label for="headline">Título principal</label><input id="headline"></div><div class="field"><label for="subheadline">Descrição</label><textarea id="subheadline"></textarea></div></section><section class="admin-card"><h2>Notícias e tendências</h2><div class="field"><label for="newsQuery">Consulta de notícias</label><textarea id="newsQuery"></textarea></div><div class="field"><label for="symbols">Ativos, um por linha</label><textarea id="symbols"></textarea></div></section></div>
           </section>
 
+          <section class="admin-tab-panel" data-admin-panel="speeches">
+            <div class="admin-page-head"><div><span>PERSONAGEM ATLAS</span><h1>Configuração de Falas</h1><p>Gerencie os textos e os áudios que o personagem pode reproduzir em cada situação.</p></div><button class="submit compact" id="newSpeech" type="button">+ Nova fala</button></div>
+            <div class="metric-grid speech-metrics">
+              <article class="metric-card"><span>Total de falas</span><strong id="speechTotal">0</strong><small>Sem limite de cadastro</small></article>
+              <article class="metric-card positive"><span>Com áudio</span><strong id="speechWithAudio">0</strong><small>Prontas para reprodução</small></article>
+              <article class="metric-card pending"><span>Ativas</span><strong id="speechActive">0</strong><small>Disponíveis ao personagem</small></article>
+              <article class="metric-card"><span>Contextos</span><strong id="speechContexts">0</strong><small>Situações configuradas</small></article>
+            </div>
+            <div class="speech-toolbar">
+              <label class="search-box" for="speechSearch"><i>⌕</i><input id="speechSearch" type="search" placeholder="Buscar por contexto, situação ou frase"></label>
+              <select id="speechContextFilter" aria-label="Filtrar por contexto"><option value="all">Todos os contextos</option></select>
+              <button class="tiny" id="clearSpeechFilters" type="button">Limpar</button>
+            </div>
+            <section class="speech-list" id="speechList"><div class="empty-admin">Carregando falas…</div></section>
+          </section>
+
           <section class="admin-tab-panel" data-admin-panel="integrations">
             <div class="admin-page-head"><div><span>CONEXÕES</span><h1>Integrações</h1><p>Gerencie o pagamento e acompanhe a base de dados.</p></div></div>
-            <div class="integration-grid"><section class="admin-card integration-card"><span class="integration-logo">V</span><div><h2>VenoPag</h2><p id="venoState">Verificando integração…</p><small class="credential-date" id="venoUpdatedAt">Nenhuma configuração salva.</small></div><div class="field"><label for="venoClientId">Client ID configurado</label><input id="venoClientId" autocomplete="off"></div><div class="field secret-field"><label for="venoClientSecret">Client Secret configurado</label><div><input id="venoClientSecret" type="password" autocomplete="new-password"><button class="tiny" type="button" data-toggle-secret="venoClientSecret">Mostrar</button></div></div><div class="field secret-field"><label for="venoWebhookSecret">Webhook Secret configurado</label><div><input id="venoWebhookSecret" type="password" autocomplete="new-password"><button class="tiny" type="button" data-toggle-secret="venoWebhookSecret">Mostrar</button></div></div><small>Visível somente nesta área administrativa. Webhook: <b id="webhookUrl"></b></small></section><section class="admin-card integration-card connected"><span class="integration-logo">L</span><div><h2>Voz local do Atlas</h2><p>Motor brasileiro executado no navegador.</p></div><ul><li>Voz masculina pt-BR</li><li>Sem API, chave ou cartão</li><li>Sem limite mensal ou custo por fala</li><li>Modelo salvo no navegador após o primeiro uso</li></ul><span class="integration-state">100% GRATUITA</span></section><section class="admin-card integration-card connected"><span class="integration-logo">M</span><div><h2>MySQL</h2><p>Autenticação e dados no servidor do Atlas.</p></div><ul><li>Contas persistidas</li><li>Sessões protegidas</li><li>Busca de clientes ativa</li></ul><span class="integration-state">CONECTADO</span></section></div>
+            <div class="integration-grid"><section class="admin-card integration-card"><span class="integration-logo">V</span><div><h2>VenoPag</h2><p id="venoState">Verificando integração…</p><small class="credential-date" id="venoUpdatedAt">Nenhuma configuração salva.</small></div><div class="field"><label for="venoClientId">Client ID configurado</label><input id="venoClientId" autocomplete="off"></div><div class="field secret-field"><label for="venoClientSecret">Client Secret configurado</label><div><input id="venoClientSecret" type="password" autocomplete="new-password"><button class="tiny" type="button" data-toggle-secret="venoClientSecret">Mostrar</button></div></div><div class="field secret-field"><label for="venoWebhookSecret">Webhook Secret configurado</label><div><input id="venoWebhookSecret" type="password" autocomplete="new-password"><button class="tiny" type="button" data-toggle-secret="venoWebhookSecret">Mostrar</button></div></div><small>Visível somente nesta área administrativa. Webhook: <b id="webhookUrl"></b></small></section><section class="admin-card integration-card connected"><span class="integration-logo">A</span><div><h2>Áudios do personagem</h2><p>O Atlas reproduz exclusivamente os arquivos enviados pelo administrador.</p></div><ul><li>Sem voz automática</li><li>Upload de MP3, WAV, OGG ou M4A</li><li>Escolha aleatória por contexto</li><li>Arquivos persistidos no servidor</li></ul><button class="tiny" type="button" data-switch-tab="speeches">Gerenciar falas</button></section><section class="admin-card integration-card connected"><span class="integration-logo">M</span><div><h2>MySQL</h2><p>Autenticação e dados no servidor do Atlas.</p></div><ul><li>Contas persistidas</li><li>Sessões protegidas</li><li>Busca de clientes ativa</li></ul><span class="integration-state">CONECTADO</span></section></div>
           </section>
 
           <section class="admin-tab-panel" data-admin-panel="security">
@@ -98,6 +115,7 @@
     </div>
   </main>
   <dialog class="admin-dialog" id="userPasswordDialog"><form method="dialog"><button class="dialog-close" value="cancel" aria-label="Fechar">×</button><span class="dialog-kicker">SUPORTE AO CLIENTE</span><h2>Definir nova senha</h2><p id="passwordCustomer">Cliente selecionado</p><input id="passwordCustomerId" type="hidden"><div class="field"><label for="customerNewPassword">Nova senha temporária</label><input id="customerNewPassword" type="password" minlength="8" autocomplete="new-password" placeholder="Mínimo de 8 caracteres"></div><div class="dialog-actions"><button class="tiny" value="cancel">Cancelar</button><button class="submit compact" id="saveCustomerPassword" type="button">Salvar nova senha</button></div><div class="status" id="customerPasswordStatus"></div></form></dialog>
-  <script type="module" src="/modules/admin.js?v=3.7.3"></script>
+  <dialog class="admin-dialog speech-dialog" id="speechDialog"><form method="dialog" id="speechEditor"><button class="dialog-close" value="cancel" aria-label="Fechar">×</button><span class="dialog-kicker">FALA DO PERSONAGEM</span><h2 id="speechDialogTitle">Nova fala</h2><p>O áudio só será reproduzido quando esta fala estiver ativa e possuir um arquivo enviado.</p><input id="speechId" type="hidden"><div class="field"><label for="speechContext">Contexto</label><input id="speechContext" list="speechContextOptions" maxlength="64" placeholder="Ex.: buy, sell, asset" required><datalist id="speechContextOptions"></datalist></div><div class="field"><label for="speechDescription">Quando essa fala deve acontecer</label><textarea id="speechDescription" maxlength="255" placeholder="Descreva o gatilho e a situação de uso" required></textarea></div><div class="field"><label for="speechPhrase">Frase exata</label><textarea id="speechPhrase" maxlength="800" placeholder="Texto que corresponde ao áudio" required></textarea><small>Variáveis aceitas: {asset}, {confidence}, {amount}, {direction}, {risk}, {count}, {exposure} e {balance}.</small></div><label class="check-row"><input id="speechEnabled" type="checkbox" checked> Fala ativa</label><div class="speech-upload"><label for="speechAudio">Áudio do ElevenLabs</label><input id="speechAudio" type="file" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a"><small>MP3, WAV, OGG ou M4A, até 15 MB. Enviar outro arquivo substitui o atual.</small><audio id="speechAudioPreview" controls hidden></audio></div><div class="dialog-actions"><button class="tiny danger hidden" id="deleteSpeech" type="button">Excluir fala</button><span></span><button class="tiny" value="cancel">Cancelar</button><button class="submit compact" id="saveSpeech" type="button">Salvar fala</button></div><div class="status" id="speechEditorStatus"></div></form></dialog>
+  <script type="module" src="/modules/admin.js?v=3.8.0"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { apiFetch, getAtlasClient } from "/modules/atlas-client.js";
+import { apiFetch, getAccessToken, getAtlasClient } from "/modules/atlas-client.js";
 
 const $ = selector => document.querySelector(selector);
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
@@ -7,6 +7,7 @@ const client = await getAtlasClient();
 let settingsCache;
 let userSearchTimer;
 let paymentCache = [];
+let speechCache = [];
 
 const statusLabel = status => ({ active: "ATIVO", blocked: "BLOQUEADO", pending: "PENDENTE" })[status] || "PENDENTE";
 const dateLabel = value => value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(value)) : "—";
@@ -22,7 +23,7 @@ function accessTimeLabel(user) {
 }
 
 function setAdminTab(tab) {
-  const allowed = ["overview", "clients", "payments", "sales", "content", "integrations", "security"];
+  const allowed = ["overview", "clients", "payments", "sales", "content", "speeches", "integrations", "security"];
   const next = allowed.includes(tab) ? tab : "overview";
   document.querySelectorAll("[data-admin-tab]").forEach(button => button.classList.toggle("active", button.dataset.adminTab === next));
   document.querySelectorAll("[data-admin-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.adminPanel === next));
@@ -160,6 +161,101 @@ async function loadPayments() {
   $("#accountList").innerHTML = payload.accounts.length ? payload.accounts.map(account => `<article class="account-row"><span class="user-avatar">${escapeHtml(String(account.name || account.email || "C").charAt(0).toUpperCase())}</span><div><b>${escapeHtml(account.name || "Cliente sem nome")}</b><small>${escapeHtml(account.email)}${account.phone ? ` · ${escapeHtml(account.phone)}` : ""}</small></div><time>${escapeHtml(dateTimeLabel(account.created_at))}</time></article>`).join("") : '<div class="empty-admin">Nenhuma conta criada.</div>';
 }
 
+function speechMatches(speech) {
+  const query = $("#speechSearch").value.trim().toLowerCase();
+  const context = $("#speechContextFilter").value;
+  const haystack = `${speech.context} ${speech.contextDescription} ${speech.phrase}`.toLowerCase();
+  return (!query || haystack.includes(query)) && (context === "all" || speech.context === context);
+}
+
+function renderSpeechFilters() {
+  const select = $("#speechContextFilter");
+  const selected = select.value || "all";
+  const contexts = [...new Set(speechCache.map(item => item.context))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  select.innerHTML = `<option value="all">Todos os contextos</option>${contexts.map(context => `<option value="${escapeHtml(context)}">${escapeHtml(context)}</option>`).join("")}`;
+  select.value = contexts.includes(selected) ? selected : "all";
+  $("#speechContextOptions").innerHTML = contexts.map(context => `<option value="${escapeHtml(context)}"></option>`).join("");
+}
+
+function renderSpeeches() {
+  const visible = speechCache.filter(speechMatches);
+  $("#speechTotal").textContent = speechCache.length;
+  $("#speechWithAudio").textContent = speechCache.filter(item => item.audioUrl).length;
+  $("#speechActive").textContent = speechCache.filter(item => item.active).length;
+  $("#speechContexts").textContent = new Set(speechCache.map(item => item.context)).size;
+  $("#speechList").innerHTML = visible.length ? visible.map(speech => `<article class="speech-card ${speech.active ? "" : "is-paused"}">
+    <div><div class="speech-card-head"><span class="speech-context">${escapeHtml(speech.context)}</span><span class="speech-audio-state ${speech.audioUrl ? "ready" : ""}">${speech.audioUrl ? "ÁUDIO PRONTO" : "SEM ÁUDIO"}</span></div><h3>${escapeHtml(speech.phrase)}</h3><p>${escapeHtml(speech.contextDescription)}</p></div>
+    <div class="speech-card-actions">${speech.audioUrl ? `<audio controls preload="none" src="${escapeHtml(speech.audioUrl)}"></audio>` : ""}<label class="speech-toggle"><input type="checkbox" data-speech-toggle="${escapeHtml(speech.id)}" ${speech.active ? "checked" : ""}> Ativa</label><button class="tiny" type="button" data-edit-speech="${escapeHtml(speech.id)}">Editar</button></div>
+  </article>`).join("") : '<div class="empty-admin"><b>Nenhuma fala encontrada.</b><br>Ajuste os filtros ou crie uma nova fala.</div>';
+}
+
+async function loadSpeeches() {
+  const payload = await apiFetch("/api/admin-speeches");
+  speechCache = payload.speeches || [];
+  renderSpeechFilters();
+  renderSpeeches();
+}
+
+function openSpeechEditor(id = "") {
+  const speech = speechCache.find(item => item.id === id);
+  $("#speechDialogTitle").textContent = speech ? "Editar fala" : "Nova fala";
+  $("#speechId").value = speech?.id || "";
+  $("#speechContext").value = speech?.context || "";
+  $("#speechDescription").value = speech?.contextDescription || "";
+  $("#speechPhrase").value = speech?.phrase || "";
+  $("#speechEnabled").checked = speech?.active !== false;
+  $("#speechAudio").value = "";
+  $("#speechAudioPreview").hidden = !speech?.audioUrl;
+  $("#speechAudioPreview").src = speech?.audioUrl || "";
+  $("#deleteSpeech").classList.toggle("hidden", !speech);
+  $("#speechEditorStatus").textContent = "";
+  $("#speechDialog").showModal();
+}
+
+async function uploadSpeechAudio(id, file) {
+  const token = await getAccessToken();
+  const response = await fetch(`/api/admin-speeches/audio?id=${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": file.type, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: file
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Não foi possível enviar o áudio.");
+  return payload;
+}
+
+async function saveSpeech() {
+  const button = $("#saveSpeech");
+  const id = $("#speechId").value;
+  const audio = $("#speechAudio").files[0];
+  if (audio && audio.size > 15 * 1024 * 1024) throw new Error("O áudio deve ter no máximo 15 MB.");
+  button.disabled = true;
+  $("#speechEditorStatus").textContent = id ? "Salvando alterações…" : "Criando fala…";
+  try {
+    const payload = await apiFetch("/api/admin-speeches", {
+      method: id ? "PUT" : "POST",
+      body: JSON.stringify({ id, context: $("#speechContext").value, contextDescription: $("#speechDescription").value, phrase: $("#speechPhrase").value, active: $("#speechEnabled").checked })
+    });
+    const speechId = payload.speech.id;
+    if (audio) {
+      $("#speechEditorStatus").textContent = "Enviando áudio…";
+      await uploadSpeechAudio(speechId, audio);
+    }
+    await loadSpeeches();
+    $("#speechEditorStatus").textContent = "Fala salva e publicada.";
+    $("#speechEditorStatus").className = "status success";
+    setTimeout(() => $("#speechDialog").close(), 650);
+  } finally { button.disabled = false; }
+}
+
+async function deleteSpeech(id = $("#speechId").value) {
+  if (!id || !confirm("Excluir esta fala e o áudio enviado?")) return;
+  await apiFetch(`/api/admin-speeches?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  $("#speechDialog").close();
+  await loadSpeeches();
+  setStatus("Fala excluída.", "success");
+}
+
 async function loadSettings() { const settings = await apiFetch("/api/admin-settings"); fill(settings); }
 
 async function openDashboard() {
@@ -167,7 +263,7 @@ async function openDashboard() {
     const account = await apiFetch("/api/me");
     if (account.profile?.role !== "admin") { await client.auth.signOut(); showLogin("Esta conta não possui permissão administrativa."); return; }
     showDashboard();
-    await Promise.all([loadSettings(), loadUsers(), loadPayments()]);
+    await Promise.all([loadSettings(), loadUsers(), loadPayments(), loadSpeeches()]);
     $("#adminForm").classList.remove("hidden");
     setAdminTab(location.hash.replace("#", "") || "overview");
     setStatus("Painel pronto.", "success");
@@ -238,6 +334,34 @@ $("#saveCustomerPassword").addEventListener("click", async () => {
 });
 $("#refreshPayments").addEventListener("click", () => loadPayments().catch(error => setStatus(error.message, "error")));
 $("#paymentStatusFilter").addEventListener("change", renderPayments);
+$("#newSpeech").addEventListener("click", () => openSpeechEditor());
+$("#speechSearch").addEventListener("input", renderSpeeches);
+$("#speechContextFilter").addEventListener("change", renderSpeeches);
+$("#clearSpeechFilters").addEventListener("click", () => { $("#speechSearch").value = ""; $("#speechContextFilter").value = "all"; renderSpeeches(); });
+$("#speechList").addEventListener("click", event => {
+  const button = event.target.closest("[data-edit-speech]");
+  if (button) openSpeechEditor(button.dataset.editSpeech);
+});
+$("#speechList").addEventListener("change", async event => {
+  const toggle = event.target.closest("[data-speech-toggle]");
+  if (!toggle) return;
+  const speech = speechCache.find(item => item.id === toggle.dataset.speechToggle);
+  if (!speech) return;
+  toggle.disabled = true;
+  try {
+    await apiFetch("/api/admin-speeches", { method: "PUT", body: JSON.stringify({ ...speech, active: toggle.checked }) });
+    await loadSpeeches();
+  } catch (error) { toggle.checked = speech.active; setStatus(error.message, "error"); }
+  finally { toggle.disabled = false; }
+});
+$("#speechAudio").addEventListener("change", event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  $("#speechAudioPreview").src = URL.createObjectURL(file);
+  $("#speechAudioPreview").hidden = false;
+});
+$("#saveSpeech").addEventListener("click", () => saveSpeech().catch(error => { $("#speechEditorStatus").textContent = error.message; $("#speechEditorStatus").className = "status error"; }));
+$("#deleteSpeech").addEventListener("click", () => deleteSpeech().catch(error => { $("#speechEditorStatus").textContent = error.message; $("#speechEditorStatus").className = "status error"; }));
 document.querySelectorAll("[data-toggle-secret]").forEach(button => button.addEventListener("click", () => {
   const input = $(`#${button.dataset.toggleSecret}`); input.type = input.type === "password" ? "text" : "password"; button.textContent = input.type === "password" ? "Mostrar" : "Ocultar";
 }));

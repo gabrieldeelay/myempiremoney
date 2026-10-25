@@ -20,6 +20,7 @@ function run(handler) {
 const apiHandlers = {
   "/api/auth": require("./api/auth"),
   "/api/admin-settings": require("./api/admin-settings"),
+  "/api/admin-speeches": require("./api/admin-speeches"),
   "/api/admin-users": require("./api/admin-users"),
   "/api/extension-status": require("./api/extension-status"),
   "/api/me": require("./api/me"),
@@ -29,6 +30,7 @@ const apiHandlers = {
   "/api/payment-status": require("./api/payment-status"),
   "/api/profile": require("./api/profile"),
   "/api/public-config": require("./api/public-config"),
+  "/api/robot-speeches": require("./api/robot-speeches"),
   "/api/trends": require("./api/trends")
 };
 
@@ -42,10 +44,17 @@ app.post(
   run(require("./api/venopag-webhook"))
 );
 
+app.put(
+  "/api/admin-speeches/audio",
+  express.raw({ type: ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg", "audio/mp4", "audio/x-m4a"], limit: "15mb" }),
+  run(require("./api/admin-speeches"))
+);
+
 app.use(express.json({ limit: "1mb" }));
 for (const [route, handler] of Object.entries(apiHandlers)) app.all(route, run(handler));
 
 app.get("/health", (_req, res) => res.status(200).json({ ok: true, service: "atlas" }));
+app.use("/robot-audio", express.static(path.join(__dirname, "storage", "robot-audio"), { index: false, maxAge: "1h", fallthrough: false }));
 app.use(express.static(distRoot, { index: false, maxAge: "5m" }));
 
 app.get("*", (req, res, next) => {

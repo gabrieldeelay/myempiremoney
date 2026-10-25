@@ -72,6 +72,14 @@ const schema = [
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     CONSTRAINT fk_reset_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_reset_expiry (expires_at)
+  ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS robot_speeches (
+    id CHAR(36) PRIMARY KEY, context_key VARCHAR(64) NOT NULL, context_description VARCHAR(255) NOT NULL,
+    phrase TEXT NOT NULL, audio_path VARCHAR(255) NULL, audio_mime VARCHAR(80) NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    INDEX idx_robot_speeches_context (context_key, active)
   ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
 ];
 
@@ -85,6 +93,11 @@ const defaults = {
 };
 for (const [key, value] of Object.entries(defaults)) {
   await db.execute("INSERT IGNORE INTO app_settings (`key`,`value`) VALUES (?,?)", [key, JSON.stringify(value)]);
+}
+
+const { DEFAULT_ROBOT_SPEECHES } = await import("../lib/robot-speech-defaults.js").then(module => module.default || module);
+for (const speech of DEFAULT_ROBOT_SPEECHES) {
+  await db.execute("INSERT IGNORE INTO robot_speeches (id,context_key,context_description,phrase,active) VALUES (?,?,?,?,1)", [speech.id, speech.context, speech.contextDescription, speech.phrase]);
 }
 
 const [admins] = await db.execute("SELECT id FROM users WHERE role='admin' LIMIT 1");
