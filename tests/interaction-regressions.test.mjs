@@ -112,6 +112,7 @@ assert.match(app, /if \(!speech\?\.context \|\| !speech\?\.audioUrl\) continue/,
 assert.match(app, /this\.voiceQueue\.push\(\{ line, audioUrl \}\)/, "novos áudios devem entrar em fila sem cortar o atual");
 assert.match(app, /if \(moves % 3 === 0\)/, "o robô deve reclamar a cada terceira movimentação");
 assert.doesNotMatch(app, /robot\.speak\("dragged", \{ count: moves \}/, "a reclamação não deve dizer quantas vezes o robô foi movido");
+assert.match(app, /dragged:\s*\[(?:[^\]]|\](?!,))*\]/, "o robô deve manter reclamações próprias para quando for movimentado");
 assert.match(app, /"NESTA VELA"/, "a indicação da vela atual deve permanecer curta no design");
 assert.match(app, /"PRÓXIMA VELA"/, "a indicação para a vela seguinte deve continuar evidente");
 assert.doesNotMatch(app, /`TENDÊNCIA DE/, "o indicador principal não deve exibir a palavra tendência");
