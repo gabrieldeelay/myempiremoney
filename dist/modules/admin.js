@@ -12,6 +12,7 @@ let pendingSpeechAudio = null;
 let pendingSpeechAudioUrl = "";
 
 const speechContextLabels = {
+  hello: "Entrada no site",
   waiting: "Aguardando a leitura", noaccess: "Leitura visual desligada", loggedout: "Corretora desconectada",
   connect: "Leitura conectada", asset: "Troca de ativo", buy: "Sinal de compra", sell: "Sinal de venda",
   wait: "Sem entrada segura", timeframe: "Gráfico fora de 5 minutos", expiration: "Expiração fora de 5 minutos",

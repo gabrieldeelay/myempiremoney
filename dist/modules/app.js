@@ -523,6 +523,7 @@ const robot = {
   activeVoiceText: "",
   voiceAudio: null,
   phrases: {
+    hello: ["Calma aí, tô esperando a tela terminar de falar comigo."],
     waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
     noaccess: ["A Hezilex abriu. Agora ative a leitura visual para eu interpretar as velas sem extensão.", "O gráfico está na tela, mas a leitura visual ainda está desligada. Clique em ‘Ativar leitura’ e escolha esta aba.", "Sem extensão, eu leio a imagem da aba. Só falta você autorizar o compartilhamento da tela."],
     loggedout: ["Olha, eu tô vendo um moço fuçando o aplicativo, mas que ainda não fez login. Tá esperando convite?", "Rapaz, você abriu tudo, menos a conta. Sem login eu analiso o quê, a tela laranja?", "Você tá passeando pela Hezilex sem entrar. Bonito turismo financeiro.", "Eu aqui pronto pra analisar e você namorando a tela de login. Sensacional."],
@@ -842,7 +843,7 @@ const robot = {
     this.syncAudioControls();
     restoreRobotPosition();
     await this.loadCatalog();
-    this.speak("waiting", {}, true);
+    this.speak("hello", {}, true);
   },
   toggle() {
     const characterBefore = $("robotCharacter").getBoundingClientRect();

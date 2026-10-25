@@ -107,6 +107,8 @@ assert.match(html, /class="robot-avatar"/, "os controles e o personagem devem fo
 assert.match(styles, /\.robot-controls\s*\{[^}]*display:\s*flex/s, "os controles devem permanecer presos ao personagem");
 assert.doesNotMatch(styles, /\.robot-voice-toggle\s*\{[^}]*position:\s*absolute/s, "o áudio não pode flutuar pelo topo de um balão expandido");
 assert.match(app, /fetch\("\/api\/robot-speeches"/, "o robô deve carregar as falas cadastradas no servidor");
+assert.match(app, /this\.speak\("hello", \{\}, true\)/, "a primeira fala deve usar o áudio configurável de entrada no site");
+assert.match(adminModule, /hello:\s*"Entrada no site"/, "a saudação inicial deve ser identificável no painel de falas");
 assert.doesNotMatch(app, /vozz-piper|speechSynthesis|SpeechSynthesisUtterance|narrator\.falar/, "nenhum narrador automático pode permanecer ativo");
 assert.match(app, /if \(!speech\?\.context \|\| !speech\?\.audioUrl\) continue/, "falas sem áudio não podem ser reproduzidas");
 assert.match(app, /this\.voiceQueue\.push\(\{ line, audioUrl \}\)/, "novos áudios devem entrar em fila sem cortar o atual");
