@@ -253,6 +253,11 @@ assert.match(checkoutPage, /checkout-offer-summary/, "o checkout deve usar o res
 assert.match(checkoutPage, /checkout\.css\?v=3\.4\.0/, "o checkout deve carregar o layout compacto");
 assert.doesNotMatch(checkoutPage, /Escolha o plano|Plano vitalício|Plano mensal/, "o checkout não deve expor modalidades de plano");
 assert.match(adminPage, /data-admin-tab="payments"/, "o painel deve ter uma aba de pagamentos");
+assert.match(adminPage, /class="speech-variable-help"/, "o editor de falas deve explicar as variáveis sem poluir o formulário");
+assert.match(adminPage, /\{asset\}<\/code><b>Ativo atual/, "a variável do ativo deve possuir uma explicação clara");
+assert.match(adminPage, /id="speechModalDrop"/, "o modal deve oferecer uma área grande para arrastar o áudio");
+assert.match(adminModule, /previewSpeechAudio/, "o áudio arrastado deve ser validado e exibido antes de salvar");
+assert.match(adminModule, /speechModalDrop.*addEventListener\("drop"/s, "o modal deve aceitar o arquivo solto diretamente na área de envio");
 assert.match(adminPage, /id="userPasswordDialog"/, "o suporte deve poder redefinir a senha do cliente com segurança");
 assert.match(adminModule, /accessTimeLabel/, "a lista de clientes deve calcular os dias restantes");
 

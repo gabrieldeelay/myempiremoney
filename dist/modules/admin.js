@@ -8,6 +8,8 @@ let settingsCache;
 let userSearchTimer;
 let paymentCache = [];
 let speechCache = [];
+let pendingSpeechAudio = null;
+let pendingSpeechAudioUrl = "";
 
 const speechContextLabels = {
   waiting: "Aguardando a leitura", noaccess: "Leitura visual desligada", loggedout: "Corretora desconectada",
@@ -218,6 +220,12 @@ function openSpeechEditor(id = "") {
   $("#speechPhrase").value = speech?.phrase || "";
   $("#speechEnabled").checked = speech?.active !== false;
   $("#speechAudio").value = "";
+  pendingSpeechAudio = null;
+  if (pendingSpeechAudioUrl) URL.revokeObjectURL(pendingSpeechAudioUrl);
+  pendingSpeechAudioUrl = "";
+  $("#speechAudioName").textContent = speech?.audioUrl ? "Áudio atual enviado" : "Arraste o áudio aqui";
+  $("#speechModalDrop").classList.toggle("has-file", Boolean(speech?.audioUrl));
+  $("#speechModalDrop").classList.remove("drag-over");
   $("#speechAudioPreview").hidden = !speech?.audioUrl;
   $("#speechAudioPreview").src = speech?.audioUrl || "";
   $("#deleteSpeech").classList.toggle("hidden", !speech);
@@ -261,7 +269,7 @@ async function uploadSpeechFromCard(id, file, zone) {
 async function saveSpeech() {
   const button = $("#saveSpeech");
   const id = $("#speechId").value;
-  const audio = $("#speechAudio").files[0];
+  const audio = pendingSpeechAudio || $("#speechAudio").files[0];
   if (audio) validateSpeechAudio(audio);
   button.disabled = true;
   $("#speechEditorStatus").textContent = id ? "Salvando alterações…" : "Criando fala…";
@@ -280,6 +288,21 @@ async function saveSpeech() {
     $("#speechEditorStatus").className = "status success";
     setTimeout(() => $("#speechDialog").close(), 650);
   } finally { button.disabled = false; }
+}
+
+function previewSpeechAudio(file) {
+  if (!file) return;
+  validateSpeechAudio(file);
+  if (pendingSpeechAudioUrl) URL.revokeObjectURL(pendingSpeechAudioUrl);
+  pendingSpeechAudio = file;
+  pendingSpeechAudioUrl = URL.createObjectURL(file);
+  $("#speechAudioName").textContent = file.name;
+  $("#speechModalDrop").classList.add("has-file");
+  $("#speechModalDrop").classList.remove("drag-over");
+  $("#speechAudioPreview").src = pendingSpeechAudioUrl;
+  $("#speechAudioPreview").hidden = false;
+  $("#speechEditorStatus").textContent = "Áudio pronto para ser enviado ao salvar a fala.";
+  $("#speechEditorStatus").className = "status success";
 }
 
 async function deleteSpeech(id = $("#speechId").value) {
@@ -424,10 +447,22 @@ $("#speechList").addEventListener("change", async event => {
   finally { toggle.disabled = false; }
 });
 $("#speechAudio").addEventListener("change", event => {
-  const file = event.target.files[0];
-  if (!file) return;
-  $("#speechAudioPreview").src = URL.createObjectURL(file);
-  $("#speechAudioPreview").hidden = false;
+  try { previewSpeechAudio(event.target.files[0]); }
+  catch (error) { $("#speechEditorStatus").textContent = error.message; $("#speechEditorStatus").className = "status error"; }
+});
+$("#speechModalDrop").addEventListener("dragover", event => {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+  $("#speechModalDrop").classList.add("drag-over");
+});
+$("#speechModalDrop").addEventListener("dragleave", event => {
+  if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.classList.remove("drag-over");
+});
+$("#speechModalDrop").addEventListener("drop", event => {
+  event.preventDefault();
+  $("#speechModalDrop").classList.remove("drag-over");
+  try { previewSpeechAudio(event.dataTransfer.files?.[0]); }
+  catch (error) { $("#speechEditorStatus").textContent = error.message; $("#speechEditorStatus").className = "status error"; }
 });
 $("#saveSpeech").addEventListener("click", () => saveSpeech().catch(error => { $("#speechEditorStatus").textContent = error.message; $("#speechEditorStatus").className = "status error"; }));
 $("#deleteSpeech").addEventListener("click", () => deleteSpeech().catch(error => { $("#speechEditorStatus").textContent = error.message; $("#speechEditorStatus").className = "status error"; }));
