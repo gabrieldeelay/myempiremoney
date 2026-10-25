@@ -13,6 +13,12 @@ const DASHBOARD_SOURCE = "atlas-guard-dashboard";
 const EXTENSION_SOURCE = "atlas-guard-extension";
 const DIRECT_EXTENSION_SOURCE = "atlas-guard-dashboard-extension";
 const $ = id => document.getElementById(id);
+const robotSpeechCatalogPromise = fetch("/api/robot-speeches", { headers: { Accept: "application/json" }, cache: "no-store" })
+  .then(async response => {
+    if (!response.ok) throw new Error("Catálogo de falas indisponível");
+    return response.json();
+  })
+  .catch(() => ({ speeches: [] }));
 
 const frame = $("hezilexFrame");
 const pending = new Map();
@@ -522,6 +528,8 @@ const robot = {
   voiceSpeaking: false,
   activeVoiceText: "",
   voiceAudio: null,
+  audioBlocked: false,
+  preloadedAudio: new Map(),
   phrases: {
     hello: ["Calma aí, tô esperando a tela terminar de falar comigo."],
     waiting: ["Calma aí, tô esperando a tela terminar de falar comigo.", "A Hezilex abriu. Agora falta o gráfico parar de me dar gelo."],
@@ -600,6 +608,7 @@ const robot = {
   },
   unlockSound() {
     if (!this.soundEnabled) return;
+    this.audioBlocked = false;
     this.drainNarration();
   },
   canNarrate() {
@@ -614,7 +623,7 @@ const robot = {
     return true;
   },
   drainNarration() {
-    if (!this.canNarrate() || this.voiceSpeaking || !this.voiceQueue.length) return;
+    if (!this.canNarrate() || this.audioBlocked || this.voiceSpeaking || !this.voiceQueue.length) return;
     const item = this.voiceQueue.shift();
     this.voiceSpeaking = true;
     this.activeVoiceText = item.line;
@@ -633,24 +642,45 @@ const robot = {
       if (this.soundEnabled && this.voiceQueue.length) this.drainNarration();
       else $("robotOverlay").classList.remove("talking");
     };
-    const audio = new Audio(item.audioUrl);
+    const audio = this.preloadedAudio.get(item.audioUrl) || new Audio(item.audioUrl);
+    this.preloadedAudio.delete(item.audioUrl);
     this.voiceAudio = audio;
     audio.volume = .94;
+    audio.currentTime = 0;
     audio.onended = finish;
     audio.onerror = finish;
-    audio.play().catch(finish);
+    audio.play().catch(error => {
+      if (error?.name !== "NotAllowedError") {
+        finish();
+        return;
+      }
+      if (finished) return;
+      finished = true;
+      audio.onended = null;
+      audio.onerror = null;
+      this.voiceAudio = null;
+      this.voiceSpeaking = false;
+      this.activeVoiceText = "";
+      this.audioBlocked = true;
+      if (!this.voiceQueue.some(queued => queued.audioUrl === item.audioUrl)) this.voiceQueue.unshift(item);
+      $("robotOverlay").classList.add("talking");
+    });
   },
   async loadCatalog() {
     try {
-      const response = await fetch("/api/robot-speeches", { headers: { Accept: "application/json" }, cache: "no-store" });
-      if (!response.ok) throw new Error("Catálogo de falas indisponível");
-      const payload = await response.json();
+      const payload = await robotSpeechCatalogPromise;
       this.catalog = new Map();
       for (const speech of payload.speeches || []) {
         if (!speech?.context || !speech?.audioUrl) continue;
         const list = this.catalog.get(speech.context) || [];
         list.push(speech);
         this.catalog.set(speech.context, list);
+      }
+      for (const speech of this.catalog.get("hello") || []) {
+        const audio = new Audio(speech.audioUrl);
+        audio.preload = "auto";
+        audio.load();
+        this.preloadedAudio.set(speech.audioUrl, audio);
       }
     } catch {
       this.catalog = new Map();
@@ -1191,7 +1221,7 @@ $("robotSoundToggle")?.addEventListener("change", event => robot.setSoundEnabled
 addEventListener("pointerdown", () => {
   robot.unlockSound();
   robot.drainNarration();
-}, { capture: true, once: true });
+}, { capture: true });
 $("setupWarnings")?.addEventListener("click", event => {
   const button = event.target.closest("[data-setup-warning-dismiss]");
   if (!button) return;
