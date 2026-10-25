@@ -13,6 +13,12 @@ const DASHBOARD_SOURCE = "atlas-guard-dashboard";
 const EXTENSION_SOURCE = "atlas-guard-extension";
 const DIRECT_EXTENSION_SOURCE = "atlas-guard-dashboard-extension";
 const $ = id => document.getElementById(id);
+const ROBOT_GREETING_AUDIO_PATH = "/robot-audio/00000000-0000-4000-8000-000000000044.mp3";
+const robotGreetingAudio = "Audio" in window ? new Audio(ROBOT_GREETING_AUDIO_PATH) : null;
+if (robotGreetingAudio) {
+  robotGreetingAudio.preload = "auto";
+  robotGreetingAudio.load();
+}
 const robotSpeechCatalogPromise = fetch("/api/robot-speeches", { headers: { Accept: "application/json" }, cache: "no-store" })
   .then(async response => {
     if (!response.ok) throw new Error("Catálogo de falas indisponível");
@@ -676,8 +682,10 @@ const robot = {
         list.push(speech);
         this.catalog.set(speech.context, list);
       }
-      for (const speech of this.catalog.get("hello") || []) {
-        const audio = new Audio(speech.audioUrl);
+      for (const speeches of this.catalog.values()) for (const speech of speeches) {
+        const audio = speech.context === "hello" && robotGreetingAudio
+          ? robotGreetingAudio
+          : new Audio(speech.audioUrl);
         audio.preload = "auto";
         audio.load();
         this.preloadedAudio.set(speech.audioUrl, audio);

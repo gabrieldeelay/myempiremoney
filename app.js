@@ -54,7 +54,7 @@ app.use(express.json({ limit: "1mb" }));
 for (const [route, handler] of Object.entries(apiHandlers)) app.all(route, run(handler));
 
 app.get("/health", (_req, res) => res.status(200).json({ ok: true, service: "atlas" }));
-app.use("/robot-audio", express.static(path.join(__dirname, "storage", "robot-audio"), { index: false, maxAge: "1h", fallthrough: false }));
+app.use("/robot-audio", express.static(path.join(__dirname, "storage", "robot-audio"), { index: false, maxAge: "5m", fallthrough: false }));
 app.use(express.static(distRoot, { index: false, maxAge: "5m" }));
 
 app.get("*", (req, res, next) => {

@@ -113,6 +113,8 @@ assert.match(app, /const robotSpeechCatalogPromise = fetch\("\/api\/robot-speech
 assert.match(app, /this\.audioBlocked = true/, "um bloqueio de reprodução automática não pode descartar a primeira fala");
 assert.match(app, /this\.voiceQueue\.unshift\(item\)/, "a saudação bloqueada deve permanecer na fila até o primeiro toque");
 assert.match(app, /audio\.preload = "auto"/, "o áudio inicial deve ser pré-carregado antes da reprodução");
+assert.match(app, /for \(const speeches of this\.catalog\.values\(\)\) for \(const speech of speeches\)/, "todos os áudios configurados devem ser pré-carregados em paralelo");
+assert.match(html, /rel="preload" href="\/robot-audio\/00000000-0000-4000-8000-000000000044\.mp3" as="audio"/, "o navegador deve iniciar o download da saudação ainda no cabeçalho");
 assert.doesNotMatch(app, /capture: true, once: true/, "a liberação de áudio deve continuar disponível se o primeiro toque ocorrer cedo demais");
 assert.doesNotMatch(app, /vozz-piper|speechSynthesis|SpeechSynthesisUtterance|narrator\.falar/, "nenhum narrador automático pode permanecer ativo");
 assert.match(app, /if \(!speech\?\.context \|\| !speech\?\.audioUrl\) continue/, "falas sem áudio não podem ser reproduzidas");
