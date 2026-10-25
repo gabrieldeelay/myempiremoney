@@ -8,6 +8,7 @@ let settingsCache;
 let userSearchTimer;
 let paymentCache = [];
 let speechCache = [];
+let broadcastCache = [];
 let pendingSpeechAudio = null;
 let pendingSpeechAudioUrl = "";
 
@@ -36,7 +37,7 @@ function accessTimeLabel(user) {
 }
 
 function setAdminTab(tab) {
-  const allowed = ["overview", "clients", "payments", "sales", "content", "speeches", "integrations", "security"];
+  const allowed = ["overview", "clients", "payments", "sales", "content", "signals", "speeches", "integrations", "security"];
   const next = allowed.includes(tab) ? tab : "overview";
   document.querySelectorAll("[data-admin-tab]").forEach(button => button.classList.toggle("active", button.dataset.adminTab === next));
   document.querySelectorAll("[data-admin-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.adminPanel === next));
@@ -316,12 +317,57 @@ async function deleteSpeech(id = $("#speechId").value) {
 
 async function loadSettings() { const settings = await apiFetch("/api/admin-settings"); fill(settings); }
 
+function renderBroadcasts() {
+  const host = $("#broadcastList");
+  if (!host) return;
+  if (!broadcastCache.length) {
+    host.innerHTML = '<div class="empty-admin">Nenhum sinal foi enviado ainda.</div>';
+    return;
+  }
+  host.innerHTML = broadcastCache.map(signal => {
+    const active = signal.status === "active" && new Date(signal.expiresAt).getTime() > Date.now();
+    const direction = signal.direction === "BUY" ? "COMPRA" : "VENDA";
+    const timing = signal.timing === "CURRENT_CANDLE" ? "NESTA VELA" : "PRÓXIMA VELA";
+    const status = active ? "AO VIVO" : signal.status === "cancelled" ? "ENCERRADO" : signal.status === "superseded" ? "SUBSTITUÍDO" : "FINALIZADO";
+    return `<article class="broadcast-row ${signal.direction === "BUY" ? "buy" : "sell"} ${active ? "active" : ""}"><span class="broadcast-direction">${signal.direction === "BUY" ? "↗" : "↘"}</span><div><small>${escapeHtml(signal.asset)}</small><strong>${direction}</strong><p>${timing} · ${signal.confidence}% de confiança</p></div><div class="broadcast-row-meta"><span>${status}</span><time>${dateTimeLabel(signal.createdAt)}</time>${active ? `<button class="tiny danger" type="button" data-cancel-broadcast="${signal.id}">Encerrar</button>` : ""}</div></article>`;
+  }).join("");
+}
+
+async function loadBroadcasts() {
+  const data = await apiFetch("/api/admin-signals");
+  broadcastCache = data.signals || [];
+  renderBroadcasts();
+}
+
+async function sendBroadcastSignal() {
+  const button = $("#sendBroadcastSignal");
+  const asset = $("#broadcastAsset").value;
+  const direction = document.querySelector('input[name="broadcastDirection"]:checked')?.value;
+  const timing = document.querySelector('input[name="broadcastTiming"]:checked')?.value;
+  const confidence = Number($("#broadcastConfidence").value);
+  const label = direction === "BUY" ? "COMPRA" : "VENDA";
+  const moment = timing === "CURRENT_CANDLE" ? "NESTA VELA" : "PRÓXIMA VELA";
+  if (!confirm(`Enviar ${label} · ${moment} para todos que estiverem em ${asset}?`)) return;
+  button.disabled = true;
+  $("#broadcastStatus").textContent = "Transmitindo sinal…";
+  $("#broadcastStatus").className = "status";
+  try {
+    await apiFetch("/api/admin-signals", { method: "POST", body: JSON.stringify({ asset, direction, timing, confidence }) });
+    $("#broadcastStatus").textContent = `${label} enviada para ${asset}. Os usuários receberão o alerta em instantes.`;
+    $("#broadcastStatus").className = "status success";
+    await loadBroadcasts();
+  } catch (error) {
+    $("#broadcastStatus").textContent = error.message;
+    $("#broadcastStatus").className = "status error";
+  } finally { button.disabled = false; }
+}
+
 async function openDashboard() {
   try {
     const account = await apiFetch("/api/me");
     if (account.profile?.role !== "admin") { await client.auth.signOut(); showLogin("Esta conta não possui permissão administrativa."); return; }
     showDashboard();
-    await Promise.all([loadSettings(), loadUsers(), loadPayments(), loadSpeeches()]);
+    await Promise.all([loadSettings(), loadUsers(), loadPayments(), loadSpeeches(), loadBroadcasts()]);
     $("#adminForm").classList.remove("hidden");
     setAdminTab(location.hash.replace("#", "") || "overview");
     setStatus("Painel pronto.", "success");
@@ -359,6 +405,16 @@ $("#couponSave").addEventListener("click", async () => {
   } catch (error) { $("#couponStatus").textContent = error.message; $("#couponStatus").className = "status error"; } finally { button.disabled = false; }
 });
 $("#couponClear").addEventListener("click", clearCoupon);
+$("#broadcastConfidence").addEventListener("input", event => { $("#broadcastConfidenceValue").textContent = `${event.target.value}%`; });
+$("#sendBroadcastSignal").addEventListener("click", () => sendBroadcastSignal());
+$("#refreshBroadcasts").addEventListener("click", () => loadBroadcasts().catch(error => setStatus(error.message, "error")));
+$("#broadcastList").addEventListener("click", async event => {
+  const button = event.target.closest("[data-cancel-broadcast]");
+  if (!button || !confirm("Encerrar este sinal agora?")) return;
+  button.disabled = true;
+  try { await apiFetch(`/api/admin-signals?id=${encodeURIComponent(button.dataset.cancelBroadcast)}`, { method: "DELETE" }); await loadBroadcasts(); }
+  catch (error) { setStatus(error.message, "error"); button.disabled = false; }
+});
 
 document.querySelectorAll("[data-admin-tab]").forEach(button => button.addEventListener("click", () => setAdminTab(button.dataset.adminTab)));
 document.querySelectorAll("[data-switch-tab]").forEach(button => button.addEventListener("click", () => setAdminTab(button.dataset.switchTab)));

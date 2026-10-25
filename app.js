@@ -20,10 +20,12 @@ function run(handler) {
 const apiHandlers = {
   "/api/auth": require("./api/auth"),
   "/api/admin-settings": require("./api/admin-settings"),
+  "/api/admin-signals": require("./api/admin-signals"),
   "/api/admin-speeches": require("./api/admin-speeches"),
   "/api/admin-users": require("./api/admin-users"),
   "/api/extension-status": require("./api/extension-status"),
   "/api/me": require("./api/me"),
+  "/api/manual-signals": require("./api/manual-signals"),
   "/api/news": require("./api/news"),
   "/api/password-reset": require("./api/password-reset"),
   "/api/payment-create": require("./api/payment-create"),

@@ -54,6 +54,10 @@ let lastExtremeAlertSignature = "";
 let activeSignalPane = localStorage.getItem("atlas-active-signal-pane") === "next" ? "next" : "current";
 let signalAlertTimer = null;
 let signalAlertActive = false;
+let activeAdminSignal = null;
+let lastAdminSignalId = "";
+let adminSignalAlertTimer = null;
+let adminSignalPollInFlight = false;
 const signalAlertQueue = [];
 const lastSignalAlertSignature = new Map();
 const lastAutoTabSignalSignature = new Map();
@@ -74,6 +78,79 @@ let state = {
   readingIssue: null,
   assetPending: false
 };
+
+function adminSignalView(signal) {
+  return {
+    direction: String(signal?.direction || "WAIT").toUpperCase(),
+    confidence: Math.round(Number(signal?.confidence) || 95),
+    possible: false,
+    actionable: true,
+    entryConfirmed: true,
+    entryTiming: signal?.timing,
+    signalKind: "admin-broadcast",
+    setup: "ADMIN_BROADCAST",
+    source: "admin-broadcast",
+    heldByCandle: true,
+    reason: "Sinal oficial enviado ao vivo pelo administrador do Atlas.",
+    factors: ["Transmissão manual direcionada especificamente para este ativo.", "O sinal permanece visível até o encerramento da vela configurada."]
+  };
+}
+
+function matchingAdminSignal(asset = state.asset) {
+  if (!activeAdminSignal || new Date(activeAdminSignal.expiresAt).getTime() <= Date.now()) return null;
+  return normalizeAssetName(activeAdminSignal.asset) === normalizeAssetName(asset) ? activeAdminSignal : null;
+}
+
+function hideAdminSignalAlert() {
+  const host = $("adminSignalAlert");
+  if (host) host.hidden = true;
+  document.body.classList.remove("admin-broadcast-buy", "admin-broadcast-sell");
+}
+
+function showAdminSignalAlert(signal) {
+  const host = $("adminSignalAlert");
+  if (!host) return;
+  const buy = signal.direction === "BUY";
+  const timing = signal.timing === "CURRENT_CANDLE" ? "NESTA VELA" : "PRÓXIMA VELA";
+  host.className = `admin-signal-alert ${buy ? "buy" : "sell"}`;
+  $("adminSignalIcon").textContent = buy ? "↗" : "↘";
+  $("adminSignalAsset").textContent = `${signal.asset} · ${timing}`;
+  $("adminSignalLabel").textContent = buy ? "COMPRA" : "VENDA";
+  $("adminSignalDetail").textContent = `${timing}: sinal transmitido ao vivo para todos que estão neste ativo.`;
+  $("adminSignalConfidence").textContent = `${signal.confidence}%`;
+  host.hidden = false;
+  document.body.classList.remove("admin-broadcast-buy", "admin-broadcast-sell");
+  void document.body.offsetWidth;
+  document.body.classList.add(buy ? "admin-broadcast-buy" : "admin-broadcast-sell");
+  clearTimeout(adminSignalAlertTimer);
+  adminSignalAlertTimer = setTimeout(hideAdminSignalAlert, 7600);
+  flashTrade(signal.direction, "critical");
+}
+
+async function pollAdminSignal(force = false) {
+  if (adminSignalPollInFlight || !state.asset) {
+    if (!state.asset && activeAdminSignal) { activeAdminSignal = null; renderSignal(displayedAnalysis || effectiveAnalysis()); }
+    return;
+  }
+  adminSignalPollInFlight = true;
+  const requestedAsset = normalizeAssetName(state.asset);
+  try {
+    const response = await fetch(`/api/manual-signals?asset=${encodeURIComponent(requestedAsset)}`, { cache: "no-store", headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error("Canal de sinais indisponível");
+    const { signal } = await response.json();
+    if (normalizeAssetName(state.asset) !== requestedAsset) return;
+    const changed = (signal?.id || "") !== (activeAdminSignal?.id || "");
+    activeAdminSignal = signal || null;
+    if (changed || force) renderSignal(displayedAnalysis || effectiveAnalysis());
+    if (signal && signal.id !== lastAdminSignalId) {
+      lastAdminSignalId = signal.id;
+      setSignalTab(signal.timing === "NEXT_CANDLE" ? "next" : "current");
+      showAdminSignalAlert(signal);
+    }
+  } catch (_error) {
+    // A análise automática continua funcionando mesmo se o canal ao vivo oscilar.
+  } finally { adminSignalPollInFlight = false; }
+}
 
 function formatRobotMessage(value) {
   const raw = String(value || "").trim();
@@ -328,6 +405,11 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
     current: signalCandleLock.resolve({ asset: signalAsset, pane: "current", cycleKey, view: composedViews.current }),
     next: signalCandleLock.resolve({ asset: signalAsset, pane: "next", cycleKey, view: composedViews.next })
   };
+  const adminSignal = matchingAdminSignal(signalAsset);
+  if (adminSignal) {
+    const pane = adminSignal.timing === "NEXT_CANDLE" ? "next" : "current";
+    views[pane] = adminSignalView(adminSignal);
+  }
   const analysis = {
     ...views.current,
     signalKind: views.current.direction === "WAIT" ? "no-opportunity" : "entry",
@@ -949,6 +1031,10 @@ function renderState(next = {}, source = "extension") {
   const explicitlyPendingAsset = source === "screen" && next.assetPending === true;
   const normalizedAsset = explicitlyPendingAsset ? null : source === "screen" && !nextAsset ? state.asset : nextAsset;
   const assetChanged = Boolean(normalizedAsset && normalizedAsset !== previousAsset);
+  if (assetChanged) {
+    lastAdminSignalId = "";
+    setTimeout(() => pollAdminSignal(true), 0);
+  }
   const cached = assetChanged ? analysisCache.state(normalizedAsset) : null;
   const currentTrend = trendForAsset(normalizedAsset);
   const cachedDirection = cached?.rendered?.direction || cached?.analysis?.direction;
@@ -1249,6 +1335,7 @@ $("signalAlertClose")?.addEventListener("click", () => {
   signalAlertActive = false;
   setTimeout(drainSignalAlerts, 120);
 });
+$("adminSignalAlertClose")?.addEventListener("click", hideAdminSignalAlert);
 
 document.querySelector(".signal-tabs")?.addEventListener("click", event => {
   const tab = event.target.closest("[data-signal-tab]");
@@ -1377,6 +1464,7 @@ function refreshReadingFeedback() {
     : `${direction === "BUY" ? "Compra" : "Venda"} mantida · leitura há ${ageSeconds}s`;
 }
 setInterval(refreshReadingFeedback, 1000);
+setInterval(() => pollAdminSignal(), 1000);
 addEventListener("resize", () => {
   keepRobotInViewport();
 }, { passive: true });

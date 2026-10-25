@@ -80,6 +80,15 @@ const schema = [
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     INDEX idx_robot_speeches_context (context_key, active)
+  ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS manual_signals (
+    id CHAR(36) PRIMARY KEY, asset VARCHAR(40) NOT NULL, direction VARCHAR(8) NOT NULL,
+    timing VARCHAR(24) NOT NULL, confidence INT NOT NULL DEFAULT 95,
+    status VARCHAR(20) NOT NULL DEFAULT 'active', starts_at DATETIME(3) NOT NULL,
+    expires_at DATETIME(3) NOT NULL, created_by CHAR(36) NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    INDEX idx_manual_signal_active (status, expires_at), INDEX idx_manual_signal_asset (asset, status, expires_at)
   ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
 ];
 
