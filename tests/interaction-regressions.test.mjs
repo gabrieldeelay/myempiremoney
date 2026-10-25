@@ -131,6 +131,9 @@ assert.match(app, /Possível reversão para \$\{side\} nesta vela/, "uma revers�
 assert.doesNotMatch(server, /\/api\/tts/, "a voz local não deve depender de uma rota paga no servidor");
 assert.match(adminPage, /data-admin-tab="speeches"/, "o painel deve oferecer a configuração de falas");
 assert.match(adminPage, /id="speechAudio"/, "o administrador deve poder enviar o áudio de cada fala");
+assert.match(adminModule, /data-speech-drop/, "cada cartão de fala deve aceitar áudio sem abrir a edição");
+assert.match(adminModule, /addEventListener\("drop"/, "o painel deve aceitar arquivos arrastados para a fala");
+assert.doesNotMatch(adminPage, /Frase exata/, "o editor não deve usar um rótulo ambíguo para o texto da fala");
 assert.match(speechApi, /storage.*robot-audio/s, "os áudios devem ser persistidos fora dos arquivos públicos da aplicação");
 assert.doesNotMatch(adminPage, /Google Cloud Text-to-Speech|speechApiKey|speechVoice|Azure|Antonio|Antônio/i, "o painel não deve conservar integrações de voz pagas");
 assert.doesNotMatch(adminModule, /speechChanged|speechApiKey|speechVoice/, "o painel não deve tentar salvar credenciais de voz");

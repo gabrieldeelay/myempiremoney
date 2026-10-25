@@ -9,6 +9,16 @@ let userSearchTimer;
 let paymentCache = [];
 let speechCache = [];
 
+const speechContextLabels = {
+  waiting: "Aguardando a leitura", noaccess: "Leitura visual desligada", loggedout: "Corretora desconectada",
+  connect: "Leitura conectada", asset: "Troca de ativo", buy: "Sinal de compra", sell: "Sinal de venda",
+  wait: "Sem entrada segura", timeframe: "Gráfico fora de 5 minutos", expiration: "Expiração fora de 5 minutos",
+  risk: "Alerta de risco", all: "Configuração completa", reversalBuy: "Possível reversão para compra",
+  reversalSell: "Possível reversão para venda", dragged: "Personagem movimentado", win: "Operação positiva",
+  loss: "Operação negativa", exposureDanger: "Exposição perigosa", protectionReady: "Proteção no ponto"
+};
+const speechContextLabel = context => speechContextLabels[context] || context;
+
 const statusLabel = status => ({ active: "ATIVO", blocked: "BLOQUEADO", pending: "PENDENTE" })[status] || "PENDENTE";
 const dateLabel = value => value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(value)) : "—";
 const dateTimeLabel = value => value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "—";
@@ -172,9 +182,12 @@ function renderSpeechFilters() {
   const select = $("#speechContextFilter");
   const selected = select.value || "all";
   const contexts = [...new Set(speechCache.map(item => item.context))].sort((a, b) => a.localeCompare(b, "pt-BR"));
-  select.innerHTML = `<option value="all">Todos os contextos</option>${contexts.map(context => `<option value="${escapeHtml(context)}">${escapeHtml(context)}</option>`).join("")}`;
+  select.innerHTML = `<option value="all">Todos os acontecimentos</option>${contexts.map(context => `<option value="${escapeHtml(context)}">${escapeHtml(speechContextLabel(context))}</option>`).join("")}`;
   select.value = contexts.includes(selected) ? selected : "all";
-  $("#speechContextOptions").innerHTML = contexts.map(context => `<option value="${escapeHtml(context)}"></option>`).join("");
+  const editor = $("#speechContext");
+  const editorSelected = editor.value;
+  editor.innerHTML = contexts.map(context => `<option value="${escapeHtml(context)}">${escapeHtml(speechContextLabel(context))}</option>`).join("");
+  if (contexts.includes(editorSelected)) editor.value = editorSelected;
 }
 
 function renderSpeeches() {
@@ -184,8 +197,8 @@ function renderSpeeches() {
   $("#speechActive").textContent = speechCache.filter(item => item.active).length;
   $("#speechContexts").textContent = new Set(speechCache.map(item => item.context)).size;
   $("#speechList").innerHTML = visible.length ? visible.map(speech => `<article class="speech-card ${speech.active ? "" : "is-paused"}">
-    <div><div class="speech-card-head"><span class="speech-context">${escapeHtml(speech.context)}</span><span class="speech-audio-state ${speech.audioUrl ? "ready" : ""}">${speech.audioUrl ? "ÁUDIO PRONTO" : "SEM ÁUDIO"}</span></div><h3>${escapeHtml(speech.phrase)}</h3><p>${escapeHtml(speech.contextDescription)}</p></div>
-    <div class="speech-card-actions">${speech.audioUrl ? `<audio controls preload="none" src="${escapeHtml(speech.audioUrl)}"></audio>` : ""}<label class="speech-toggle"><input type="checkbox" data-speech-toggle="${escapeHtml(speech.id)}" ${speech.active ? "checked" : ""}> Ativa</label><button class="tiny" type="button" data-edit-speech="${escapeHtml(speech.id)}">Editar</button></div>
+    <div class="speech-card-copy"><div class="speech-card-head"><span class="speech-context" title="Acontecimento que dispara esta fala">${escapeHtml(speechContextLabel(speech.context))}</span><span class="speech-audio-state ${speech.audioUrl ? "ready" : ""}">${speech.audioUrl ? "ÁUDIO PRONTO" : "SEM ÁUDIO"}</span></div><h3>${escapeHtml(speech.phrase)}</h3><p><b>Quando acontece:</b> ${escapeHtml(speech.contextDescription)}</p>${speech.audioUrl ? `<audio controls preload="none" src="${escapeHtml(speech.audioUrl)}"></audio>` : ""}</div>
+    <div class="speech-card-actions"><label class="speech-drop-zone ${speech.audioUrl ? "has-audio" : ""}" data-speech-drop="${escapeHtml(speech.id)}" tabindex="0" role="button" aria-label="${speech.audioUrl ? "Trocar" : "Enviar"} áudio da fala"><input type="file" data-speech-file="${escapeHtml(speech.id)}" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a" hidden><span class="speech-drop-icon">⇧</span><span><b>${speech.audioUrl ? "Trocar áudio" : "Arraste o áudio aqui"}</b><small>${speech.audioUrl ? "Solte um novo arquivo ou clique" : "ou clique para escolher"}</small></span></label><div class="speech-card-controls"><label class="speech-toggle"><input type="checkbox" data-speech-toggle="${escapeHtml(speech.id)}" ${speech.active ? "checked" : ""}> Ativa</label><button class="tiny" type="button" data-edit-speech="${escapeHtml(speech.id)}">Editar texto e contexto</button></div></div>
   </article>`).join("") : '<div class="empty-admin"><b>Nenhuma fala encontrada.</b><br>Ajuste os filtros ou crie uma nova fala.</div>';
 }
 
@@ -200,7 +213,7 @@ function openSpeechEditor(id = "") {
   const speech = speechCache.find(item => item.id === id);
   $("#speechDialogTitle").textContent = speech ? "Editar fala" : "Nova fala";
   $("#speechId").value = speech?.id || "";
-  $("#speechContext").value = speech?.context || "";
+  $("#speechContext").value = speech?.context || "waiting";
   $("#speechDescription").value = speech?.contextDescription || "";
   $("#speechPhrase").value = speech?.phrase || "";
   $("#speechEnabled").checked = speech?.active !== false;
@@ -224,11 +237,32 @@ async function uploadSpeechAudio(id, file) {
   return payload;
 }
 
+function validateSpeechAudio(file) {
+  if (!file) throw new Error("Escolha um arquivo de áudio.");
+  if (!/^(audio\/(mpeg|mp3|wav|x-wav|ogg|mp4|x-m4a))$/i.test(file.type)) throw new Error("Use um arquivo MP3, WAV, OGG ou M4A.");
+  if (file.size > 15 * 1024 * 1024) throw new Error("O áudio deve ter no máximo 15 MB.");
+}
+
+async function uploadSpeechFromCard(id, file, zone) {
+  validateSpeechAudio(file);
+  zone.classList.add("uploading");
+  zone.querySelector("b").textContent = "Enviando áudio…";
+  try {
+    await uploadSpeechAudio(id, file);
+    await loadSpeeches();
+    setStatus("Áudio enviado e publicado com sucesso.", "success");
+  } catch (error) {
+    zone.classList.remove("uploading");
+    setStatus(error.message, "error");
+    throw error;
+  }
+}
+
 async function saveSpeech() {
   const button = $("#saveSpeech");
   const id = $("#speechId").value;
   const audio = $("#speechAudio").files[0];
-  if (audio && audio.size > 15 * 1024 * 1024) throw new Error("O áudio deve ter no máximo 15 MB.");
+  if (audio) validateSpeechAudio(audio);
   button.disabled = true;
   $("#speechEditorStatus").textContent = id ? "Salvando alterações…" : "Criando fala…";
   try {
@@ -339,10 +373,45 @@ $("#speechSearch").addEventListener("input", renderSpeeches);
 $("#speechContextFilter").addEventListener("change", renderSpeeches);
 $("#clearSpeechFilters").addEventListener("click", () => { $("#speechSearch").value = ""; $("#speechContextFilter").value = "all"; renderSpeeches(); });
 $("#speechList").addEventListener("click", event => {
+  if (event.target.closest("[data-speech-file]")) return;
+  const zone = event.target.closest("[data-speech-drop]");
+  if (zone) {
+    event.preventDefault();
+    zone.querySelector("[data-speech-file]")?.click();
+    return;
+  }
   const button = event.target.closest("[data-edit-speech]");
   if (button) openSpeechEditor(button.dataset.editSpeech);
 });
+$("#speechList").addEventListener("keydown", event => {
+  const zone = event.target.closest("[data-speech-drop]");
+  if (zone && ["Enter", " "].includes(event.key)) { event.preventDefault(); zone.querySelector("[data-speech-file]")?.click(); }
+});
+$("#speechList").addEventListener("dragover", event => {
+  const zone = event.target.closest("[data-speech-drop]");
+  if (!zone) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+  zone.classList.add("drag-over");
+});
+$("#speechList").addEventListener("dragleave", event => {
+  const zone = event.target.closest("[data-speech-drop]");
+  if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove("drag-over");
+});
+$("#speechList").addEventListener("drop", event => {
+  const zone = event.target.closest("[data-speech-drop]");
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.remove("drag-over");
+  uploadSpeechFromCard(zone.dataset.speechDrop, event.dataTransfer.files?.[0], zone).catch(() => {});
+});
 $("#speechList").addEventListener("change", async event => {
+  const fileInput = event.target.closest("[data-speech-file]");
+  if (fileInput) {
+    const zone = fileInput.closest("[data-speech-drop]");
+    await uploadSpeechFromCard(fileInput.dataset.speechFile, fileInput.files?.[0], zone).catch(() => {});
+    return;
+  }
   const toggle = event.target.closest("[data-speech-toggle]");
   if (!toggle) return;
   const speech = speechCache.find(item => item.id === toggle.dataset.speechToggle);
