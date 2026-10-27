@@ -7,6 +7,7 @@ import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
 import { createSaoPauloCandleClock, saoPauloFiveMinuteCycle, signalEffectTone } from "./candle-cycle.js?v=3.13.0";
 import { composeDualSignalViews, signalLabel } from "./dual-signal.js?v=3.16.1";
 import { createSignalCandleLock } from "./signal-candle-lock.js?v=3.16.0";
+import { keepManualSignalAfterPoll, manualSignalIsActive, shouldReleaseManualSignal } from "./manual-signal-priority.js?v=3.19.1";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";
 const DASHBOARD_SOURCE = "atlas-guard-dashboard";
@@ -114,17 +115,18 @@ function adminSignalWaitingView(signal) {
 }
 
 function matchingAdminSignal(asset = state.asset) {
-  if (!activeAdminSignal || Number(activeAdminSignal.clientExpiresAtMs || 0) <= Date.now()) return null;
+  if (!manualSignalIsActive(activeAdminSignal)) return null;
   return normalizeAssetName(activeAdminSignal.asset) === normalizeAssetName(asset) ? activeAdminSignal : null;
 }
 
-function clearAdminSignal(signalId = "") {
-  if (signalId && activeAdminSignal?.id !== signalId) return;
+function clearAdminSignal(signalId = "", { force = false } = {}) {
+  if (!shouldReleaseManualSignal(activeAdminSignal, { signalId, force })) return false;
   clearTimeout(adminSignalExpiryTimer);
   adminSignalExpiryTimer = null;
   const hadSignal = Boolean(activeAdminSignal);
   activeAdminSignal = null;
   if (hadSignal) renderSignal(displayedAnalysis || effectiveAnalysis());
+  return hadSignal;
 }
 
 function activateAdminSignal(signal, { announce = true } = {}) {
@@ -172,7 +174,6 @@ function showAdminSignalAlert(signal) {
 
 async function pollAdminSignal(force = false) {
   if (adminSignalPollInFlight || !state.asset) {
-    if (!state.asset && activeAdminSignal) { activeAdminSignal = null; renderSignal(displayedAnalysis || effectiveAnalysis()); }
     return;
   }
   adminSignalPollInFlight = true;
@@ -183,6 +184,10 @@ async function pollAdminSignal(force = false) {
     const { signal } = await response.json();
     if (normalizeAssetName(state.asset) !== requestedAsset) return;
     if (signal) activateAdminSignal(signal, { announce: true });
+    else if (keepManualSignalAfterPoll(activeAdminSignal, { asset: requestedAsset, normalize: normalizeAssetName })) {
+      // Uma consulta vazia ou atrasada nunca derruba uma transmissão já recebida.
+      // O lacre só termina no fechamento local da vela ou quando chega outro sinal manual.
+    }
     else if (activeAdminSignal && normalizeAssetName(activeAdminSignal.asset) === requestedAsset) clearAdminSignal(activeAdminSignal.id);
     else if (force) renderSignal(displayedAnalysis || effectiveAnalysis());
   } catch (_error) {
@@ -1491,7 +1496,7 @@ setSignalTab(activeSignalPane);
 const candleClock = createSaoPauloCandleClock({
   onCycle: cycle => {
     const manual = matchingAdminSignal(state.asset);
-    if (manual) clearAdminSignal(manual.id);
+    if (manual) clearAdminSignal(manual.id, { force: true });
     else triggerSignalVisual(currentSignalTone, "cycle", cycle);
   }
 });

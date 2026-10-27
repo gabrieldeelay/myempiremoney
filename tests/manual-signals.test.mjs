@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import fs from "node:fs";
+import {
+  keepManualSignalAfterPoll,
+  manualSignalIsActive,
+  shouldReleaseManualSignal
+} from "../dist/modules/manual-signal-priority.js";
 
 const require = createRequire(import.meta.url);
 const { createManualSignal, normalizeSignalAsset, signalWindow } = require("../lib/manual-signals.js");
@@ -59,4 +64,38 @@ test("a transmissão criada já retorna o tempo restante para entrega imediata",
   assert.equal(signal.remainingMs, 120000);
   assert.match(calls[1].sql, /300 - MOD/);
   assert.deepEqual(calls[1].params.slice(1, 5), ["LITECOIN", "SELL", "CURRENT_CANDLE", 95]);
+});
+
+test("uma resposta vazia do servidor não derruba um sinal manual antes do fechamento", () => {
+  const now = Date.parse("2026-10-27T15:02:00.000Z");
+  const signal = {
+    id: "signal-fixed",
+    asset: "BITCOIN",
+    direction: "SELL",
+    clientExpiresAtMs: Date.parse("2026-10-27T15:05:00.000Z")
+  };
+  assert.equal(manualSignalIsActive(signal, now), true);
+  assert.equal(keepManualSignalAfterPoll(signal, { asset: "BITCOIN", now }), true);
+  assert.equal(shouldReleaseManualSignal(signal, { signalId: signal.id, now }), false);
+});
+
+test("o lacre manual só libera no fim da vela ou por liberação forçada", () => {
+  const signal = {
+    id: "signal-fixed",
+    asset: "BITCOIN",
+    clientExpiresAtMs: Date.parse("2026-10-27T15:05:00.000Z")
+  };
+  assert.equal(shouldReleaseManualSignal(signal, {
+    signalId: signal.id,
+    now: Date.parse("2026-10-27T15:04:59.999Z")
+  }), false);
+  assert.equal(shouldReleaseManualSignal(signal, {
+    signalId: signal.id,
+    now: Date.parse("2026-10-27T15:05:00.000Z")
+  }), true);
+  assert.equal(shouldReleaseManualSignal(signal, {
+    signalId: signal.id,
+    force: true,
+    now: Date.parse("2026-10-27T15:04:00.000Z")
+  }), true);
 });
