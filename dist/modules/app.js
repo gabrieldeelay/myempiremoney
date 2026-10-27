@@ -58,6 +58,8 @@ let activeAdminSignal = null;
 let lastAdminSignalId = "";
 let adminSignalAlertTimer = null;
 let adminSignalPollInFlight = false;
+let adminSignalExpiryTimer = null;
+const adminSignalChannel = "BroadcastChannel" in window ? new BroadcastChannel("atlas-manual-signals") : null;
 const signalAlertQueue = [];
 const lastSignalAlertSignature = new Map();
 const lastAutoTabSignalSignature = new Map();
@@ -112,8 +114,34 @@ function adminSignalWaitingView(signal) {
 }
 
 function matchingAdminSignal(asset = state.asset) {
-  if (!activeAdminSignal || new Date(activeAdminSignal.expiresAt).getTime() <= Date.now()) return null;
+  if (!activeAdminSignal || Number(activeAdminSignal.clientExpiresAtMs || 0) <= Date.now()) return null;
   return normalizeAssetName(activeAdminSignal.asset) === normalizeAssetName(asset) ? activeAdminSignal : null;
+}
+
+function clearAdminSignal(signalId = "") {
+  if (signalId && activeAdminSignal?.id !== signalId) return;
+  clearTimeout(adminSignalExpiryTimer);
+  adminSignalExpiryTimer = null;
+  const hadSignal = Boolean(activeAdminSignal);
+  activeAdminSignal = null;
+  if (hadSignal) renderSignal(displayedAnalysis || effectiveAnalysis());
+}
+
+function activateAdminSignal(signal, { announce = true } = {}) {
+  if (!signal?.id || normalizeAssetName(signal.asset) !== normalizeAssetName(state.asset)) return false;
+  const remainingMs = Math.max(0, Number(signal.remainingMs) || 0);
+  if (remainingMs <= 0) return false;
+  const changed = signal.id !== activeAdminSignal?.id;
+  activeAdminSignal = { ...signal, clientExpiresAtMs: Date.now() + remainingMs };
+  clearTimeout(adminSignalExpiryTimer);
+  adminSignalExpiryTimer = setTimeout(() => clearAdminSignal(signal.id), remainingMs + 20);
+  if (changed) renderSignal(displayedAnalysis || effectiveAnalysis());
+  if (announce && signal.id !== lastAdminSignalId) {
+    lastAdminSignalId = signal.id;
+    setSignalTab(signal.timing === "NEXT_CANDLE" ? "next" : "current");
+    showAdminSignalAlert(signal);
+  }
+  return changed;
 }
 
 function hideAdminSignalAlert() {
@@ -154,14 +182,9 @@ async function pollAdminSignal(force = false) {
     if (!response.ok) throw new Error("Canal de sinais indisponível");
     const { signal } = await response.json();
     if (normalizeAssetName(state.asset) !== requestedAsset) return;
-    const changed = (signal?.id || "") !== (activeAdminSignal?.id || "");
-    activeAdminSignal = signal || null;
-    if (changed || force) renderSignal(displayedAnalysis || effectiveAnalysis());
-    if (signal && signal.id !== lastAdminSignalId) {
-      lastAdminSignalId = signal.id;
-      setSignalTab(signal.timing === "NEXT_CANDLE" ? "next" : "current");
-      showAdminSignalAlert(signal);
-    }
+    if (signal) activateAdminSignal(signal, { announce: true });
+    else if (activeAdminSignal && normalizeAssetName(activeAdminSignal.asset) === requestedAsset) clearAdminSignal(activeAdminSignal.id);
+    else if (force) renderSignal(displayedAnalysis || effectiveAnalysis());
   } catch (_error) {
     // A análise automática continua funcionando mesmo se o canal ao vivo oscilar.
   } finally { adminSignalPollInFlight = false; }
@@ -557,9 +580,16 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
   updateSignalTab("current", currentTabView);
   updateSignalTab("next", views.next);
   autoSelectSignalTab({ current: currentTabView, next: views.next }, cycleKey);
-  queueSignalAlert("current", currentTabView, cycleKey);
-  queueSignalAlert("next", views.next, cycleKey);
-  if (views.setupVerified) showExtremeMovementAlert(views.current);
+  if (adminSignal) {
+    signalAlertQueue.length = 0;
+    $("signalAlert").hidden = true;
+    $("extremeAlert").hidden = true;
+    signalAlertActive = false;
+  } else {
+    queueSignalAlert("current", currentTabView, cycleKey);
+    queueSignalAlert("next", views.next, cycleKey);
+    if (views.setupVerified) showExtremeMovementAlert(views.current);
+  }
 }
 
 function renderSetupWarnings(force = false) {
@@ -1154,6 +1184,8 @@ function renderState(next = {}, source = "extension") {
   const renewedSameDirection = displayedAnalysis?.entryOpportunityRenewed === true
     && displayedAnalysis.direction === previousDirection
     && ["BUY", "SELL"].includes(displayedAnalysis.direction);
+  const manualOverride = matchingAdminSignal(state.asset);
+  if (manualOverride) pulse.textContent = `Sinal oficial mantido em ${manualOverride.asset}`;
   if (newOperation && state.manualOperation.outcome === "OPEN") {
     flashTrade(state.manualOperation.direction, state.manualOperation.exposure?.severity);
   }
@@ -1163,6 +1195,7 @@ function renderState(next = {}, source = "extension") {
     showToast(`Proteção no ponto em ${state.uiEvent.asset}: ${state.uiEvent.direction === "SELL" ? "VENDA" : "COMPRA"}${Number.isFinite(amount) ? ` de ${formatMoney(amount)}` : ""}.`, "success", 8000);
   }
   else if (newOperation) robot.commentOnOperation(state.manualOperation);
+  else if (manualOverride) return;
   else if (newIntracandleReversal) {
     const side = displayedAnalysis.direction === "BUY" ? "COMPRA" : "VENDA";
     showToast(`Possível reversão para ${side} nesta vela. Aguarde o melhor ponto de entrada.`, "info", 8000);
@@ -1441,11 +1474,26 @@ addEventListener("pointermove", event => {
   });
 }, { passive: true });
 
+function receiveAdminSignalMessage(payload) {
+  const signal = payload?.signal;
+  if (signal) activateAdminSignal(signal, { announce: true });
+}
+
+adminSignalChannel?.addEventListener("message", event => receiveAdminSignalMessage(event.data));
+addEventListener("storage", event => {
+  if (event.key !== "atlas-manual-signal-event" || !event.newValue) return;
+  try { receiveAdminSignalMessage(JSON.parse(event.newValue)); } catch (_error) {}
+});
+
 robot.init();
 renderConnection(false);
 setSignalTab(activeSignalPane);
 const candleClock = createSaoPauloCandleClock({
-  onCycle: cycle => triggerSignalVisual(currentSignalTone, "cycle", cycle)
+  onCycle: cycle => {
+    const manual = matchingAdminSignal(state.asset);
+    if (manual) clearAdminSignal(manual.id);
+    else triggerSignalVisual(currentSignalTone, "cycle", cycle);
+  }
 });
 candleClock.start();
 document.addEventListener("visibilitychange", () => {
@@ -1481,7 +1529,7 @@ function refreshReadingFeedback() {
     : `${direction === "BUY" ? "Compra" : "Venda"} mantida · leitura há ${ageSeconds}s`;
 }
 setInterval(refreshReadingFeedback, 1000);
-setInterval(() => pollAdminSignal(), 1000);
+setInterval(() => pollAdminSignal(), 500);
 addEventListener("resize", () => {
   keepRobotInViewport();
 }, { passive: true });

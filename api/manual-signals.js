@@ -10,6 +10,6 @@ module.exports = async function handler(req, res) {
     const asset = normalizeSignalAsset(req.query?.asset);
     if (!asset) return res.status(200).json({ signal: null });
     res.set("Cache-Control", "no-store, max-age=0");
-    return res.status(200).json({ signal: await getActiveManualSignal(db, asset) });
+    return res.status(200).json({ signal: await getActiveManualSignal(db, asset), serverNow: Date.now() });
   } catch (error) { return sendError(res, error); }
 };

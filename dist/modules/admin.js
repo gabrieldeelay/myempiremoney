@@ -352,7 +352,14 @@ async function sendBroadcastSignal() {
   $("#broadcastStatus").textContent = "Transmitindo sinal…";
   $("#broadcastStatus").className = "status";
   try {
-    await apiFetch("/api/admin-signals", { method: "POST", body: JSON.stringify({ asset, direction, timing, confidence }) });
+    const { signal } = await apiFetch("/api/admin-signals", { method: "POST", body: JSON.stringify({ asset, direction, timing, confidence }) });
+    const eventPayload = JSON.stringify({ signal, sentAt: Date.now() });
+    localStorage.setItem("atlas-manual-signal-event", eventPayload);
+    if ("BroadcastChannel" in window) {
+      const channel = new BroadcastChannel("atlas-manual-signals");
+      channel.postMessage({ signal, sentAt: Date.now() });
+      channel.close();
+    }
     $("#broadcastStatus").textContent = `${label} enviada para ${asset}. Os usuários receberão o alerta em instantes.`;
     $("#broadcastStatus").className = "status success";
     await loadBroadcasts();
