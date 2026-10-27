@@ -91,7 +91,7 @@ test("reinicia a confirmação quando o ativo muda", () => {
   assert.equal(filter.update(buy, "ETHEREUM").direction, "WAIT");
 });
 
-test("mostra possível reversão quando a direção confirmada fica esticada", () => {
+test("ignora possível reversão oposta depois que a direção foi confirmada na vela", () => {
   let clock = 0;
   const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
   assert.equal(filter.update({ direction: "SELL", confidence: 82 }, "LITECOIN").direction, "SELL");
@@ -105,10 +105,9 @@ test("mostra possível reversão quando a direção confirmada fica esticada", (
     technical: { lastCandle: { centerX: 181, width: 12 } },
     reason: "queda esticada"
   }, "LITECOIN");
-  assert.equal(blocked.direction, "WAIT");
-  assert.equal(blocked.reversalDirection, "BUY");
-  assert.equal(blocked.setup, "STRETCHED_CANDLE");
-  assert.equal(blocked.observationHeld, true);
+  assert.equal(blocked.direction, "SELL");
+  assert.equal(blocked.candleLocked, true);
+  assert.equal(blocked.reversalDirection, undefined);
 });
 
 test("mantém a direção confirmada mesmo quando leituras seguintes voltam para aguardar", () => {
@@ -192,7 +191,7 @@ test("encerra a observação quando uma nova vela substitui a hipótese anterior
   assert.equal(nextCandle.confidence, 0);
 });
 
-test("uma compra confirmada pode alertar possível venda sem oscilar para aguardar", () => {
+test("uma compra confirmada não muda de opinião dentro da mesma vela", () => {
   let clock = 60000;
   const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
   const buy = { direction: "BUY", confidence: 82, technical: { lastCandle: { centerX: 180, width: 12 } } };
@@ -201,9 +200,8 @@ test("uma compra confirmada pode alertar possível venda sem oscilar para aguard
 
   clock = 120000;
   const held = filter.update(sellReversal, "BITCOIN");
-  assert.equal(held.direction, "WAIT");
-  assert.equal(held.reversalDirection, "SELL");
-  assert.equal(held.setup, "STRETCHED_CANDLE");
+  assert.equal(held.direction, "BUY");
+  assert.equal(held.candleLocked, true);
 
   clock = 300100;
   assert.equal(filter.update(sellReversal, "BITCOIN").direction, "BUY");
@@ -211,7 +209,7 @@ test("uma compra confirmada pode alertar possível venda sem oscilar para aguard
   assert.equal(filter.update(sellReversal, "BITCOIN").direction, "SELL");
 });
 
-test("uma venda confirmada exibe possível compra na queda esticada da mesma vela", () => {
+test("uma venda confirmada não publica possível compra na mesma vela", () => {
   let clock = 60000;
   const filter = createSignalStabilizer({ now: () => clock, initialConfirmMs: 0, initialHits: 1 });
   const sell = { direction: "SELL", confidence: 82, technical: { lastCandle: { centerX: 180, width: 12 } } };
@@ -226,16 +224,13 @@ test("uma venda confirmada exibe possível compra na queda esticada da mesma vel
     reversalDirection: "BUY",
     technical: { lastCandle: { centerX: 181, width: 12 } }
   }, "EUR/USD");
-  assert.equal(stretched.direction, "WAIT");
-  assert.equal(stretched.reversalDirection, "BUY");
-  assert.equal(stretched.setup, "STRETCHED_CANDLE");
-  assert.equal(stretched.entryTiming, "CURRENT_CANDLE");
+  assert.equal(stretched.direction, "SELL");
+  assert.equal(stretched.candleLocked, true);
 
   clock = 121000;
   const held = filter.update({ direction: "WAIT", confidence: 0, technical: { lastCandle: { centerX: 182, width: 12 } } }, "EUR/USD");
-  assert.equal(held.direction, "WAIT");
-  assert.equal(held.reversalDirection, "BUY");
-  assert.equal(held.observationHeld, true);
+  assert.equal(held.direction, "SELL");
+  assert.equal(held.candleLocked, true);
 });
 
 test("mantém possível compra até o fim da vela antes de aceitar sem oportunidade", () => {

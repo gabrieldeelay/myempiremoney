@@ -216,8 +216,9 @@ assert.match(analysisPolicy, /A direção só é publicada quando o servidor cen
 assert.match(app, /createSignalStabilizer\(\{ initialConfirmMs: 0, initialHits: 1 \}\)/, "o primeiro sinal central deve aparecer sem atraso");
 assert.doesNotMatch(app, /identifiedAnalysis\.source === "market-radar-5m"/, "o radar central não pode contornar o bloqueio por vela");
 assert.match(signalStability, /analysis\.signalKind === "no-opportunity"/, "sem oportunidade só deve substituir um sinal após o fechamento da vela");
-assert.match(signalStability, /const oppositeStretch = \["STRETCHED_CANDLE", "INTRACANDLE_REVERSAL"\]/, "uma vela extrema deve abrir possível compra ou venda mesmo durante o cooldown");
-assert.match(signalStability, /Possível \$\{reversalDirection === "BUY" \? "compra" : "venda"\} nesta vela/, "a reversão intravela deve explicar o novo alerta sem confirmar entrada cedo demais");
+assert.match(signalStability, /return \{ \.\.\.stable, stability: "stable", transition: null, candleLocked: true \}/, "depois de publicado, o primeiro sinal deve permanecer absoluto até o fim da vela");
+assert.doesNotMatch(signalStability, /const oppositeStretch = \["STRETCHED_CANDLE", "INTRACANDLE_REVERSAL"\]/, "uma reversão momentânea não pode contradizer um sinal já publicado na mesma vela");
+assert.match(app, /spokenSignalLock\.accept/, "a fala do robô também deve respeitar a primeira direção publicada na vela");
 assert.match(signalStability, /minimumSignalConfidence = options\.minimumSignalConfidence \?\? 50/, "o estabilizador deve aceitar possíveis sinais a partir de cinquenta por cento");
 assert.match(html, /id="currentCandleTitle">NESTA VELA</, "o painel deve reservar uma análise própria para a vela atual");
 assert.match(html, /id="nextCandleTitle">PRÓXIMA VELA</, "o painel deve reservar uma análise própria para a próxima vela");

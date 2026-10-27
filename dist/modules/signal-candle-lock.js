@@ -47,3 +47,31 @@ export function createSignalCandleLock() {
 
   return { resolve, clear };
 }
+
+const spokenDirection = context => {
+  if (["buy", "reversalBuy"].includes(context)) return "BUY";
+  if (["sell", "reversalSell"].includes(context)) return "SELL";
+  return "";
+};
+
+export function createSpokenSignalLock() {
+  const locked = new Map();
+
+  function accept({ asset = "", cycleKey = "", context = "" } = {}) {
+    const normalizedAsset = String(asset || "").trim().toUpperCase();
+    const direction = spokenDirection(context);
+    if (!normalizedAsset || !cycleKey || !direction) return true;
+
+    const previous = locked.get(normalizedAsset);
+    if (previous?.cycleKey === cycleKey && previous.direction !== direction) return false;
+    locked.set(normalizedAsset, { cycleKey, direction });
+    return true;
+  }
+
+  function direction(asset = "", cycleKey = "") {
+    const current = locked.get(String(asset || "").trim().toUpperCase());
+    return current?.cycleKey === cycleKey ? current.direction : "";
+  }
+
+  return { accept, direction };
+}
