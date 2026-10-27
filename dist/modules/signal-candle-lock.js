@@ -6,7 +6,7 @@ export function createSignalCandleLock() {
   const locked = new Map();
 
   function resolve({ asset = "", pane = "current", cycleKey = "", view = {} } = {}) {
-    const key = `${String(asset).toUpperCase()}|${pane}`;
+    const key = String(asset).trim().toUpperCase();
     const direction = String(view.direction || "WAIT").toUpperCase();
     const previous = locked.get(key);
 
@@ -18,30 +18,48 @@ export function createSignalCandleLock() {
         return { ...view };
       }
       const first = { ...view, direction };
-      locked.set(key, { cycleKey, view: first });
+      locked.set(key, { cycleKey, direction, views: new Map([[pane, first]]) });
       return first;
     }
 
-    if (!directional(view) || direction !== previous.view.direction) {
-      return { ...previous.view, heldByCandle: true };
+    const paneView = previous.views.get(pane);
+
+    if (!directional(view)) {
+      return paneView ? { ...paneView, heldByCandle: true } : { ...view };
+    }
+
+    if (direction !== previous.direction) {
+      if (paneView) return { ...paneView, heldByCandle: true };
+      return {
+        ...view,
+        direction: "WAIT",
+        confidence: 0,
+        possible: false,
+        actionable: false,
+        entryConfirmed: false,
+        signalKind: "direction-locked",
+        heldByCandle: true,
+        suppressedDirection: direction,
+        reason: `A direção desta vela já foi fixada em ${previous.direction === "BUY" ? "COMPRA" : "VENDA"}. A leitura oposta foi descartada.`
+      };
     }
 
     const upgraded = {
-      ...previous.view,
+      ...(paneView || {}),
       ...view,
       direction,
-      confidence: Math.max(Number(previous.view.confidence) || 0, Number(view.confidence) || 0),
-      possible: previous.view.possible === false || view.possible === false ? false : Boolean(view.possible),
+      confidence: Math.max(Number(paneView?.confidence) || 0, Number(view.confidence) || 0),
+      possible: paneView?.possible === false || view.possible === false ? false : Boolean(view.possible),
       heldByCandle: false
     };
-    locked.set(key, { cycleKey, view: upgraded });
+    previous.views.set(pane, upgraded);
     return upgraded;
   }
 
   function clear(asset = "") {
-    const normalized = String(asset).toUpperCase();
+    const normalized = String(asset).trim().toUpperCase();
     for (const key of locked.keys()) {
-      if (!normalized || key.startsWith(`${normalized}|`)) locked.delete(key);
+      if (!normalized || key === normalized) locked.delete(key);
     }
   }
 
