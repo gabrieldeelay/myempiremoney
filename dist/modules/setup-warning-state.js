@@ -65,22 +65,34 @@ export function createMinuteReadingStabilizer(options = {}) {
   return { update, reset };
 }
 
-export function createSetupWarningTracker() {
-  let currentAsset = "";
-  const dismissed = new Set();
+export function createSetupWarningTracker(options = {}) {
+  const storage = options.storage ?? (typeof window !== "undefined" ? window.sessionStorage : null);
+  const storageKey = options.storageKey || "atlas-setup-warning-shown-v1";
+  let shownWithoutStorage = false;
+  let active = null;
+
+  function wasShownInThisTab() {
+    try { return storage ? storage.getItem(storageKey) === "1" : shownWithoutStorage; }
+    catch { return shownWithoutStorage; }
+  }
+
+  function rememberShownInThisTab() {
+    shownWithoutStorage = true;
+    try { storage?.setItem(storageKey, "1"); }
+    catch { /* A memória local do rastreador ainda evita repetições. */ }
+  }
 
   function update({ asset, timeframe, expiration } = {}) {
     const normalizedAsset = String(asset || "").trim().toUpperCase();
-    if (normalizedAsset !== currentAsset) {
-      currentAsset = normalizedAsset;
-      dismissed.clear();
+    if (!normalizedAsset) {
+      active = null;
+      return [];
     }
-    if (!currentAsset) return [];
 
     const issues = [];
     const timeframeMinutes = minuteValue(timeframe);
     const expirationMinutes = minuteValue(expiration);
-    if (timeframeMinutes != null && timeframeMinutes !== 5 && !dismissed.has("timeframe")) {
+    if (timeframeMinutes != null && timeframeMinutes !== 5) {
       issues.push({
         id: "timeframe",
         title: "Ajuste o gráfico",
@@ -88,7 +100,7 @@ export function createSetupWarningTracker() {
         detail: `O gráfico está em ${timeframeMinutes}m. O Atlas usa velas de cinco minutos para manter a leitura consistente.`
       });
     }
-    if (expirationMinutes != null && expirationMinutes !== 5 && !dismissed.has("expiration")) {
+    if (expirationMinutes != null && expirationMinutes !== 5) {
       issues.push({
         id: "expiration",
         title: "Ajuste a expiração",
@@ -96,12 +108,29 @@ export function createSetupWarningTracker() {
         detail: `A expiração está em ${expirationMinutes} minuto${expirationMinutes === 1 ? "" : "s"}. Ela deve acompanhar o gráfico em 5M.`
       });
     }
-    return issues;
+    if (active) {
+      if (active.asset !== normalizedAsset) {
+        active = null;
+        return [];
+      }
+      const current = issues.find(issue => issue.id === active.issue.id);
+      if (!current) {
+        active = null;
+        return [];
+      }
+      active.issue = current;
+      return [current];
+    }
+
+    if (wasShownInThisTab() || issues.length === 0) return [];
+    active = { asset: normalizedAsset, issue: issues[0] };
+    rememberShownInThisTab();
+    return [issues[0]];
   }
 
-  function dismiss(id, asset) {
-    if (String(asset || "").trim().toUpperCase() !== currentAsset) return;
-    if (["timeframe", "expiration"].includes(id)) dismissed.add(id);
+  function dismiss(id) {
+    if (!active || active.issue.id !== id) return;
+    active = null;
   }
 
   return { update, dismiss };

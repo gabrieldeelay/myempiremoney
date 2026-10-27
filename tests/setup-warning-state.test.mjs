@@ -67,7 +67,7 @@ test("a expiração exige três leituras iguais para não transformar o contador
 test("avisa quando gráfico e expiração não estão em cinco minutos", () => {
   const tracker = createSetupWarningTracker();
   const issues = tracker.update({ asset: "BITCOIN", timeframe: "1m", expiration: "1 min" });
-  assert.deepEqual(issues.map(issue => issue.id), ["timeframe", "expiration"]);
+  assert.deepEqual(issues.map(issue => issue.id), ["timeframe"], "a aba deve exibir somente um cartão de ajuste");
   assert.equal(tracker.update({ asset: "BITCOIN", timeframe: "5m", expiration: "5 min" }).length, 0);
 });
 
@@ -77,7 +77,7 @@ test("avisa sobre o gráfico mesmo quando a expiração ainda não foi reconheci
   assert.deepEqual(issues.map(issue => issue.id), ["timeframe"]);
 });
 
-test("vou mudar silencia o aviso somente durante a visita atual ao ativo", () => {
+test("depois de fechado o aviso não reaparece ao trocar de ativo", () => {
   const tracker = createSetupWarningTracker();
   const wrong = { timeframe: "1m", expiration: "5 min" };
   tracker.update({ asset: "BITCOIN", ...wrong });
@@ -86,5 +86,28 @@ test("vou mudar silencia o aviso somente durante a visita atual ao ativo", () =>
 
   tracker.update({ asset: "LITECOIN", ...wrong });
   const returned = tracker.update({ asset: "BITCOIN", ...wrong });
-  assert.deepEqual(returned.map(issue => issue.id), ["timeframe"]);
+  assert.equal(returned.length, 0);
+});
+
+test("o aviso continua silenciado após recarregar a mesma aba", () => {
+  const values = new Map();
+  const storage = {
+    getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value))
+  };
+  const wrong = { asset: "BNB", timeframe: "1m", expiration: "5 min" };
+  const firstLoad = createSetupWarningTracker({ storage });
+  assert.equal(firstLoad.update(wrong).length, 1);
+  const reloaded = createSetupWarningTracker({ storage });
+  assert.equal(reloaded.update(wrong).length, 0);
+});
+
+test("uma nova aba pode exibir novamente o lembrete", () => {
+  const wrong = { asset: "BNB", timeframe: "1m", expiration: "5 min" };
+  const storageForNewTab = () => {
+    const values = new Map();
+    return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)) };
+  };
+  assert.equal(createSetupWarningTracker({ storage: storageForNewTab() }).update(wrong).length, 1);
+  assert.equal(createSetupWarningTracker({ storage: storageForNewTab() }).update(wrong).length, 1);
 });

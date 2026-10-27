@@ -243,7 +243,7 @@ assert.match(app, /SINAL PARA PRÓXIMA VELA/, "uma leitura direcional ainda não
 assert.doesNotMatch(app, /state\.readingIssue/, "falhas transitórias da leitura não devem ocupar a área de avisos");
 assert.doesNotMatch(html, />Tendências</, "a aba de tendências não deve mais aparecer na interface");
 assert.doesNotMatch(insights, /trend-row/, "ativos do radar central não devem mais ser exibidos como uma lista clicável");
-assert.match(app, /setupWarningTracker\.dismiss/, "o botão Vou mudar deve silenciar o aviso na visita atual ao ativo");
+assert.match(app, /setupWarningTracker\.dismiss/, "o botão Vou mudar deve silenciar o único aviso da aba");
 assert.match(app, /atlas:screen-state/, "o robô deve receber o estado produzido pela leitura visual");
 assert.match(landing, /Operar no escuro/, "a raiz deve apresentar a nova chamada do Atlas");
 assert.doesNotMatch(landing, /id="oldPrice"|id="currentPrice"/, "a landing não deve revelar preços");
