@@ -27,6 +27,9 @@ test("reconhece o ativo mesmo com erro comum do OCR", () => {
   assert.equal(fuzzyMatchAsset("8N8"), "BNB");
   assert.equal(fuzzyMatchAsset("BN8"), "BNB");
   assert.equal(fuzzyMatchAsset("BMB"), "BNB");
+  // OCR output reproduced from the user's selected BNB tab on 30 October.
+  assert.equal(fuzzyMatchAsset("WF BME"), "BNB");
+  assert.equal(fuzzyMatchAsset("BNE"), "BNB");
   assert.equal(fuzzyMatchAsset("XP1"), "XPL");
   assert.equal(fuzzyMatchAsset("XPI"), "XPL");
 });

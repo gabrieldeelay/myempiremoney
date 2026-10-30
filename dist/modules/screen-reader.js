@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.20.0";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.21.0";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.19.4";
 import { isDeadlineError, withDeadline } from "./async-watchdog.js?v=3.19.5";
 
@@ -23,10 +23,15 @@ let worker = null;
 let workerPromise = null;
 let workerGeneration = 0;
 let processing = false;
+let textProcessing = false;
 let inspectionEpoch = 0;
 let lastCompletedInspectionAt = 0;
+let lastTextInspectionAt = 0;
+let lastVisualAnalysis = null;
+let missingTabFrames = 0;
 let ocrBusy = false;
 let analysisTimer = null;
+let videoFrameHandle = null;
 let lastAsset = null;
 let lastOcrAt = 0;
 let lastTabCenter = null;
@@ -77,19 +82,13 @@ function balanceFromText(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function analyzeCandles() {
-  if (!context || !canvas.width || !canvas.height) return null;
-  const frame = context.getImageData(0, 0, canvas.width, canvas.height);
-  return analyzeChartPixels(frame.data, canvas.width, canvas.height);
-}
-
 function prepareOcrCrop(tab, textOnly = false) {
   // `tab.y` is the blue underline, not the top of the tab. Keep the crop inside
   // the selected tab so nearby labels (for example APPLE in the asset list) can
   // never replace the selected ticker.
   const cropTop = Math.max(0, Math.round(tab.y - tab.height * .82));
-  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * (textOnly ? .12 : .02)));
-  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * (textOnly ? .86 : .97)));
+  const cropLeft = Math.max(0, Math.round(tab.x + tab.width * (textOnly ? .30 : .02)));
+  const cropWidth = Math.min(canvas.width - cropLeft, Math.round(tab.width * (textOnly ? .66 : .97)));
   const cropHeight = Math.min(canvas.height - cropTop, Math.round(tab.height * .68));
   const scale = 4;
   const source = document.createElement("canvas");
@@ -256,7 +255,7 @@ async function readVisibleText(activeTab, force = false) {
     }, OCR_JOB_TIMEOUT_MS, "Leitura do ativo");
     let text = result?.data?.text || "";
     let asset = fuzzyMatchAsset(text);
-    if (!asset || ["BNB", "XPL", "XRP"].includes(asset)) {
+    if (!asset) {
       prepareOcrCrop(activeTab, true);
       const fallbackResult = await withDeadline(async () => {
         await reader.setParameters({
@@ -274,7 +273,7 @@ async function readVisibleText(activeTab, force = false) {
     }
     missedAssetReads = asset ? 0 : missedAssetReads + 1;
     return {
-      asset: asset || lastAsset,
+      asset,
       recognizedAsset: asset,
       balance: balanceFromText(text),
       activeTabDetected: true
@@ -288,10 +287,88 @@ async function readVisibleText(activeTab, force = false) {
   }
 }
 
-async function inspectFrame() {
+function publishFrameState(activeTab, analysis = null, visible = {}) {
+  const readingAge = Date.now() - captureStartedAt;
+  const readingIssue = readingAge < READING_ISSUE_AFTER_MS
+    ? null
+    : !activeTab
+      ? "Não consegui localizar a aba ativa da Hezilex. Deixe a área das abas visível."
+      : !lastAsset
+        ? "Não consegui confirmar o nome do ativo. A leitura continua tentando, sem reutilizar outro ativo."
+        : missedChartReads >= 8
+          ? `Reconheci ${lastAsset}, mas não consegui interpretar as velas do gráfico.`
+          : null;
+  window.dispatchEvent(new CustomEvent("atlas:screen-state", {
+    detail: {
+      version: "visual-1.1",
+      bridge: "screen-capture",
+      monitoring: true,
+      asset: lastAsset,
+      assetPending: !lastAsset,
+      assetRevision,
+      timeframe: lastTimeframe,
+      expiration: lastExpiration,
+      timeframeChecked: Boolean(lastTimeframe),
+      expirationChecked: Boolean(lastExpiration),
+      setupChecked: Boolean(lastTimeframe && lastExpiration),
+      ...(visible.balance != null ? { balance: visible.balance, balanceConfidence: "visual" } : {}),
+      chartDetected: Boolean(analysis?.chartDetected),
+      readingIssue,
+      readingHealth: {
+        activeTab: Boolean(activeTab),
+        asset: Boolean(lastAsset),
+        chart: Boolean(analysis?.chartDetected),
+        timeframe: Boolean(lastTimeframe),
+        expiration: Boolean(lastExpiration)
+      },
+      analysis: analysis || { direction: "WAIT", confidence: 0,
+        reason: lastAsset ? "Não consegui interpretar as velas desta imagem." : "Identificando o ativo selecionado.",
+        source: "screen-capture" },
+      lastInspectionAt: new Date().toISOString()
+    }
+  }));
+}
+
+async function inspectText(activeTab, epoch) {
+  if (textProcessing || !activeTab || !stream) return;
+  textProcessing = true;
+  lastTextInspectionAt = Date.now();
+  try {
+    // OCR runs separately from the video loop. A slow worker must never stop
+    // current-candle updates while it recognizes the asset and setup labels.
+    const visible = await readVisibleText(activeTab, !lastAsset);
+    if (epoch !== inspectionEpoch || !stream) return;
+    if (visible.recognizedAsset && visible.recognizedAsset !== lastAsset) {
+      lastAsset = visible.recognizedAsset;
+      assetRevision += 1;
+      missedAssetReads = 0;
+      reversalTracker.reset();
+      resetSetupReadings();
+      publishFrameState(activeTab, reversalTracker.update(lastVisualAnalysis, lastAsset), visible);
+    } else if (!visible.recognizedAsset && missedAssetReads >= 3 && lastAsset) {
+      // A ticker that cannot be re-read cannot retain another asset's signal.
+      lastAsset = null;
+      assetRevision += 1;
+      reversalTracker.reset();
+      resetSetupReadings();
+      publishFrameState(activeTab);
+    }
+    await readSetupValue("timeframe", activeTab);
+    if (epoch !== inspectionEpoch || !stream) return;
+    await readSetupValue("expiration", activeTab);
+    if (epoch !== inspectionEpoch || !stream) return;
+    const analysis = lastAsset ? reversalTracker.update(lastVisualAnalysis, lastAsset) : null;
+    publishFrameState(activeTab, analysis, visible);
+  } catch (error) {
+    if (epoch === inspectionEpoch) console.warn("Atlas text inspection", error);
+  } finally {
+    textProcessing = false;
+  }
+}
+
+function inspectFrame() {
   if (!stream || processing || !video.videoWidth || !context) return;
   processing = true;
-  const epoch = inspectionEpoch;
   try {
     const targetWidth = Math.min(1920, video.videoWidth);
     const targetHeight = Math.round(video.videoHeight * (targetWidth / video.videoWidth));
@@ -300,118 +377,64 @@ async function inspectFrame() {
       canvas.height = targetHeight;
     }
     context.drawImage(video, 0, 0, targetWidth, targetHeight);
-    const rawAnalysis = analyzeCandles();
     const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+    lastVisualAnalysis = analyzeChartPixels(frame.data, canvas.width, canvas.height);
     const activeTab = findActiveTabRect(frame.data, canvas.width, canvas.height);
     const tabCenter = activeTab ? activeTab.x + activeTab.width / 2 : null;
     const tabMoved = tabCenter != null && lastTabCenter != null
       && Math.abs(tabCenter - lastTabCenter) > Math.max(18, canvas.width * .025);
-    if (tabCenter != null) lastTabCenter = tabCenter;
-    if (tabMoved) {
-      missedAssetReads = 0;
+    if (tabCenter != null) {
+      lastTabCenter = tabCenter;
+      missingTabFrames = 0;
+    } else {
+      missingTabFrames += 1;
+    }
+    if (tabMoved || missingTabFrames === 3 && lastAsset) {
+      inspectionEpoch += 1;
       lastAsset = null;
+      missedAssetReads = 0;
       assetRevision += 1;
       reversalTracker.reset();
       resetSetupReadings();
-      window.dispatchEvent(new CustomEvent("atlas:screen-state", {
-        detail: {
-          bridge: "screen-capture",
-          monitoring: true,
-          asset: null,
-          assetPending: true,
-          assetRevision,
-          timeframe: null,
-          expiration: null,
-          chartDetected: false,
-          analysis: { direction: "WAIT", confidence: 0, reason: "Identificando o ativo selecionado.", source: "screen-capture" },
-          lastInspectionAt: new Date().toISOString()
-        }
-      }));
+      publishFrameState(activeTab);
     }
-    // Timeframe comes first: a visible 1m must be detected before the heavier
-    // asset/expiration work, especially just after switching tabs.
-    const timeframe = await readSetupValue("timeframe", activeTab);
-    if (epoch !== inspectionEpoch) return;
-    const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
-    if (epoch !== inspectionEpoch) return;
-    const detectedNewAsset = Boolean(visible.recognizedAsset && visible.recognizedAsset !== lastAsset);
-    if (detectedNewAsset) {
-      if (!tabMoved) assetRevision += 1;
-      reversalTracker.reset();
-      resetSetupReadings();
-    }
-    if ("asset" in visible) lastAsset = visible.asset;
-    if (detectedNewAsset) {
-      window.dispatchEvent(new CustomEvent("atlas:screen-state", {
-        detail: {
-          bridge: "screen-capture",
-          monitoring: true,
-          asset: lastAsset,
-          assetPending: false,
-          assetRevision,
-          timeframe: null,
-          expiration: null,
-          chartDetected: Boolean(rawAnalysis?.chartDetected),
-          readingIssue: null,
-          analysis: rawAnalysis || { direction: "WAIT", confidence: 0, source: "screen-capture" },
-          lastInspectionAt: new Date().toISOString()
-        }
-      }));
-    }
-    const expiration = await readSetupValue("expiration", activeTab);
-    if (epoch !== inspectionEpoch) return;
-    const setup = { timeframe, expiration };
-    const analysis = lastAsset ? reversalTracker.update(rawAnalysis, lastAsset) : null;
+    const analysis = lastAsset ? reversalTracker.update(lastVisualAnalysis, lastAsset) : null;
     missedChartReads = analysis?.chartDetected ? 0 : missedChartReads + 1;
-    const readingAge = Date.now() - captureStartedAt;
-    const readingIssue = readingAge < READING_ISSUE_AFTER_MS
-      ? null
-      : !activeTab
-        ? "Não consegui localizar a aba ativa da Hezilex. Deixe a área das abas visível."
-        : !lastAsset || missedAssetReads >= 4
-          ? "Não consegui confirmar o nome do ativo. O Atlas continuará tentando sem trocar a análise atual."
-          : missedChartReads >= 8
-            ? `Reconheci ${lastAsset}, mas não consegui interpretar as velas do gráfico.`
-            : (!setup.timeframe || !setup.expiration) && readingAge >= 9000
-              ? "Não consegui confirmar o tempo do gráfico e da expiração. Verifique se os controles estão visíveis."
-              : null;
-    window.dispatchEvent(new CustomEvent("atlas:screen-state", {
-      detail: {
-        version: "visual-1.0",
-        bridge: "screen-capture",
-        monitoring: true,
-        asset: lastAsset,
-        assetPending: !lastAsset,
-        assetRevision,
-        timeframe: setup.timeframe,
-        expiration: setup.expiration,
-        timeframeChecked: Boolean(setup.timeframe),
-        expirationChecked: Boolean(setup.expiration),
-        setupChecked: Boolean(setup.timeframe && setup.expiration),
-        balance: visible.balance,
-        balanceConfidence: visible.balance != null ? "visual" : null,
-        chartDetected: Boolean(analysis?.chartDetected),
-        readingIssue,
-        readingHealth: {
-          activeTab: Boolean(activeTab),
-          asset: Boolean(lastAsset),
-          chart: Boolean(analysis?.chartDetected),
-          timeframe: Boolean(setup.timeframe),
-          expiration: Boolean(setup.expiration)
-        },
-        analysis: analysis || { direction: "WAIT", confidence: 0, reason: lastAsset ? "Preparando a leitura visual." : "Identificando o ativo selecionado.", source: "screen-capture" },
-        lastInspectionAt: new Date().toISOString()
-      }
-    }));
+    publishFrameState(activeTab, analysis);
     lastCompletedInspectionAt = Date.now();
     setStatus(analysis?.chartDetected ? "Leitura visual ao vivo" : "Procurando o gráfico…", analysis?.chartDetected ? "connected" : "waiting");
+    if (activeTab && !textProcessing && Date.now() - lastTextInspectionAt >= 400) {
+      void inspectText(activeTab, inspectionEpoch);
+    }
   } catch (error) {
-    if (epoch !== inspectionEpoch) return;
     console.warn("Atlas frame inspection", error);
     setStatus("Recuperando a análise ao vivo…", "waiting");
   } finally {
-    if (epoch === inspectionEpoch) processing = false;
+    processing = false;
   }
+}
+
+function startFrameLoop() {
+  if (!stream) return;
+  if (typeof video.requestVideoFrameCallback === "function") {
+    const onFrame = () => {
+      if (!stream) return;
+      inspectFrame();
+      videoFrameHandle = video.requestVideoFrameCallback(onFrame);
+    };
+    videoFrameHandle = video.requestVideoFrameCallback(onFrame);
+  } else {
+    analysisTimer = setInterval(inspectFrame, 125);
+  }
+}
+
+function stopFrameLoop() {
+  if (videoFrameHandle != null && typeof video.cancelVideoFrameCallback === "function") {
+    video.cancelVideoFrameCallback(videoFrameHandle);
+  }
+  videoFrameHandle = null;
+  clearInterval(analysisTimer);
+  analysisTimer = null;
 }
 
 function recoverStalledReader() {
@@ -438,8 +461,7 @@ function recoverStalledReader() {
 async function stopReading(reason = "Leitura visual desativada") {
   inspectionEpoch += 1;
   processing = false;
-  clearInterval(analysisTimer);
-  analysisTimer = null;
+  stopFrameLoop();
   stream?.getTracks().forEach(track => track.stop());
   stream = null;
   video.srcObject = null;
@@ -448,6 +470,12 @@ async function stopReading(reason = "Leitura visual desativada") {
   lastCompletedInspectionAt = 0;
   missedChartReads = 0;
   missedAssetReads = 0;
+  lastAsset = null;
+  lastVisualAnalysis = null;
+  lastTabCenter = null;
+  missingTabFrames = 0;
+  lastTextInspectionAt = 0;
+  resetSetupReadings();
   showActivationPrompt(true);
   setStatus(reason, "");
   setButtons("Ativar leitura da tela");
@@ -481,14 +509,16 @@ async function startReading() {
     missedChartReads = 0;
     lastOcrAt = 0;
     lastSetupOcrAt = { timeframe: 0, expiration: 0 };
+    lastTextInspectionAt = 0;
+    missingTabFrames = 0;
     showActivationPrompt(false);
     stream.getVideoTracks()[0]?.addEventListener("ended", () => stopReading("Compartilhamento encerrado"), { once: true });
     stream.getVideoTracks()[0]?.addEventListener("unmute", () => inspectFrame());
     setButtons("Encerrar leitura");
     setStatus("Iniciando leitura visual…", "waiting");
     window.dispatchEvent(new CustomEvent("atlas:screen-started"));
-    await inspectFrame();
-    analysisTimer = setInterval(inspectFrame, 850);
+    inspectFrame();
+    startFrameLoop();
   } catch (error) {
     stream = null;
     showActivationPrompt(true);

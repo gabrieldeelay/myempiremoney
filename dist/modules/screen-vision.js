@@ -49,7 +49,9 @@ export function fuzzyMatchAsset(value = "") {
   const rawText = String(value).toUpperCase();
   const rawTokens = rawText.split(/[^A-Z0-9]+/).filter(token => token.length >= 3);
   for (const token of rawTokens) {
-    if (/^[8B][NMH][8B]$/.test(token) || /^(?:BN8|8NB|BMB)$/.test(token)) return "BNB";
+    // The tiny BNB label is routinely read as BME/BNE in a real Hezilex tab.
+    // Match only whole three-character tokens from the selected tab crop.
+    if (/^[8B][NMH][8B]$/.test(token) || /^(?:BN8|8NB|BMB|BME|BNE)$/.test(token)) return "BNB";
     if (/^XP(?:L|I|1)$/.test(token)) return "XPL";
   }
   const text = rawText.replace(/[|]/g, "I");

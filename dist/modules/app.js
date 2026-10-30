@@ -463,7 +463,7 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
     timeframe: state.timeframe,
     expiration: state.expiration
   });
-  const signalAsset = state.asset || centralAnalysis?.previewAsset || selectedRadarAsset || "";
+  const signalAsset = state.assetPending ? "" : state.asset || centralAnalysis?.previewAsset || selectedRadarAsset || "";
   const cycleKey = saoPauloFiveMinuteCycle().key;
   const views = {
     ...composedViews,
@@ -1437,6 +1437,7 @@ addEventListener("atlas:trends", event => {
   marketTrends = Array.isArray(event.detail?.items) ? event.detail.items : [];
   radarUpdatedAt = event.detail?.updatedAt || new Date().toISOString();
   marketTrends.forEach(item => analysisCache.rememberTrend(item.asset, item, radarUpdatedAt));
+  if (state.monitoring && state.assetPending) return;
   const preferredAsset = state.asset
     || selectedRadarAsset
     || normalizeAssetName(analysisCache.lastAsset())
