@@ -84,6 +84,37 @@ test("sequência ascendente resulta em compra", () => {
   assert.equal(result.entryTiming, "CURRENT_CANDLE");
 });
 
+test("a vela em formação continua visível quando o gráfico ocupa a borda direita da captura", () => {
+  const image = frame(320, 200);
+  paint(image, 120, 109, 130, 128, [13, 199, 144]);
+  paint(image, 180, 94, 190, 115, [13, 199, 144]);
+  paint(image, 240, 79, 250, 100, [13, 199, 144]);
+  paint(image, 300, 64, 310, 86, [13, 199, 144]);
+  const result = analyzeChartPixels(image.data, image.width, image.height);
+  assert.equal(result.technical.lastCandle.centerX, 305);
+  assert.equal(result.direction, "BUY");
+  assert.equal(result.entryTiming, "CURRENT_CANDLE");
+});
+
+test("uma vela ainda pequena pode mostrar possível compra nesta vela quando a sequência já confirma a direção", () => {
+  const bodies = Array.from({ length: 6 }, (_, index) => ({
+    direction: "BUY", centerX: 70 + index * 22, width: 12,
+    y0: 110 - index * 6, y1: 110 - index * 6 + (index === 5 ? 9 : 19),
+    height: index === 5 ? 10 : 20, upperWick: 0, lowerWick: 0
+  }));
+  const early = classifyCandleSequence(bodies);
+  assert.equal(early.direction, "BUY");
+  assert.equal(early.entryTiming, "CURRENT_CANDLE");
+  assert.equal(early.setup, "EARLY_CONTINUATION");
+  assert.ok(early.confidence >= 50 && early.confidence < 70);
+
+  bodies[5].height = 15;
+  bodies[5].y1 = bodies[5].y0 + 14;
+  const confirmed = classifyCandleSequence(bodies);
+  assert.equal(confirmed.entryTiming, "CURRENT_CANDLE");
+  assert.ok(confirmed.confidence >= 70);
+});
+
 test("um pavio de rejeição em suporte pode gerar leitura preliminar nesta vela", () => {
   const image = frame(320, 200);
   paint(image, 90, 98, 100, 118, [13, 199, 144]);

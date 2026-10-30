@@ -28,14 +28,12 @@ test("não troca a direção confirmada no meio da mesma vela", () => {
   assert.equal(held.possible, true);
 });
 
-test("as abas nesta vela e próxima vela compartilham uma única direção", () => {
+test("cada aba preserva sua direção porque descreve um momento diferente", () => {
   const lock = createSignalCandleLock();
   const current = lock.resolve({ asset: "BITCOIN", pane: "current", cycleKey: "10:00", view: { direction: "BUY", confidence: 73, possible: false } });
   const next = lock.resolve({ asset: "BITCOIN", pane: "next", cycleKey: "10:00", view: { direction: "SELL", confidence: 82, possible: false } });
   assert.equal(current.direction, "BUY");
-  assert.equal(next.direction, "WAIT");
-  assert.equal(next.suppressedDirection, "SELL");
-  assert.equal(next.heldByCandle, true);
+  assert.equal(next.direction, "SELL");
 });
 
 test("a outra aba pode publicar um sinal quando ele mantém a direção já fixada", () => {
@@ -46,14 +44,13 @@ test("a outra aba pode publicar um sinal quando ele mantém a direção já fixa
   assert.equal(next.confidence, 78);
 });
 
-test("se a próxima vela publicar primeiro, a aba atual não pode contradizer", () => {
+test("a previsão da próxima vela não bloqueia uma reversão confirmada nesta vela", () => {
   const lock = createSignalCandleLock();
   lock.resolve({ asset: "ETHEREUM", pane: "current", cycleKey: "10:00", view: { direction: "WAIT", confidence: 0 } });
   const next = lock.resolve({ asset: "ETHEREUM", pane: "next", cycleKey: "10:00", view: { direction: "SELL", confidence: 74 } });
   const current = lock.resolve({ asset: "ETHEREUM", pane: "current", cycleKey: "10:00", view: { direction: "BUY", confidence: 88 } });
   assert.equal(next.direction, "SELL");
-  assert.equal(current.direction, "WAIT");
-  assert.equal(current.suppressedDirection, "BUY");
+  assert.equal(current.direction, "BUY");
 });
 
 test("libera uma nova leitura no início da próxima vela", () => {

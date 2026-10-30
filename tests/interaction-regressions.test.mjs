@@ -167,7 +167,7 @@ assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
 assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desaparecer automaticamente quando a leitura começar");
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
-assert.match(screenReader, /screen-vision\.js\?v=3\.21\.0/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
+assert.match(screenReader, /screen-vision\.js\?v=3\.22\.0/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.14\.0/, "o painel deve carregar o alerta de reversão sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");

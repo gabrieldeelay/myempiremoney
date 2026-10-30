@@ -6,7 +6,10 @@ export function createSignalCandleLock() {
   const locked = new Map();
 
   function resolve({ asset = "", pane = "current", cycleKey = "", view = {} } = {}) {
-    const key = String(asset).trim().toUpperCase();
+    // The two tabs describe different entry moments. Lock each one for the
+    // candle so an earlier next-candle forecast cannot suppress a valid
+    // reversal detected during the current candle.
+    const key = `${String(asset).trim().toUpperCase()}|${pane}`;
     const direction = String(view.direction || "WAIT").toUpperCase();
     const previous = locked.get(key);
 
@@ -59,7 +62,7 @@ export function createSignalCandleLock() {
   function clear(asset = "") {
     const normalized = String(asset).trim().toUpperCase();
     for (const key of locked.keys()) {
-      if (!normalized || key === normalized) locked.delete(key);
+      if (!normalized || key.startsWith(`${normalized}|`)) locked.delete(key);
     }
   }
 

@@ -6,7 +6,7 @@ import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3
 import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.20.0";
 import { createSaoPauloCandleClock, saoPauloFiveMinuteCycle, signalEffectTone } from "./candle-cycle.js?v=3.13.0";
 import { composeDualSignalViews, signalLabel } from "./dual-signal.js?v=3.20.0";
-import { createSignalCandleLock, createSpokenSignalLock } from "./signal-candle-lock.js?v=3.19.3";
+import { createSignalCandleLock, createSpokenSignalLock } from "./signal-candle-lock.js?v=3.22.0";
 import { keepManualSignalAfterPoll, manualSignalIsActive, shouldReleaseManualSignal } from "./manual-signal-priority.js?v=3.19.1";
 
 const HEZILEX_ORIGIN = "https://app.hezilex.com";

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { composeDualSignalViews, signalLabel } from "../dist/modules/dual-signal.js";
+import { classifyCandleSequence } from "../dist/modules/screen-vision.js";
+import { createSignalCandleLock } from "../dist/modules/signal-candle-lock.js";
 
 test("estado neutro informa que falta confirmação", () => {
   assert.equal(signalLabel({ direction: "WAIT" }), "AGUARDANDO CONFIRMAÇÃO");
@@ -61,4 +63,25 @@ test("uma rejeição confirmada pode virar compra nesta vela sem alterar a previ
   });
   assert.equal(signalLabel(result.current), "COMPRA");
   assert.equal(signalLabel(result.next), "VENDA");
+});
+
+test("a vela em formação publica uma possibilidade e a mantém até o fechamento", () => {
+  const bodies = Array.from({ length: 6 }, (_, index) => ({
+    direction: "BUY", centerX: 70 + index * 22, width: 12,
+    y0: 110 - index * 6, y1: 110 - index * 6 + (index === 5 ? 9 : 19),
+    height: index === 5 ? 10 : 20, upperWick: 0, lowerWick: 0
+  }));
+  const live = { ...classifyCandleSequence(bodies), source: "screen-capture" };
+  const views = composeDualSignalViews({
+    live, trend: { direction: "SELL", confidence: 71 },
+    timeframe: "5m", expiration: "5 min"
+  });
+  const lock = createSignalCandleLock();
+  const current = lock.resolve({ asset: "BNB", pane: "current", cycleKey: "10:00", view: views.current });
+  const next = lock.resolve({ asset: "BNB", pane: "next", cycleKey: "10:00", view: views.next });
+  assert.equal(signalLabel(current), "PROVÁVEL COMPRA");
+  assert.equal(current.entryTiming, "CURRENT_CANDLE");
+  assert.equal(signalLabel(next), "VENDA");
+  const held = lock.resolve({ asset: "BNB", pane: "current", cycleKey: "10:00", view: { direction: "WAIT", confidence: 0 } });
+  assert.equal(signalLabel(held), "PROVÁVEL COMPRA");
 });

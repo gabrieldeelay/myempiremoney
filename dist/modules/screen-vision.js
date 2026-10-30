@@ -196,17 +196,19 @@ function collectBodiesForColor(data, width, bounds, direction) {
     return { direction, x0, x1, y0, y1, width: bodyWidth, height: bodyHeight, density,
       upperWick: Math.max(0, y0 - wickTop), lowerWick: Math.max(0, wickBottom - y1),
       centerX: (x0 + x1) / 2 };
-  }).filter(body => body.width >= 3
+  }).filter(body => body.width >= Math.max(5, Math.floor(width * .008))
     && body.width <= Math.max(48, width * .055)
     && body.height >= 5
-    && body.density >= .14);
+    && body.density >= .62);
 }
 
 export function extractCandleBodies(data, width, height) {
   if (!data?.length || !width || !height) return [];
   const bounds = {
     left: Math.floor(width * .075),
-    right: Math.floor(width * .78),
+    // On narrow captures the price chart can occupy almost the entire frame.
+    // Cropping at 78% silently discarded the still-forming candle.
+    right: Math.floor(width * .99),
     top: Math.floor(height * .235),
     bottom: Math.floor(height * .79)
   };
@@ -231,7 +233,7 @@ export function extractCandleBodies(data, width, height) {
   }
   const minimumBodyHeight = Math.max(6, Math.floor(height * .014));
   return merged.filter(body => body.centerX > width * .18
-    && body.centerX < width * .755
+    && body.centerX < width * .985
     && body.height >= minimumBodyHeight).slice(-12);
 }
 
@@ -279,8 +281,9 @@ export function classifyCandleSequence(bodies = []) {
     && (recentSameSide >= 1 || spikeRatio >= 1.65);
   const matureRunStretch = recent.length >= 6
     && recentSameSide >= 2
-    && closeStretch >= .68
-    && extremeBreak >= -.05;
+    && closeStretch >= 1.2
+    && extremeBreak >= .35
+    && spikeRatio >= .75;
   const extremeBodyStretch = recent.length >= 6
     && spikeRatio >= 1.65
     && closeStretch >= .9
@@ -376,7 +379,20 @@ export function classifyCandleSequence(bodies = []) {
     && recentAgreement >= 2
     && last.height >= averagePreviousHeight * .65
     && spikeRatio <= 1.35;
-  const entryTiming = direction === "WAIT" ? "WAIT_CONFIRMATION" : currentCandleEntry ? "CURRENT_CANDLE" : "NEXT_CANDLE";
+  const oppositeWick = direction === "BUY" ? technical.upperWickRatio : technical.lowerWickRatio;
+  const earlyCurrentEntry = !currentCandleEntry
+    && direction !== "WAIT"
+    && recent.length >= 5
+    && Math.abs(score) >= .24
+    && last.direction === direction
+    && recentAgreement >= 2
+    && last.height >= averagePreviousHeight * .42
+    && spikeRatio <= 1.1
+    && oppositeWick < .4;
+  const entryTiming = direction === "WAIT" ? "WAIT_CONFIRMATION" : currentCandleEntry || earlyCurrentEntry ? "CURRENT_CANDLE" : "NEXT_CANDLE";
+  const entryConfidence = earlyCurrentEntry
+    ? Math.round(clamp(49 + Math.abs(score) * 18 + spikeRatio * 8, 50, 69))
+    : confidence;
   const reason = direction === "BUY"
     ? `Leitura visual: ${recent.length} velas recentes mostram fechamentos e pressão para cima.`
     : direction === "SELL"
@@ -391,15 +407,17 @@ export function classifyCandleSequence(bodies = []) {
       ? "A entrada deve esperar uma nova confirmação."
       : currentCandleEntry
         ? "A sequência e a vela atual estão alinhadas; a leitura vale para esta vela, escolhendo com cuidado o melhor momento de entrada."
+        : earlyCurrentEntry
+          ? "A vela atual começou a confirmar a sequência, mas ainda está se formando; esta é uma possibilidade, não uma entrada confirmada."
         : "A leitura ainda precisa do fechamento atual; prepare a entrada somente para a próxima vela."
   ];
   return {
     direction,
-    confidence,
+    confidence: entryConfidence,
     chartDetected: true,
     score,
     candleCount: recent.length,
-    setup: "TREND_CONTINUATION",
+    setup: earlyCurrentEntry ? "EARLY_CONTINUATION" : "TREND_CONTINUATION",
     entryTiming,
     technical,
     factors,
