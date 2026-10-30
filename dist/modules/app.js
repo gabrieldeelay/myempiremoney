@@ -458,7 +458,7 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
   }
   const analysis = {
     ...views.current,
-    signalKind: views.current.direction === "WAIT" ? "no-opportunity" : "entry",
+    signalKind: views.current.signalKind || (views.current.direction === "WAIT" ? "syncing" : "entry"),
     entryConfirmed: views.current.direction !== "WAIT",
     entryTiming: "CURRENT_CANDLE"
   };
@@ -535,7 +535,7 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
   card.classList.toggle("scanning", finalDirection === "WAIT" && dataReady() && !noOpportunity);
   if ($("signalKicker")) $("signalKicker").textContent = "ENTRADA DURANTE A FORMAÇÃO";
   $("analysisDirection").textContent = finalDirection === "WAIT"
-    ? "ANALISANDO..."
+    ? noOpportunity ? "SEM OPORTUNIDADE" : "ANALISANDO..."
     : signalLabel({ direction: finalDirection, possible });
   $("signalIcon").textContent = finalDirection === "BUY" ? "↗" : finalDirection === "SELL" ? "↘" : "—";
   $("confidenceBadge").textContent = `${confidence}% CONFIANÇA`;

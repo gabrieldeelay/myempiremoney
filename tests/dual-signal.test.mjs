@@ -2,8 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { composeDualSignalViews, signalLabel } from "../dist/modules/dual-signal.js";
 
-test("unifica todo estado neutro como analisando", () => {
+test("estado neutro em processamento continua como analisando", () => {
   assert.equal(signalLabel({ direction: "WAIT" }), "ANALISANDO...");
+});
+
+test("análise concluída sem entrada não parece um carregamento infinito", () => {
+  assert.equal(signalLabel({ direction: "WAIT", signalKind: "no-opportunity" }), "SEM OPORTUNIDADE");
 });
 
 test("separa uma possível compra intravela de uma venda para a próxima vela", () => {

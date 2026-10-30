@@ -1,9 +1,12 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
 import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.16.4";
-import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.15.0";
+import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.19.4";
+import { isDeadlineError, withDeadline } from "./async-watchdog.js?v=3.19.5";
 
 const ASSET_OCR_INTERVAL_MS = 450;
 const READING_ISSUE_AFTER_MS = 6500;
+const OCR_JOB_TIMEOUT_MS = 4500;
+const OCR_START_TIMEOUT_MS = 12000;
 
 const buttons = [...document.querySelectorAll("[data-screen-reader-start]")];
 const statusLabels = [...document.querySelectorAll("[data-screen-reader-status]")];
@@ -17,6 +20,8 @@ const activationPrompts = [...document.querySelectorAll("[data-screen-reader-pro
 
 let stream = null;
 let worker = null;
+let workerPromise = null;
+let workerGeneration = 0;
 let processing = false;
 let ocrBusy = false;
 let analysisTimer = null;
@@ -30,7 +35,7 @@ let lastExpiration = null;
 let captureStartedAt = 0;
 let missedChartReads = 0;
 let assetRevision = 0;
-const timeframeReading = createMinuteReadingStabilizer({ immediateInitialMismatch: true });
+const timeframeReading = createMinuteReadingStabilizer({ requiredHits: 2, warningHits: 4 });
 // Expiration sits next to a changing countdown. Requiring three matching OCR
 // samples keeps a timer such as 01:34 from becoming a false "1 min" warning.
 const expirationReading = createMinuteReadingStabilizer({ requiredHits: 3, warningHits: 7 });
@@ -160,13 +165,15 @@ async function readSetupValue(kind, activeTab) {
   ocrBusy = true;
   lastSetupOcrAt[kind] = Date.now();
   try {
-    const reader = await ensureOcrWorker();
-    await reader.setParameters({
-      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
-      tessedit_char_whitelist: "015mMINin :"
-    });
-    prepareSetupCrop(kind, activeTab);
-    const result = await reader.recognize(ocrCanvas);
+    const reader = await withDeadline(() => ensureOcrWorker(), OCR_START_TIMEOUT_MS, "Inicialização do OCR");
+    const result = await withDeadline(async () => {
+      await reader.setParameters({
+        tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+        tessedit_char_whitelist: "015mMINin :"
+      });
+      prepareSetupCrop(kind, activeTab);
+      return reader.recognize(ocrCanvas);
+    }, OCR_JOB_TIMEOUT_MS, `Leitura de ${kind}`);
     const minutes = (kind === "timeframe" ? timeframeReading : expirationReading)
       .update(minuteFromOcr(result?.data?.text));
     const value = minutes == null ? null : `${minutes}${kind === "timeframe" ? "m" : " min"}`;
@@ -175,6 +182,7 @@ async function readSetupValue(kind, activeTab) {
     return value;
   } catch (error) {
     console.warn("Atlas setup OCR", error);
+    if (isDeadlineError(error)) restartOcrWorker("Reiniciando leitura visual…");
     const minutes = (kind === "timeframe" ? timeframeReading : expirationReading).update(null);
     const value = minutes == null ? null : `${minutes}${kind === "timeframe" ? "m" : " min"}`;
     if (kind === "timeframe") lastTimeframe = value;
@@ -187,21 +195,45 @@ async function readSetupValue(kind, activeTab) {
 
 async function ensureOcrWorker() {
   if (worker) return worker;
+  if (workerPromise) return workerPromise;
   setStatus("Preparando leitura de texto…", "waiting");
-  worker = await Tesseract.createWorker("eng", 1, {
-    workerPath: "/vendor/tesseract/worker.min.js",
-    corePath: "/vendor/tesseract/core/tesseract-core-simd-lstm.wasm.js",
-    langPath: "/vendor/tesseract/lang",
-    gzip: true,
-    logger: message => {
-      if (message.status === "recognizing text") setStatus(`Lendo a tela · ${Math.round((message.progress || 0) * 100)}%`, "waiting");
+  const generation = workerGeneration;
+  workerPromise = (async () => {
+    const created = await Tesseract.createWorker("eng", 1, {
+      workerPath: "/vendor/tesseract/worker.min.js",
+      corePath: "/vendor/tesseract/core/tesseract-core-simd-lstm.wasm.js",
+      langPath: "/vendor/tesseract/lang",
+      gzip: true,
+      logger: message => {
+        if (message.status === "recognizing text") setStatus(`Lendo a tela · ${Math.round((message.progress || 0) * 100)}%`, "waiting");
+      }
+    });
+    if (generation !== workerGeneration) {
+      Promise.resolve(created.terminate?.()).catch(() => {});
+      throw new Error("Leitor antigo descartado.");
     }
-  });
-  await worker.setParameters({
-    tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
-    preserve_interword_spaces: "1"
-  });
-  return worker;
+    await created.setParameters({
+      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+      preserve_interword_spaces: "1"
+    });
+    worker = created;
+    return created;
+  })();
+  try {
+    return await workerPromise;
+  } finally {
+    if (generation === workerGeneration) workerPromise = null;
+  }
+}
+
+function restartOcrWorker(status = "Recuperando leitura visual…") {
+  const staleWorker = worker;
+  workerGeneration += 1;
+  worker = null;
+  workerPromise = null;
+  ocrBusy = false;
+  setStatus(status, "waiting");
+  Promise.resolve(staleWorker?.terminate?.()).catch(() => {});
 }
 
 async function readVisibleText(activeTab, force = false) {
@@ -209,22 +241,26 @@ async function readVisibleText(activeTab, force = false) {
   ocrBusy = true;
   lastOcrAt = Date.now();
   try {
-    const reader = await ensureOcrWorker();
+    const reader = await withDeadline(() => ensureOcrWorker(), OCR_START_TIMEOUT_MS, "Inicialização do OCR");
     prepareOcrCrop(activeTab);
-    await reader.setParameters({
-      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
-      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/0185"
-    });
-    const result = await reader.recognize(ocrCanvas);
+    const result = await withDeadline(async () => {
+      await reader.setParameters({
+        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/0185"
+      });
+      return reader.recognize(ocrCanvas);
+    }, OCR_JOB_TIMEOUT_MS, "Leitura do ativo");
     let text = result?.data?.text || "";
     let asset = fuzzyMatchAsset(text);
     if (!asset || ["BNB", "XPL", "XRP"].includes(asset)) {
       prepareOcrCrop(activeTab, true);
-      await reader.setParameters({
-        tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
-        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/0185"
-      });
-      const fallbackResult = await reader.recognize(ocrCanvas);
+      const fallbackResult = await withDeadline(async () => {
+        await reader.setParameters({
+          tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+          tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ/0185"
+        });
+        return reader.recognize(ocrCanvas);
+      }, OCR_JOB_TIMEOUT_MS, "Confirmação do ativo");
       const fallbackText = fallbackResult?.data?.text || "";
       const fallbackAsset = fuzzyMatchAsset(fallbackText);
       text = `${text} ${fallbackText}`;
@@ -241,6 +277,7 @@ async function readVisibleText(activeTab, force = false) {
     };
   } catch (error) {
     console.warn("Atlas screen OCR", error);
+    if (isDeadlineError(error)) restartOcrWorker("Reiniciando identificação do ativo…");
     return {};
   } finally {
     ocrBusy = false;
@@ -359,6 +396,9 @@ async function inspectFrame() {
       }
     }));
     setStatus(analysis?.chartDetected ? "Leitura visual ao vivo" : "Procurando o gráfico…", analysis?.chartDetected ? "connected" : "waiting");
+  } catch (error) {
+    console.warn("Atlas frame inspection", error);
+    setStatus("Recuperando a análise ao vivo…", "waiting");
   } finally {
     processing = false;
   }
@@ -408,6 +448,7 @@ async function startReading() {
     lastSetupOcrAt = { timeframe: 0, expiration: 0 };
     showActivationPrompt(false);
     stream.getVideoTracks()[0]?.addEventListener("ended", () => stopReading("Compartilhamento encerrado"), { once: true });
+    stream.getVideoTracks()[0]?.addEventListener("unmute", () => inspectFrame());
     setButtons("Encerrar leitura");
     setStatus("Iniciando leitura visual…", "waiting");
     window.dispatchEvent(new CustomEvent("atlas:screen-started"));
@@ -421,6 +462,13 @@ async function startReading() {
     setButtons("Ativar leitura da tela");
   }
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && stream) {
+    video.play().catch(() => {});
+    inspectFrame();
+  }
+});
 
 buttons.forEach(button => button.addEventListener("click", startReading));
 document.querySelectorAll("[data-settings-trigger]").forEach(button => button.addEventListener("click", () => {

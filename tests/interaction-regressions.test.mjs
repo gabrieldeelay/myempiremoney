@@ -170,7 +170,7 @@ assert.match(screenReader, /screen-vision\.js\?v=3\.16\.4/, "a leitura deve carr
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.14\.0/, "o painel deve carregar o alerta de reversão sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
-assert.match(screenReader, /setup-warning-state\.js\?v=3\.15\.0/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
+assert.match(screenReader, /setup-warning-state\.js\?v=3\.19\.4/, "os avisos de cinco minutos devem carregar o filtro conservador sem cache antigo");
 assert.match(screenReader, /left: \.78, width: \.16/, "a expiração deve ser lida sem misturar o contador regressivo com o valor de cinco minutos");
 assert.match(screenReader, /Math\.max\(28, frame\.height \* \.06\)/, "o recorte da expiração deve ficar abaixo do contador regressivo");
 assert.match(screenReader, /requiredHits: 3, warningHits: 7/, "a expiração deve exigir leituras independentes antes de gerar aviso");
@@ -194,6 +194,9 @@ assert.match(screenReader, /textOnly \? \.12 : \.02/, "a leitura do ativo deve i
 assert.match(screenReader, /textOnly \? \.86 : \.97/, "a leitura do ativo deve capturar o nome completo e também oferecer um recorte sem a bandeira");
 assert.match(screenReader, /max - min < 70/, "o OCR deve remover as cores do ícone e preservar o texto claro da aba");
 assert.match(screenReader, /setInterval\(inspectFrame, 850\)/, "a troca da aba ativa deve ser percebida em menos de um segundo");
+assert.match(screenReader, /withDeadline/, "uma chamada de OCR travada não pode interromper a análise indefinidamente");
+assert.match(screenReader, /restartOcrWorker/, "o leitor deve se recriar automaticamente depois de uma falha prolongada");
+assert.match(screenReader, /visibilitychange/, "a análise deve retomar imediatamente quando a aba voltar a ficar visível");
 assert.match(styles, /@keyframes screenReaderPromptPulse/, "o aviso de ativação deve chamar atenção sem cobrir o gráfico inteiro");
 assert.match(screenReader, /readVisibleText\(activeTab, tabMoved \|\| !lastAsset\)/, "mudar a aba deve priorizar uma leitura imediata do novo ativo");
 assert.match(screenReader, /ASSET_OCR_INTERVAL_MS = 450/, "o ativo deve ser reconfirmado rapidamente mesmo quando a linha da aba não se move");
@@ -225,7 +228,7 @@ assert.match(html, /id="nextCandleTitle">PRÓXIMA VELA</, "o painel deve reserva
 assert.match(html, /id="nextConfidenceBadge"/, "a próxima vela deve ter probabilidade independente");
 assert.match(app, /function autoSelectSignalTab/, "uma aba deve abrir automaticamente quando recebe um sinal novo");
 assert.match(app, /freshSignals\.find\(item => item\.pane === "current"\)/, "quando as duas abas recebem sinal juntas, a vela atual deve ter prioridade");
-assert.doesNotMatch(html, /SEM DIREÇÃO|SEM ENTRADA/, "todo estado neutro visível deve usar o nome único ANALISANDO");
+assert.doesNotMatch(html, /SEM DIREÇÃO|SEM ENTRADA/, "estados neutros não devem usar nomes antigos e ambíguos");
 assert.match(html, /id="extremeAlert"[^>]*aria-live="assertive"/, "movimentos extremos devem abrir um alerta temporário acessível");
 assert.match(app, /setTimeout\(\(\) => \{ host\.hidden = true; \}, 5600\)/, "o alerta extremo deve desaparecer automaticamente");
 assert.match(dualSignal, /const nextSource = trend \|\| central/, "a próxima vela deve usar a direção central sem substituir a leitura intravela");

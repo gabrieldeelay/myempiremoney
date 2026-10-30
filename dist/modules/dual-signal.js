@@ -13,6 +13,7 @@ function waitingView(timing, reason, confidence = 0, source = null) {
     confidence: confidenceOf(confidence),
     possible: false,
     actionable: false,
+    signalKind: "syncing",
     timing,
     setup: null,
     reason,
@@ -82,6 +83,7 @@ export function composeDualSignalViews({ live = {}, central = {}, trend = null, 
       visualReady ? liveConfidence : 0,
       live
     );
+    if (visualReady) current.signalKind = "no-opportunity";
   }
 
   const nextSource = trend || central || {};
@@ -106,7 +108,7 @@ export function composeDualSignalViews({ live = {}, central = {}, trend = null, 
 
 export function signalLabel(view = {}) {
   const direction = directionOf(view.direction);
-  if (direction === "WAIT") return "ANALISANDO...";
+  if (direction === "WAIT") return view.signalKind === "no-opportunity" ? "SEM OPORTUNIDADE" : "ANALISANDO...";
   const side = direction === "BUY" ? "COMPRA" : "VENDA";
   return `${view.possible ? "POSSÍVEL " : ""}${side}`;
 }
