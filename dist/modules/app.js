@@ -2,10 +2,10 @@ import { normalizeAssetName } from "./asset-name.js?v=2.5.3-r1";
 import { createSignalStabilizer } from "./signal-stability.js?v=3.14.0";
 import { createSetupWarningTracker } from "./setup-warning-state.js?v=3.19.4";
 import { createScreenRevisionGuard } from "./screen-session.js?v=3.12.1";
-import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.12.5";
-import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.10.0";
+import { composeCentralAnalysis, strongestTrend } from "./analysis-policy.js?v=3.20.0";
+import { createAssetAnalysisCache } from "./asset-analysis-cache.js?v=3.20.0";
 import { createSaoPauloCandleClock, saoPauloFiveMinuteCycle, signalEffectTone } from "./candle-cycle.js?v=3.13.0";
-import { composeDualSignalViews, signalLabel } from "./dual-signal.js?v=3.16.1";
+import { composeDualSignalViews, signalLabel } from "./dual-signal.js?v=3.20.0";
 import { createSignalCandleLock, createSpokenSignalLock } from "./signal-candle-lock.js?v=3.19.3";
 import { keepManualSignalAfterPoll, manualSignalIsActive, shouldReleaseManualSignal } from "./manual-signal-priority.js?v=3.19.1";
 
@@ -45,6 +45,7 @@ const analysisCache = createAssetAnalysisCache();
 let displayedAnalysis = null;
 let setupWarningRenderKey = "";
 let radarUpdatedAt = null;
+let radarIssue = null;
 let lastSignalVisualSignature = "";
 let currentSignalTone = "neutral";
 let signalVisualTimer = null;
@@ -216,14 +217,25 @@ function dataReady() {
 }
 
 function trendForAsset(asset = state.asset || selectedRadarAsset) {
+  if (radarIssue || (radarUpdatedAt && Date.now() - Date.parse(radarUpdatedAt) > 60000)) return null;
   const normalized = normalizeAssetName(asset);
   if (!normalized) return null;
-  return marketTrends.find(item => normalizeAssetName(item.asset) === normalized)
+  const item = marketTrends.find(item => normalizeAssetName(item.asset) === normalized)
     || analysisCache.trend(normalized)
     || null;
+  return item && item.probabilityCalibrated !== true && item.direction !== "WAIT"
+    ? { ...item, direction: "WAIT", confidence: 0,
+      reason: "A taxa histórica deste ativo ainda não foi validada; não há sinal para a próxima vela." }
+    : item;
 }
 
 function effectiveAnalysis() {
+  if (radarIssue) return {
+    direction: "WAIT", confidence: 0, signalKind: "syncing", entryConfirmed: false,
+    reason: `Atualização do mercado interrompida: ${radarIssue} O Atlas está tentando reconectar.`,
+    factors: ["Nenhuma leitura antiga será apresentada como previsão atual."],
+    source: "market-radar-unavailable"
+  };
   return composeCentralAnalysis({
     live: state.analysis || {},
     trend: trendForAsset(),
@@ -321,8 +333,17 @@ function renderNextSignal(view = {}) {
   pane.classList.toggle("possible-sell", direction === "SELL" && possible);
   pane.classList.toggle("waiting", direction === "WAIT");
   $("nextSignalIcon").textContent = direction === "BUY" ? "↗" : direction === "SELL" ? "↘" : "—";
-  $("nextAnalysisDirection").textContent = direction === "WAIT" ? "ANALISANDO..." : signalLabel(view);
-  $("nextConfidenceBadge").textContent = `${confidence}% CONFIANÇA`;
+  $("nextAnalysisDirection").textContent = signalLabel(view);
+  $("nextConfidenceBadge").textContent = view.signalKind === "admin-broadcast"
+    ? "SINAL MANUAL"
+    : view.probabilityCalibrated
+    ? `${confidence}% ACERTO HISTÓRICO`
+    : direction === "WAIT" ? "SEM TAXA VALIDADA" : `${confidence}% FORÇA DA LEITURA`;
+  $("nextConfidenceBadge").title = view.signalKind === "admin-broadcast"
+    ? "Sinal enviado manualmente pelo administrador; o número configurado não é uma taxa de acerto validada."
+    : view.probabilityCalibrated
+    ? `Taxa estimada a partir de ${Number(view.validationSampleSize) || 0} previsões históricas comparáveis. A cotação da Hezilex pode diferir da fonte externa.`
+    : "Não há amostra histórica suficiente para chamar este número de probabilidade de acerto.";
   $("nextSignalStability").textContent = direction === "WAIT"
     ? "AGUARDANDO DIREÇÃO"
     : view.heldByCandle ? "MANTIDO ATÉ O FIM DA VELA" : possible ? "CENÁRIO EM FORMAÇÃO" : "DIREÇÃO CONFIRMADA";
@@ -493,7 +514,7 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
     : trendOnly ? "NEXT_CANDLE"
     : analysis?.entryTiming === "CURRENT_CANDLE" ? "CURRENT_CANDLE" : "NEXT_CANDLE";
   const timing = noOpportunity
-      ? "SEM OPORTUNIDADE"
+      ? "AGUARDE CONFIRMAÇÃO"
       : timingCode === "CURRENT_CANDLE" ? "NESTA VELA" : timingCode === "NEXT_CANDLE" ? "PRÓXIMA VELA" : "AGUARDE CONFIRMAÇÃO";
   const reversalSetup = analysis?.setup === "INTRACANDLE_REVERSAL";
   const entryAdvice = entryBlocked
@@ -535,10 +556,14 @@ function renderSignal(centralAnalysis = effectiveAnalysis()) {
   card.classList.toggle("scanning", finalDirection === "WAIT" && dataReady() && !noOpportunity);
   if ($("signalKicker")) $("signalKicker").textContent = "ENTRADA DURANTE A FORMAÇÃO";
   $("analysisDirection").textContent = finalDirection === "WAIT"
-    ? noOpportunity ? "SEM OPORTUNIDADE" : "ANALISANDO..."
+    ? "AGUARDANDO CONFIRMAÇÃO"
     : signalLabel({ direction: finalDirection, possible });
   $("signalIcon").textContent = finalDirection === "BUY" ? "↗" : finalDirection === "SELL" ? "↘" : "—";
-  $("confidenceBadge").textContent = `${confidence}% CONFIANÇA`;
+  $("confidenceBadge").textContent = analysis.signalKind === "admin-broadcast"
+    ? "SINAL MANUAL" : finalDirection === "WAIT" ? "SEM SINAL VALIDADO" : `${confidence}% FORÇA VISUAL`;
+  $("confidenceBadge").title = analysis.signalKind === "admin-broadcast"
+    ? "Sinal enviado manualmente pelo administrador; a confiança configurada não é uma taxa de acerto validada."
+    : "Força do padrão identificado na imagem; não é uma taxa estatística de acerto.";
   const timingBadge = $("entryTiming");
   timingBadge.textContent = timing;
   timingBadge.className = `entry-timing ${timingCode === "CURRENT_CANDLE" ? "current" : timingCode === "NEXT_CANDLE" ? "next" : "waiting"}`;
@@ -699,8 +724,8 @@ const robot = {
     protectionEarly: ["[[bad:Proteção antecipada.]] O preço ainda não tinha alcançado a região planejada de {asset}.", "Você protegeu cedo em {asset}. A ideia era esperar o preço chegar ao nível marcado antes da nova **{direction}**.", "[[bad:Faltou esperar o nível.]] A proteção veio antes do preço confirmar a região em {asset}."],
     adclose: ["Fechou o anúncio. Finalmente uma operação com 100% de acerto.", "Anúncio eliminado. Essa entrada eu aprovo sem indicador.", "Boa. Menos propaganda, mais gráfico e só um pouco menos de caos.", "Fechou o anúncio com precisão. Se operar assim, talvez dê jogo."],
     dragged: ["Escolhe um canto e deixa eu acompanhar o gráfico.", "Eu sou analista, não ícone de desktop. Deixa eu trabalhar daqui.", "O gráfico não vai vir comigo. Escolha um canto e me deixe acompanhar as velas.", "Eu entendi que você gosta de decoração, mas eu ainda estou tentando analisar o gráfico.", "Pronto, mudei de lugar. Agora me deixa trabalhar antes que a próxima vela feche."],
-    reversalBuy: ["Possível **reversão para compra** em {asset}. A queda esticou e começou a rejeitar o fundo; escolha com cuidado o ponto nesta vela.", "A pressão vendedora perdeu força em {asset}. Há fundamento para **possível compra nesta vela**, sem antecipar o clique."],
-    reversalSell: ["Possível **reversão para venda** em {asset}. A alta esticou e começou a rejeitar o topo; escolha com cuidado o ponto nesta vela.", "A pressão compradora perdeu força em {asset}. Há fundamento para **possível venda nesta vela**, sem antecipar o clique."],
+    reversalBuy: ["Provável **reversão para compra** em {asset}. A queda esticou e começou a rejeitar o fundo; escolha com cuidado o ponto nesta vela.", "A pressão vendedora perdeu força em {asset}. Há fundamento para **provável compra nesta vela**, sem antecipar o clique."],
+    reversalSell: ["Provável **reversão para venda** em {asset}. A alta esticou e começou a rejeitar o topo; escolha com cuidado o ponto nesta vela.", "A pressão compradora perdeu força em {asset}. Há fundamento para **provável venda nesta vela**, sem antecipar o clique."],
     win: ["[[good:Resultado positivo]] em {asset}. O mérito está na disciplina, não na euforia.", "[[good:Lucro confirmado]] em {asset}. Preserve o método que trouxe o resultado.", "{asset} terminou no [[good:positivo]]. Boa execução vale mais que comemoração antecipada."],
     loss: ["[[bad:Resultado negativo]] em {asset}. Revanche não é indicador.", "[[bad:Perda confirmada]] em {asset}. Revise o contexto sem aumentar a mão.", "{asset} terminou no [[bad:negativo]]. Aceite o dado e proteja a próxima decisão."],
     draw: ["Empate em {asset}. Nem o mercado quis bancar essa história.", "{asset} devolveu a entrada. Emoção gasta, saldo preservado.", "Resultado neutro em {asset}. Próxima vela, mesmo plano."],
@@ -1128,7 +1153,7 @@ function renderState(next = {}, source = "extension") {
     signalStabilizer.reset("");
     displayedAnalysis = null;
   }
-  else extensionReady = true;
+  else if (source === "extension") extensionReady = true;
   renderConnection(dataReady());
 
   $("agentAsset").textContent = state.assetPending ? "Identificando ativo" : state.asset || selectedRadarAsset || "Localizando";
@@ -1207,7 +1232,7 @@ function renderState(next = {}, source = "extension") {
   else if (manualOverride) return;
   else if (newIntracandleReversal) {
     const side = displayedAnalysis.direction === "BUY" ? "COMPRA" : "VENDA";
-    showToast(`Possível reversão para ${side} nesta vela. Aguarde o melhor ponto de entrada.`, "info", 8000);
+    showToast(`Provável reversão para ${side} nesta vela. Aguarde o melhor ponto de entrada.`, "info", 8000);
     robot.speak(displayedAnalysis.direction === "BUY" ? "reversalBuy" : "reversalSell", { asset: state.asset }, true, true);
   }
   else if (renewedSameDirection) {
@@ -1408,6 +1433,7 @@ document.querySelector(".signal-tabs")?.addEventListener("keydown", event => {
 });
 
 addEventListener("atlas:trends", event => {
+  radarIssue = null;
   marketTrends = Array.isArray(event.detail?.items) ? event.detail.items : [];
   radarUpdatedAt = event.detail?.updatedAt || new Date().toISOString();
   marketTrends.forEach(item => analysisCache.rememberTrend(item.asset, item, radarUpdatedAt));
@@ -1428,6 +1454,16 @@ addEventListener("atlas:trends", event => {
   pulse.textContent = state.asset ? "Radar e leitura sincronizados" : "Análise pronta · ative a leitura para confirmar a entrada";
 });
 
+addEventListener("atlas:trends-health", event => {
+  if (!event.detail?.stale) return;
+  radarIssue = event.detail.reason || "sem novas cotações";
+  marketTrends = [];
+  displayedAnalysis = signalStabilizer.update(effectiveAnalysis(), state.asset);
+  renderSignal(displayedAnalysis);
+  $("monitorPulse").classList.remove("live");
+  $("monitorPulse").textContent = "Radar sem atualização · reconectando";
+});
+
 addEventListener("atlas:trend-selected", event => {
   const trend = event.detail;
   if (!trend?.asset) return;
@@ -1446,7 +1482,7 @@ addEventListener("atlas:trend-selected", event => {
   });
   $("monitorPulse").classList.add("live");
   $("monitorPulse").textContent = "Radar 5M selecionado";
-  showToast(`${selectedRadarAsset}: ${trend.direction === "BUY" ? "POSSÍVEL COMPRA" : trend.direction === "SELL" ? "POSSÍVEL VENDA" : "MERCADO NEUTRO"} no Radar 5M.`, "info", 5000);
+  showToast(`${selectedRadarAsset}: ${trend.direction === "BUY" ? "PROVÁVEL COMPRA" : trend.direction === "SELL" ? "PROVÁVEL VENDA" : "AGUARDANDO CONFIRMAÇÃO"} no Radar 5M.`, "info", 5000);
 });
 
 addEventListener("atlas:screen-started", () => {
@@ -1467,6 +1503,14 @@ addEventListener("atlas:screen-state", event => {
 
 addEventListener("atlas:screen-stopped", () => {
   screenReaderReady = false;
+  state.monitoring = false;
+  state.chartDetected = false;
+  state.analysis = { direction: "WAIT", confidence: 0, source: "screen-capture",
+    reason: "Leitura da tela encerrada. Ative novamente para analisar esta vela." };
+  signalStabilizer.reset(state.asset);
+  signalCandleLock.clear(state.asset);
+  displayedAnalysis = null;
+  renderSignal(effectiveAnalysis());
   renderConnection(extensionReady);
   if (!extensionReady) $("monitorPulse").textContent = "Leitura visual desativada";
 });
@@ -1530,7 +1574,7 @@ function refreshReadingFeedback() {
   const analysis = currentAnalysis();
   const direction = String(analysis?.direction || "WAIT").toUpperCase();
   pulse.textContent = analysis?.signalKind === "trend"
-    ? `Possível ${direction === "BUY" ? "compra" : "venda"} em ${asset} · buscando confirmação`
+    ? `Provável ${direction === "BUY" ? "compra" : "venda"} em ${asset} · buscando confirmação`
     : analysis?.signalKind === "no-opportunity"
       ? `${asset} sem oportunidade segura · radar atualizado`
     : direction === "WAIT"

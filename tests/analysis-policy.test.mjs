@@ -15,7 +15,7 @@ test("uma possível entrada aparece imediatamente com momento definido", () => {
   assert.equal(analysis.direction, "BUY");
   assert.equal(analysis.signalKind, "trend");
   assert.equal(analysis.entryConfirmed, false);
-  assert.match(analysis.reason, /Possível compra para a próxima vela/);
+  assert.match(analysis.reason, /Provável compra para a próxima vela/);
 });
 
 test("uma oportunidade válida entre 50 e 69 conserva o momento da entrada", () => {
@@ -49,7 +49,8 @@ test("rejeição técnica confirmada pode superar a direção anterior sem virar
   assert.equal(analysis.direction, "SELL");
   assert.equal(analysis.signalKind, "entry");
   assert.equal(analysis.entryTiming, "CURRENT_CANDLE");
-  assert.ok(analysis.confidence >= 70);
+  assert.ok(analysis.confidence < 70, "força visual sem calibração não pode ser anunciada como alta probabilidade");
+  assert.equal(analysis.probabilityCalibrated, false);
 });
 
 test("a tendência vira sinal somente quando tela, gráfico e expiração estão alinhados", () => {
@@ -62,7 +63,7 @@ test("a tendência vira sinal somente quando tela, gráfico e expiração estão
   assert.equal(analysis.signalKind, "entry");
   assert.equal(analysis.entryConfirmed, true);
   assert.equal(analysis.entryTiming, "CURRENT_CANDLE");
-  assert.ok(analysis.confidence > buyTrend.confidence, "a confirmação visual mais forte deve participar da confiança final");
+  assert.equal(analysis.confidence, buyTrend.confidence, "força visual não pode inflar a taxa histórica de acerto");
 });
 
 test("uma oportunidade visual forte pode gerar entrada quando o radar central está neutro", () => {
@@ -81,7 +82,8 @@ test("uma oportunidade visual forte pode gerar entrada quando o radar central es
   });
   assert.equal(analysis.signalKind, "entry");
   assert.equal(analysis.direction, "SELL");
-  assert.ok(analysis.confidence >= 75);
+  assert.ok(analysis.confidence < 70);
+  assert.equal(analysis.probabilityCalibrated, false);
 });
 
 test("uma análise neutra termina como sem oportunidade em vez de carregar indefinidamente", () => {

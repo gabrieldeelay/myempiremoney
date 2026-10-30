@@ -49,7 +49,6 @@ export function composeDualSignalViews({ live = {}, central = {}, trend = null, 
   const trendDirection = directionOf(trend?.direction);
   const liveConfidence = confidenceOf(live.confidence);
   const visualReady = live.source === "screen-capture" && live.chartDetected !== false;
-  const reversalDirection = directionOf(live.reversalDirection);
 
   let current;
   if (!setupVerified) {
@@ -63,12 +62,6 @@ export function composeDualSignalViews({ live = {}, central = {}, trend = null, 
     current = directionalView(live, liveDirection, "CURRENT_CANDLE", {
       possible: liveConfidence < 70,
       setup: "INTRACANDLE_REVERSAL"
-    });
-  } else if (visualReady && live.setup === "STRETCHED_CANDLE" && reversalDirection !== "WAIT" && liveConfidence >= 50) {
-    current = directionalView(live, reversalDirection, "CURRENT_CANDLE", {
-      possible: true,
-      setup: "STRETCHED_CANDLE",
-      reason: live.reason || `Movimento extremo detectado; possível ${reversalDirection === "BUY" ? "compra" : "venda"} somente se houver reação técnica.`
     });
   } else if (visualReady && live.entryTiming === "CURRENT_CANDLE" && liveDirection !== "WAIT" && liveConfidence >= 50) {
     current = directionalView(live, liveDirection, "CURRENT_CANDLE");
@@ -108,8 +101,8 @@ export function composeDualSignalViews({ live = {}, central = {}, trend = null, 
 
 export function signalLabel(view = {}) {
   const direction = directionOf(view.direction);
-  if (direction === "WAIT") return view.signalKind === "no-opportunity" ? "SEM OPORTUNIDADE" : "ANALISANDO...";
+  if (direction === "WAIT") return "AGUARDANDO CONFIRMAÇÃO";
   const side = direction === "BUY" ? "COMPRA" : "VENDA";
-  return `${view.possible ? "POSSÍVEL " : ""}${side}`;
+  return `${view.possible ? "PROVÁVEL " : ""}${side}`;
 }
 

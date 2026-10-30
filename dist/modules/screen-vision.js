@@ -168,22 +168,32 @@ function collectBodiesForColor(data, width, bounds, direction) {
   if (start != null) groups.push([start, previous]);
 
   return groups.map(([x0, x1]) => {
+    let wickTop = bounds.bottom;
+    let wickBottom = bounds.top;
     let y0 = bounds.bottom;
     let y1 = bounds.top;
     let pixels = 0;
-    for (let x = x0; x <= x1; x += 1) {
-      for (let y = bounds.top; y < bounds.bottom; y += 1) {
+    const bodyWidth = x1 - x0 + 1;
+    for (let y = bounds.top; y < bounds.bottom; y += 1) {
+      let rowPixels = 0;
+      for (let x = x0; x <= x1; x += 1) {
         const offset = pixelOffset(width, x, y);
         if (candleColor(data[offset], data[offset + 1], data[offset + 2]) !== direction) continue;
-        y0 = Math.min(y0, y);
-        y1 = Math.max(y1, y);
-        pixels += 1;
+        rowPixels += 1;
       }
+      if (!rowPixels) continue;
+      wickTop = Math.min(wickTop, y);
+      wickBottom = Math.max(wickBottom, y);
+      if (rowPixels < Math.max(3, Math.ceil(bodyWidth * .55))) continue;
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+      pixels += rowPixels;
     }
-    const bodyWidth = x1 - x0 + 1;
     const bodyHeight = y1 - y0 + 1;
     const density = pixels / Math.max(1, bodyWidth * bodyHeight);
-    return { direction, x0, x1, y0, y1, width: bodyWidth, height: bodyHeight, density, centerX: (x0 + x1) / 2 };
+    return { direction, x0, x1, y0, y1, width: bodyWidth, height: bodyHeight, density,
+      upperWick: Math.max(0, y0 - wickTop), lowerWick: Math.max(0, wickBottom - y1),
+      centerX: (x0 + x1) / 2 };
   }).filter(body => body.width >= 3
     && body.width <= Math.max(48, width * .055)
     && body.height >= 5
@@ -213,6 +223,8 @@ export function extractCandleBodies(data, width, height) {
       previous.width = previous.x1 - previous.x0 + 1;
       previous.height = previous.y1 - previous.y0 + 1;
       previous.centerX = (previous.x0 + previous.x1) / 2;
+      previous.upperWick = Math.max(previous.upperWick || 0, body.upperWick || 0);
+      previous.lowerWick = Math.max(previous.lowerWick || 0, body.lowerWick || 0);
     } else merged.push({ ...body });
   }
   const minimumBodyHeight = Math.max(6, Math.floor(height * .014));
@@ -288,8 +300,30 @@ export function classifyCandleSequence(bodies = []) {
     closeStretch,
     extremeBreak,
     levelDistance,
-    levelTouch
+    levelTouch,
+    upperWickRatio: (Number(last.upperWick) || 0) / Math.max(1, last.height),
+    lowerWickRatio: (Number(last.lowerWick) || 0) / Math.max(1, last.height)
   };
+  const rejectionWick = last.direction === "BUY" ? technical.upperWickRatio : technical.lowerWickRatio;
+  if (recent.length >= 4 && levelTouch && recentSameSide >= 1
+    && last.height >= averagePreviousHeight * .65
+    && rejectionWick >= .55) {
+    const reversalDirection = last.direction === "BUY" ? "SELL" : "BUY";
+    const side = reversalDirection === "BUY" ? "compra" : "venda";
+    return {
+      direction: reversalDirection,
+      confidence: Math.round(clamp(54 + rejectionWick * 7 + recentSameSide * 2, 55, 69)),
+      chartDetected: true, score: 0, candleCount: recent.length,
+      setup: "INTRACANDLE_REVERSAL", entryTiming: "CURRENT_CANDLE",
+      technical,
+      factors: [
+        `Pavio de rejeição com ${rejectionWick.toFixed(1)}x o corpo da vela atual.`,
+        `O preço testou uma região recente de ${last.direction === "BUY" ? "resistência" : "suporte"}.`,
+        `A reação ainda é preliminar; confirme a força antes de considerar ${side}.`
+      ],
+      reason: `Rejeição visual em região recente: provável ${side} nesta vela, sujeita à confirmação.`
+    };
+  }
   if (stretchedCandle) {
     const reversalDirection = last.direction === "BUY" ? "SELL" : "BUY";
     const stretchedSide = last.direction === "BUY" ? "compradora" : "vendedora";
@@ -313,7 +347,7 @@ export function classifyCandleSequence(bodies = []) {
         `A pressão ${stretchedSide} está esticada; entrar em ${blockedSide} agora seria perseguir um movimento atrasado.`,
         `O Atlas só considerará ${correctionSide} nesta vela se o corpo rejeitar parte relevante do movimento ou trocar de direção.`
       ],
-      reason: `Vela ${stretchedSide} muito esticada. ${blockedSide[0].toUpperCase()}${blockedSide.slice(1)} tardia bloqueada; aguardando rejeição técnica para possível ${correctionSide}.`
+      reason: `Vela ${stretchedSide} muito esticada. ${blockedSide[0].toUpperCase()}${blockedSide.slice(1)} tardia bloqueada; aguardando rejeição técnica para provável ${correctionSide}.`
     };
   }
   const split = Math.max(1, Math.floor(recent.length / 2));
@@ -335,9 +369,10 @@ export function classifyCandleSequence(bodies = []) {
     : Math.round(clamp(57 + Math.abs(score) * 34 + Math.min(8, recent.length), 0, 91));
   const recentAgreement = recent.slice(-3).filter(body => body.direction === direction).length;
   const currentCandleEntry = direction !== "WAIT"
-    && Math.abs(score) >= .42
+    && Math.abs(score) >= .3
     && last.direction === direction
     && recentAgreement >= 2
+    && last.height >= averagePreviousHeight * .65
     && spikeRatio <= 1.35;
   const entryTiming = direction === "WAIT" ? "WAIT_CONFIRMATION" : currentCandleEntry ? "CURRENT_CANDLE" : "NEXT_CANDLE";
   const reason = direction === "BUY"
@@ -430,9 +465,9 @@ export function createIntracandleReversalTracker(options = {}) {
         factors: [
           ...watch.factors,
           rejectionLabel,
-          `A reversão tem fundamento técnico para possível ${directionLabel} nesta vela, mas o ponto de entrada ainda deve ser escolhido com cuidado.`
+          `A reversão tem fundamento técnico para provável ${directionLabel} nesta vela, mas o ponto de entrada ainda deve ser escolhido com cuidado.`
         ],
-        reason: `Rejeição confirmada após movimento esticado: possível ${directionLabel} ainda nesta vela.`
+        reason: `Rejeição confirmada após movimento esticado: provável ${directionLabel} ainda nesta vela.`
       };
     }
 

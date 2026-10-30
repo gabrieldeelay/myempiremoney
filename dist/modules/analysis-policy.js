@@ -32,9 +32,9 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
   const localEntryBlocked = directional && visualAgrees && live.entryBlocked === true;
   const validVisualOpportunity = visualAgrees && setupVerified && !localEntryBlocked && liveConfidence >= 50;
   const entryConfirmed = directional && validVisualOpportunity;
-  const combinedConfidence = entryConfirmed
-    ? confidenceOf(trendConfidence * .45 + liveConfidence * .55)
-    : trendConfidence;
+  // The server percentage is an observed historical hit rate. A visual
+  // strength score cannot be averaged into it as though it were a probability.
+  const combinedConfidence = trendConfidence;
   const localTiming = entryConfirmed ? live.entryTiming : "WAIT_CONFIRMATION";
   const side = trendDirection === "BUY" ? "alta" : trendDirection === "SELL" ? "baixa" : "neutra";
 
@@ -45,12 +45,13 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
     && liveConfidence >= 70;
   if (confirmedReversal && liveDirection !== trendDirection) {
     const reversalSide = liveDirection === "BUY" ? "compra" : "venda";
-    const reversalConfidence = confidenceOf(liveConfidence * .86 + Math.min(trendConfidence, 55) * .14);
+    const reversalConfidence = Math.min(69, liveConfidence);
     return {
       ...trend,
       ...live,
       direction: liveDirection,
       confidence: reversalConfidence,
+      probabilityCalibrated: false,
       signalKind: "entry",
       entryConfirmed: true,
       entryTiming: "CURRENT_CANDLE",
@@ -72,12 +73,13 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
       && (live.urgentReversal === true || Math.abs(Number(live.score) || 0) >= .38);
     if (visualOpportunity) {
       const visualSide = liveDirection === "BUY" ? "compra" : "venda";
-      const visualConfidence = confidenceOf(liveConfidence * .82 + trendConfidence * .18);
+      const visualConfidence = Math.min(69, liveConfidence);
       return {
         ...trend,
         ...live,
         direction: liveDirection,
         confidence: visualConfidence,
+        probabilityCalibrated: false,
         signalKind: "entry",
         entryConfirmed: true,
         setupVerified: true,
@@ -135,10 +137,10 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
     : localEntryBlocked
       ? "A direção permanece válida, mas o ponto seguro desta vela já passou."
       : !visualAgrees
-        ? `Há possível ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela; a leitura visual atualizará o momento.`
+        ? `Há provável ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela; a leitura visual atualizará o momento.`
         : !setupVerified
           ? "A direção está confirmada, mas o Atlas ainda precisa validar gráfico e expiração em 5 minutos."
-          : `Há possível ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela.`;
+          : `Há provável ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela.`;
 
   return {
     ...live,
@@ -159,7 +161,7 @@ export function composeCentralAnalysis({ live = {}, trend = null, timeframe = nu
     ],
     reason: entryConfirmed
       ? `Sinal de entrada confirmado: ${trend.reason || `direção de ${side}`}. ${localContext}`
-      : `Possível ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela. ${localContext}`,
+      : `Provável ${trendDirection === "BUY" ? "compra" : "venda"} para a próxima vela. ${localContext}`,
     source: "market-radar-5m"
   };
 }

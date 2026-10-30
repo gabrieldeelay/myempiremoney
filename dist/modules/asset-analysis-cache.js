@@ -1,4 +1,4 @@
-const STORAGE_KEY = "atlas-asset-analysis-cache-v1";
+const STORAGE_KEY = "atlas-asset-analysis-cache-v2";
 const LAST_ASSET_KEY = "atlas-last-recognized-asset-v1";
 
 const assetKey = value => String(value || "").trim().toUpperCase();
@@ -15,7 +15,7 @@ export function createAssetAnalysisCache(options = {}) {
   const storage = options.storage ?? (typeof localStorage === "undefined" ? null : localStorage);
   const now = typeof options.now === "function" ? options.now : () => Date.now();
   const liveTtlMs = options.liveTtlMs ?? 120000;
-  const trendTtlMs = options.trendTtlMs ?? 390000;
+  const trendTtlMs = options.trendTtlMs ?? 60000;
   const records = new Map(Object.entries(readJson(storage, STORAGE_KEY, {})));
 
   function persist() {

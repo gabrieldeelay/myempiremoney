@@ -653,6 +653,8 @@ html.auth-checking body { visibility: hidden; }
 .signal-pane-next.active .signal-icon { flex-basis: 46px; width: 46px; height: 46px; border-radius: 14px; font-size: 22px; }
 .signal-pane-next.active .signal-line { align-items: center; flex-direction: row; gap: 10px; }
 .signal-card .signal-pane-next.active .signal-line h1 { font-size: 28px; line-height: 1; }
+.signal-card .signal-pane-next.active.waiting .signal-line h1,
+.signal-card:not(.buy):not(.sell) .signal-pane-current .signal-line h1 { max-width: 380px; font-size: clamp(17px, 2vw, 22px); line-height: 1.08; }
 .signal-pane-next.active .signal-line span { padding: 4px 8px; font-size: 10px; }
 .signal-pane-next.active .signal-copy > small { font-size: 11px; }
 .signal-pane-next.active .analysis-summary { max-width: 480px; margin-top: 7px; overflow: hidden; white-space: nowrap; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; }

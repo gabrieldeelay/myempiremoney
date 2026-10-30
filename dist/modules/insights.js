@@ -27,16 +27,35 @@ async function loadNews() {
   }
 }
 
+let trendsRequest = null;
+let trendsLastSuccessAt = 0;
 async function loadTrends() {
+  if (trendsRequest) return trendsRequest;
+  trendsRequest = (async () => {
   try {
-    const response = await fetch("/api/trends", { cache: "no-store" });
+    const response = await fetch("/api/trends", { cache: "no-store", signal: AbortSignal.timeout(12000) });
     const payload = await response.json();
     if (!response.ok || !payload.items?.length) throw new Error(payload.error || "Sem tendências no momento.");
+    const updatedAt = Date.parse(payload.updatedAt);
+    if (!Number.isFinite(updatedAt) || Date.now() - updatedAt > 60000) throw new Error("As cotações do servidor estão desatualizadas.");
+    trendsLastSuccessAt = Date.now();
     window.dispatchEvent(new CustomEvent("atlas:trends", { detail: { items: payload.signals || payload.items, source: payload.source, updatedAt: payload.updatedAt } }));
-  } catch (error) { console.warn("Atlas central radar", error); }
+  } catch (error) {
+    console.warn("Atlas central radar", error);
+    window.dispatchEvent(new CustomEvent("atlas:trends-health", {
+      detail: { stale: !trendsLastSuccessAt || Date.now() - trendsLastSuccessAt > 30000, reason: error.message }
+    }));
+  } finally {
+    trendsRequest = null;
+  }
+  })();
+  return trendsRequest;
 }
 
 loadNews();
 loadTrends();
 setInterval(loadNews, 180000);
 setInterval(loadTrends, 5000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadTrends();
+});

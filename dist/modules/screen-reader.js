@@ -1,5 +1,5 @@
 import Tesseract from "/vendor/tesseract/tesseract.esm.min.js";
-import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.16.4";
+import { analyzeChartPixels, createIntracandleReversalTracker, findActiveTabRect, fuzzyMatchAsset } from "./screen-vision.js?v=3.20.0";
 import { createMinuteReadingStabilizer, minuteFromOcr } from "./setup-warning-state.js?v=3.19.4";
 import { isDeadlineError, withDeadline } from "./async-watchdog.js?v=3.19.5";
 
@@ -23,6 +23,8 @@ let worker = null;
 let workerPromise = null;
 let workerGeneration = 0;
 let processing = false;
+let inspectionEpoch = 0;
+let lastCompletedInspectionAt = 0;
 let ocrBusy = false;
 let analysisTimer = null;
 let lastAsset = null;
@@ -136,7 +138,9 @@ function frameBounds() {
 function prepareSetupCrop(kind, activeTab) {
   const frame = frameBounds();
   const region = kind === "timeframe"
-    ? { left: .045, width: .23 }
+    // Read only the small 1m/5m selector. The wider toolbar contains other
+    // numbers that repeatedly turned a visible 5m into a false 1m result.
+    ? { left: .07, width: .10 }
     // Expiration is the narrow control at the far right of the chart. Keeping
     // this crop tight prevents the changing countdown above it from becoming
     // a false "1 min" reading.
@@ -168,7 +172,7 @@ async function readSetupValue(kind, activeTab) {
     const reader = await withDeadline(() => ensureOcrWorker(), OCR_START_TIMEOUT_MS, "Inicialização do OCR");
     const result = await withDeadline(async () => {
       await reader.setParameters({
-        tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+        tessedit_pageseg_mode: kind === "timeframe" ? Tesseract.PSM.SINGLE_WORD : Tesseract.PSM.SPARSE_TEXT,
         tessedit_char_whitelist: "015mMINin :"
       });
       prepareSetupCrop(kind, activeTab);
@@ -287,6 +291,7 @@ async function readVisibleText(activeTab, force = false) {
 async function inspectFrame() {
   if (!stream || processing || !video.videoWidth || !context) return;
   processing = true;
+  const epoch = inspectionEpoch;
   try {
     const targetWidth = Math.min(1920, video.videoWidth);
     const targetHeight = Math.round(video.videoHeight * (targetWidth / video.videoWidth));
@@ -326,7 +331,9 @@ async function inspectFrame() {
     // Timeframe comes first: a visible 1m must be detected before the heavier
     // asset/expiration work, especially just after switching tabs.
     const timeframe = await readSetupValue("timeframe", activeTab);
+    if (epoch !== inspectionEpoch) return;
     const visible = await readVisibleText(activeTab, tabMoved || !lastAsset);
+    if (epoch !== inspectionEpoch) return;
     const detectedNewAsset = Boolean(visible.recognizedAsset && visible.recognizedAsset !== lastAsset);
     if (detectedNewAsset) {
       if (!tabMoved) assetRevision += 1;
@@ -352,6 +359,7 @@ async function inspectFrame() {
       }));
     }
     const expiration = await readSetupValue("expiration", activeTab);
+    if (epoch !== inspectionEpoch) return;
     const setup = { timeframe, expiration };
     const analysis = lastAsset ? reversalTracker.update(rawAnalysis, lastAsset) : null;
     missedChartReads = analysis?.chartDetected ? 0 : missedChartReads + 1;
@@ -395,16 +403,41 @@ async function inspectFrame() {
         lastInspectionAt: new Date().toISOString()
       }
     }));
+    lastCompletedInspectionAt = Date.now();
     setStatus(analysis?.chartDetected ? "Leitura visual ao vivo" : "Procurando o gráfico…", analysis?.chartDetected ? "connected" : "waiting");
   } catch (error) {
+    if (epoch !== inspectionEpoch) return;
     console.warn("Atlas frame inspection", error);
     setStatus("Recuperando a análise ao vivo…", "waiting");
   } finally {
-    processing = false;
+    if (epoch === inspectionEpoch) processing = false;
   }
 }
 
+function recoverStalledReader() {
+  if (!stream || document.hidden) return;
+  const lastProgress = lastCompletedInspectionAt || captureStartedAt;
+  if (Date.now() - lastProgress < 22000) return;
+  inspectionEpoch += 1;
+  processing = false;
+  lastCompletedInspectionAt = Date.now();
+  restartOcrWorker("Leitura interrompida. Reconectando automaticamente…");
+  video.play().catch(() => {});
+  window.dispatchEvent(new CustomEvent("atlas:screen-state", {
+    detail: {
+      bridge: "screen-capture", monitoring: true, asset: lastAsset,
+      assetRevision, chartDetected: false,
+      readingIssue: "A leitura visual ficou sem novas imagens. O Atlas está reconectando automaticamente.",
+      analysis: { direction: "WAIT", confidence: 0, source: "screen-capture", chartDetected: false,
+        reason: "Leitura visual interrompida; aguardando a reconexão antes de indicar uma entrada." }
+    }
+  }));
+  inspectFrame();
+}
+
 async function stopReading(reason = "Leitura visual desativada") {
+  inspectionEpoch += 1;
+  processing = false;
   clearInterval(analysisTimer);
   analysisTimer = null;
   stream?.getTracks().forEach(track => track.stop());
@@ -412,6 +445,7 @@ async function stopReading(reason = "Leitura visual desativada") {
   video.srcObject = null;
   reversalTracker.reset();
   captureStartedAt = 0;
+  lastCompletedInspectionAt = 0;
   missedChartReads = 0;
   missedAssetReads = 0;
   showActivationPrompt(true);
@@ -442,6 +476,7 @@ async function startReading() {
     video.srcObject = stream;
     await video.play();
     captureStartedAt = Date.now();
+    lastCompletedInspectionAt = captureStartedAt;
     missedAssetReads = 0;
     missedChartReads = 0;
     lastOcrAt = 0;
@@ -469,6 +504,7 @@ document.addEventListener("visibilitychange", () => {
     inspectFrame();
   }
 });
+setInterval(recoverStalledReader, 5000);
 
 buttons.forEach(button => button.addEventListener("click", startReading));
 document.querySelectorAll("[data-settings-trigger]").forEach(button => button.addEventListener("click", () => {

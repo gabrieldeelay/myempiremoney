@@ -2,15 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { composeDualSignalViews, signalLabel } from "../dist/modules/dual-signal.js";
 
-test("estado neutro em processamento continua como analisando", () => {
-  assert.equal(signalLabel({ direction: "WAIT" }), "ANALISANDO...");
+test("estado neutro informa que falta confirmação", () => {
+  assert.equal(signalLabel({ direction: "WAIT" }), "AGUARDANDO CONFIRMAÇÃO");
 });
 
-test("análise concluída sem entrada não parece um carregamento infinito", () => {
-  assert.equal(signalLabel({ direction: "WAIT", signalKind: "no-opportunity" }), "SEM OPORTUNIDADE");
+test("análise concluída sem entrada mantém o nome padronizado", () => {
+  assert.equal(signalLabel({ direction: "WAIT", signalKind: "no-opportunity" }), "AGUARDANDO CONFIRMAÇÃO");
 });
 
-test("separa uma possível compra intravela de uma venda para a próxima vela", () => {
+test("não inventa reversão intravela só porque a vela ficou esticada", () => {
   const result = composeDualSignalViews({
     live: {
       source: "screen-capture",
@@ -27,12 +27,10 @@ test("separa uma possível compra intravela de uma venda para a próxima vela", 
     expiration: "5 min"
   });
 
-  assert.equal(result.current.direction, "BUY");
-  assert.equal(result.current.possible, true);
-  assert.equal(result.current.timing, "CURRENT_CANDLE");
+  assert.equal(result.current.direction, "WAIT");
   assert.equal(result.next.direction, "SELL");
   assert.equal(result.next.timing, "NEXT_CANDLE");
-  assert.equal(signalLabel(result.current), "POSSÍVEL COMPRA");
+  assert.equal(signalLabel(result.current), "AGUARDANDO CONFIRMAÇÃO");
   assert.equal(signalLabel(result.next), "VENDA");
 });
 

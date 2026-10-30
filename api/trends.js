@@ -2,7 +2,7 @@ const { getMarketRadar } = require("../lib/market-radar");
 
 module.exports = async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Método não permitido." });
-  res.setHeader("Cache-Control", "public, max-age=5, s-maxage=15, stale-while-revalidate=45");
+  res.setHeader("Cache-Control", "public, max-age=0, s-maxage=5, must-revalidate");
   try {
     const snapshot = await getMarketRadar();
     if (!snapshot.signals.length) throw new Error("Nenhum ativo respondeu.");
@@ -10,7 +10,7 @@ module.exports = async function handler(req, res) {
       items: snapshot.signals.slice(0, 5),
       signals: snapshot.signals,
       source: snapshot.source,
-      method: "EMA9 + EMA21 + RSI14 + momentum, velas de 5 minutos",
+      method: "EMA9 + EMA21 + RSI14 + momentum; taxa de acerto medida em velas históricas de 5 minutos, sem antecipar o resultado da vela seguinte",
       updatedAt: snapshot.updatedAt,
       refreshing: snapshot.refreshing
     });

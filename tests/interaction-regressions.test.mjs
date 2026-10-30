@@ -82,7 +82,8 @@ assert.match(html, /id="galeBadge"/, "a leitura deve exibir o limite de gale cal
 assert.match(html, /id="analysisDetails"/, "o painel deve explicar os fatores que fomentam a leitura");
 assert.match(app, /confidence >= 87 \? "SEM GALE"/, "confiança muito alta deve ser apresentada sem gale");
 assert.match(app, /possible \? "ATÉ GALE 2"/, "leitura possível deve limitar a exposição ao gale 2");
-assert.match(dualSignal, /view\.possible \? "POSSÍVEL " : ""/, "leituras de menor confiança devem ser marcadas como possíveis");
+assert.match(dualSignal, /view\.possible \? "PROVÁVEL " : ""/, "leituras preliminares devem usar a nomenclatura padronizada");
+assert.match(app, /else if \(source === "extension"\) extensionReady = true/, "a captura visual não pode marcar a extensão como ativa");
 assert.match(styles, /--probable:\s*#c7a2ff/, "leituras prováveis devem usar uma cor própria");
 assert.match(styles, /\.signal-more:hover \.signal-tooltip/, "os fundamentos devem aparecer ao passar o mouse em Ler mais");
 assert.match(styles, /@keyframes trade-buy-flash/, "compras devem produzir glow verde");
@@ -137,7 +138,7 @@ assert.match(styles, /\.signal-card\.buy \.entry-guidance/, "o aviso destacado d
 assert.match(styles, /\.signal-card\.sell \.entry-guidance/, "o aviso destacado deve acompanhar a cor de venda");
 assert.match(app, /CONFIRME A REJEIÇÃO/, "uma vela esticada deve pedir confirmação antes de incentivar a reversão");
 assert.match(app, /REVERSÃO TÉCNICA/, "uma rejeição confirmada deve ficar claramente identificada");
-assert.match(app, /Possível reversão para \$\{side\} nesta vela/, "uma reversão intravela deve gerar um alerta adicional");
+assert.match(app, /Provável reversão para \$\{side\} nesta vela/, "uma reversão intravela deve gerar um alerta adicional");
 assert.doesNotMatch(server, /\/api\/tts/, "a voz local não deve depender de uma rota paga no servidor");
 assert.match(adminPage, /data-admin-tab="speeches"/, "o painel deve oferecer a configuração de falas");
 assert.match(adminPage, /id="speechAudio"/, "o administrador deve poder enviar o áudio de cada fala");
@@ -166,7 +167,7 @@ assert.doesNotMatch(html, /Instalar agora|Atualizar extensão|Microsoft Edge/, "
 assert.match(screenReader, /getDisplayMedia/, "a leitura sem extensão deve usar a autorização nativa de captura da aba");
 assert.match(screenReader, /showActivationPrompt\(false\)/, "o aviso deve desaparecer automaticamente quando a leitura começar");
 assert.match(screenReader, /showActivationPrompt\(true\)/, "o aviso deve voltar quando a leitura for encerrada ou falhar");
-assert.match(screenReader, /screen-vision\.js\?v=3\.16\.4/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
+assert.match(screenReader, /screen-vision\.js\?v=3\.20\.0/, "a leitura deve carregar o reconhecimento atualizado de ativos sem usar cache antigo");
 assert.match(screenReader, /createIntracandleReversalTracker/, "a leitura deve comparar a evolução da vela aberta entre quadros");
 assert.match(app, /signal-stability\.js\?v=3\.14\.0/, "o painel deve carregar o alerta de reversão sem usar cache antigo");
 assert.match(app, /Nova oportunidade de \$\{side\} confirmada/, "uma nova venda ou compra na mesma direção deve ser anunciada novamente");
@@ -182,7 +183,7 @@ assert.match(app, /Identificando ativo/, "a captura ativa não pode ser apresent
 assert.match(app, /renderNextSignal\(views\.next\)/, "a direção da próxima vela deve permanecer visível mesmo sem entrada na vela atual");
 assert.match(app, /A direção continua vendedora\. O ponto desta vela passou; aguarde uma nova entrada\./, "a venda deve permanecer visível sem incentivar uma entrada atrasada");
 assert.match(styles, /\.signal-card\.expired/, "um sinal encerrado deve ter um estado visual próprio");
-assert.match(dualSignal, /setup === "STRETCHED_CANDLE"/, "uma vela esticada deve aparecer como possível compra ou possível venda");
+assert.doesNotMatch(dualSignal, /setup === "STRETCHED_CANDLE"/, "uma vela esticada sozinha não deve gerar previsão de reversão");
 assert.match(app, /signalLabel\(\{ direction: finalDirection, possible \}\)/, "o estado possível deve ser identificado sem virar sinal confirmado");
 assert.doesNotMatch(app, /COMPRA" : "VENDA"\} EM OBSERVAÇÃO/, "a interface não deve chamar a hipótese de compra ou venda em observação");
 assert.match(app, /Queda forte detectada\. Espere a vela reagir para cima antes de considerar compra\./, "uma queda forte deve explicar exatamente qual confirmação falta para compra");

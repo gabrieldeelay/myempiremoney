@@ -81,6 +81,21 @@ test("sequência ascendente resulta em compra", () => {
   assert.equal(result.entryTiming, "CURRENT_CANDLE");
 });
 
+test("um pavio de rejeição em suporte pode gerar leitura preliminar nesta vela", () => {
+  const image = frame(320, 200);
+  paint(image, 90, 98, 100, 118, [13, 199, 144]);
+  paint(image, 115, 100, 125, 119, [238, 78, 82]);
+  paint(image, 140, 105, 150, 128, [238, 78, 82]);
+  paint(image, 165, 120, 175, 140, [238, 78, 82]);
+  paint(image, 170, 141, 170, 153, [238, 78, 82]);
+  const result = analyzeChartPixels(image.data, image.width, image.height);
+  assert.equal(result.direction, "BUY");
+  assert.equal(result.setup, "INTRACANDLE_REVERSAL");
+  assert.equal(result.entryTiming, "CURRENT_CANDLE");
+  assert.ok(result.confidence < 70);
+  assert.ok(result.technical.lowerWickRatio >= .55);
+});
+
 test("vela compradora esticada bloqueia uma compra atrasada sem presumir reversão", () => {
   const image = frame(320, 200);
   paint(image, 90, 112, 100, 128, [13, 199, 144]);
