@@ -1,0 +1,31 @@
+.position.countdown-mode strong {
+  color: #72ebff;
+  font-size: clamp(44px, 7vw, 76px);
+  letter-spacing: -.05em;
+}
+
+.vip-upsell {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid rgba(96, 231, 255, .22);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(96, 231, 255, .08), rgba(255, 60, 166, .08));
+}
+
+.vip-upsell > span {
+  color: #79eaff;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .12em;
+}
+
+.vip-upsell h2 { margin: 6px 0; font-size: 23px; }
+.vip-upsell p { margin: 0; color: #bbaac1; font-size: 12px; line-height: 1.5; }
+.vip-upsell > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 13px; }
+.vip-upsell a { min-height: 42px; display: grid; place-items: center; padding: 8px; border-radius: 10px; background: rgba(255,255,255,.08); color: #fff; text-align: center; font-size: 11px; font-weight: 900; }
+.vip-upsell a:last-child { background: linear-gradient(120deg, var(--orange), var(--pink)); color: #220922; }
+
+@media (max-width: 520px) {
+  .vip-upsell > div { grid-template-columns: 1fr; }
+  .position.countdown-mode strong { font-size: 40px; }
+}

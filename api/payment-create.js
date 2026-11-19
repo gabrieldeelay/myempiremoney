@@ -62,7 +62,8 @@ module.exports = async function handler(req, res) {
     const db = getDb();
     const settings = await getPublicSettings(db);
     const planId = String(req.body?.planId || "session_15");
-    if (!getCloudPlan(planId)) return res.status(422).json({ error: "Escolha um passe de jogo válido." });
+    const cloudPlan = getCloudPlan(planId);
+    if (!cloudPlan || cloudPlan.free) return res.status(422).json({ error: "Escolha um passe de jogo válido." });
     const quote = await buildQuote(db, settings, planId, req.body?.couponCode);
     if (req.body?.action === "quote") return res.status(200).json({ quote: { ...quote, coupon: quote.coupon ? { code: quote.coupon.code } : null } });
     const credentials = await getVenoCredentials(db);

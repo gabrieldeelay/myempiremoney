@@ -13,6 +13,9 @@ const adminPage = await readFile(new URL("../dist/admin/index.html", import.meta
 const adminModule = await readFile(new URL("../dist/modules/admin.js", import.meta.url), "utf8");
 const checkoutPage = await readFile(new URL("../dist/checkout/index.html", import.meta.url), "utf8");
 const checkoutModule = await readFile(new URL("../dist/modules/checkout.js", import.meta.url), "utf8");
+const landingModule = await readFile(new URL("../dist/modules/vice-cloud.js", import.meta.url), "utf8");
+const playPage = await readFile(new URL("../dist/play/index.html", import.meta.url), "utf8");
+const playModule = await readFile(new URL("../dist/modules/play.js", import.meta.url), "utf8");
 const paymentCreateApi = await readFile(new URL("../api/payment-create.js", import.meta.url), "utf8");
 const insights = await readFile(new URL("../dist/modules/insights.js", import.meta.url), "utf8");
 const newsApi = await readFile(new URL("../api/news.js", import.meta.url), "utf8");
@@ -254,7 +257,7 @@ assert.match(app, /atlas:screen-state/, "o robô deve receber o estado produzido
 assert.match(landing, /Vice City/, "a raiz deve apresentar a chamada de cloud gaming");
 assert.match(landing, /R\$<\/small><strong>19<\/strong><sup>,90/, "a landing deve mostrar o passe de quinze minutos");
 assert.match(landing, /R\$<\/small><strong>49<\/strong><sup>,90/, "a landing deve mostrar o passe de uma hora");
-assert.match(landing, /id="playingCount">45</, "a landing deve mostrar quantas pessoas estão jogando");
+assert.match(landing, /id="playingCount">—</, "a landing deve reservar a contagem ao vivo sem inventar um valor no HTML");
 assert.doesNotMatch(landing, /id="queueList"|id="queueCount"/, "a landing não deve revelar a fila antes do pagamento");
 assert.match(landing, /href="\/admin"/, "o rodapé deve oferecer acesso administrativo direto");
 assert.match(access, /id="signupPhone"/, "o cadastro deve solicitar telefone");
@@ -280,8 +283,15 @@ assert.match(paymentCreateApi, /createGuestCheckoutUser/, "a API deve criar um a
 assert.match(checkoutPage, /SEM CADASTRO/, "o checkout deve deixar claro que não exige conta");
 assert.match(landing, /player\.kick\.com\/jogargta/, "a landing deve incorporar a live solicitada da Kick");
 assert.doesNotMatch(landing, /id="queueCount"|>967</, "a landing não deve revelar o tamanho da fila antes do pagamento");
-assert.match(landing, /id="playingCount">45</, "a landing deve mostrar quarenta e cinco pessoas jogando");
+assert.match(landingModule, /apiFetch\("\/api\/cloud-queue"\)/, "a landing deve buscar a contagem real compartilhada pelo servidor");
 assert.match(landing, /FILA PRIORITÁRIA/, "a sessão completa deve destacar a prioridade na fila");
+assert.match(landing, /id="freeQueueButton"/, "a landing deve oferecer uma fila gratuita sem exigir PIX");
+assert.match(landing, /Entre na fila VIP/, "a opção gratuita deve recomendar claramente a fila VIP");
+assert.match(playPage, /id="vipUpsell"/, "a contagem gratuita deve continuar oferecendo o acesso VIP");
+assert.match(playModule, /Faltam \$\{hours\} horas, \$\{minutes\} minutos e \$\{secs\} segundos/, "o prazo gratuito deve aparecer em horas, minutos e segundos");
+assert.match(playModule, /setInterval\(updateFreeCountdown,1000\)/, "a contagem gratuita deve atualizar a cada segundo");
+assert.match(playModule, /navigation\?\.type==="reload"/, "recarregar a fila gratuita deve solicitar um novo prazo");
+assert.match(landing, /Não atualize a página da fila/, "a perda da vaga ao recarregar deve ser informada antes da entrada");
 assert.doesNotMatch(landing + checkoutPage, /VenoPag/i, "a marca do processador não deve aparecer para o comprador");
 assert.doesNotMatch(landing, /<video/, "a página inicial não deve baixar vídeo de fundo pesado");
 assert.match(adminPage, /data-admin-tab="payments"/, "o painel deve ter uma aba de pagamentos");

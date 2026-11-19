@@ -20,6 +20,7 @@ function run(handler) {
 const apiHandlers = {
   "/api/auth": require("./api/auth"),
   "/api/cloud-queue": require("./api/cloud-queue"),
+  "/api/free-queue": require("./api/free-queue"),
   "/api/admin-settings": require("./api/admin-settings"),
   "/api/admin-signals": require("./api/admin-signals"),
   "/api/admin-speeches": require("./api/admin-speeches"),
