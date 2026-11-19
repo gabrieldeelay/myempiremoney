@@ -8,9 +8,9 @@ const freeStatus = document.querySelector("#freeQueueStatus");
 async function refreshSessions() {
   try {
     const queue = await apiFetch("/api/cloud-queue");
-    const count = Number(queue.playingCount || 0);
+    const count = Number(queue.displayPlayingCount || queue.playingCount || 30);
     if (playingCount) playingCount.textContent = String(count);
-    if (activeSessionsCopy) activeSessionsCopy.textContent = `${count} sessões ativas`;
+    if (activeSessionsCopy) activeSessionsCopy.textContent = `${count} sessões ativas · estimativa visual`;
   } catch {
     if (activeSessionsCopy) activeSessionsCopy.textContent = "Servidores ativos";
   }

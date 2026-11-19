@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { CLOUD_PLANS } = require("../lib/cloud-plans");
-const { enqueueFreeSession, enqueuePaidSession, freeWaitSeconds } = require("../lib/cloud-queue");
+const { enqueueFreeSession, enqueuePaidSession, freeWaitSeconds, visualPlayingCount } = require("../lib/cloud-queue");
 
 test("os passes usam os valores e tempos definidos para a Vice Cloud", () => {
   assert.equal(CLOUD_PLANS.session_15.currentPrice, 19.90);
@@ -56,4 +56,12 @@ test("a entrada gratuita é persistida sem criar cobrança", async () => {
   assert.match(statement, /duration_minutes,display_position/);
   assert.match(statement, /VALUES \(\?,\?,\?,'gta6',0,1,1/);
   assert.deepEqual(values.slice(1), ["free-user", "free-payment"]);
+});
+
+test("a estimativa visual é compartilhada por cinco minutos e fica entre trinta e sessenta e cinco", () => {
+  const instant = Date.UTC(2026, 10, 19, 21, 55, 0);
+  const first = visualPlayingCount(instant);
+  const sameWindow = visualPlayingCount(instant + 4 * 60 * 1000);
+  assert.ok(first >= 30 && first <= 65);
+  assert.equal(sameWindow, first);
 });

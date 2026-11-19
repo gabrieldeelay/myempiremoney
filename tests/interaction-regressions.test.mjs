@@ -283,7 +283,8 @@ assert.match(paymentCreateApi, /createGuestCheckoutUser/, "a API deve criar um a
 assert.match(checkoutPage, /SEM CADASTRO/, "o checkout deve deixar claro que não exige conta");
 assert.match(landing, /player\.kick\.com\/jogargta/, "a landing deve incorporar a live solicitada da Kick");
 assert.doesNotMatch(landing, /id="queueCount"|>967</, "a landing não deve revelar o tamanho da fila antes do pagamento");
-assert.match(landingModule, /apiFetch\("\/api\/cloud-queue"\)/, "a landing deve buscar a contagem real compartilhada pelo servidor");
+assert.match(landingModule, /queue\.displayPlayingCount/, "a landing deve usar a estimativa visual compartilhada pelo servidor");
+assert.match(landing, /Estimativa visual sincronizada/, "a landing deve identificar claramente que a contagem é uma estimativa visual");
 assert.match(landing, /FILA PRIORITÁRIA/, "a sessão completa deve destacar a prioridade na fila");
 assert.match(landing, /id="freeQueueButton"/, "a landing deve oferecer uma fila gratuita sem exigir PIX");
 assert.match(landing, /Entre na fila VIP/, "a opção gratuita deve recomendar claramente a fila VIP");
