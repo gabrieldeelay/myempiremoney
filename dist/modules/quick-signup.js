@@ -2,9 +2,10 @@ import { apiFetch, getAtlasClient } from "/modules/atlas-client.js";
 
 const $ = selector => document.querySelector(selector);
 const money = value => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-const storageKey = "atlas-fast-checkout-v1";
+const storageKey = "vice-cloud-checkout-v1";
 const saved = JSON.parse(sessionStorage.getItem(storageKey) || "{}");
-const state = { step: Number(saved.step) || 0, name: saved.name || "", email: saved.email || "", phone: saved.phone || "", planId: "monthly", fullName: saved.fullName || "", document: saved.document || "", couponCode: saved.couponCode || "", accountCreated: false };
+const requestedPlan = new URLSearchParams(location.search).get("plan");
+const state = { step: Number(saved.step) || 0, name: saved.name || "", email: saved.email || "", phone: saved.phone || "", planId: requestedPlan || saved.planId || "session_15", fullName: saved.fullName || "", document: saved.document || "", couponCode: saved.couponCode || "", accountCreated: false };
 const steps = [...document.querySelectorAll("[data-quick-step]")];
 const messages = ["Leva menos de dois minutos", "Seu acesso", "Contato", "Conta segura", "Metade concluída", "Estamos quase lá", "Último dado", "Oferta pronta"];
 let config;
@@ -46,8 +47,8 @@ function renderStep() {
 }
 
 function renderPlans() {
-  const access = config.plans?.monthly || Object.values(config.plans || {}).find(plan => plan.active !== false);
-  if (access) state.planId = access.id;
+  const selected = config.plans?.[state.planId] || config.plans?.session_15 || Object.values(config.plans || {}).find(plan => plan.active !== false);
+  if (selected) state.planId = selected.id;
 }
 
 function currentField() {
@@ -93,8 +94,8 @@ function renderQuote() {
   $("#offerBilling").textContent = quote.plan.billing;
   $("#offerOldPrice").textContent = money(quote.originalPrice);
   $("#offerFinalPrice").textContent = money(quote.amount);
-  $("#offerDiscount").textContent = `${quote.discountPercent}% DE DESCONTO`;
-  $("#offerSavings").textContent = `Você economiza ${money(quote.savings)} nesta oferta.`;
+  $("#offerDiscount").textContent = quote.discountPercent ? `${quote.discountPercent}% DE DESCONTO` : "PASSE SELECIONADO";
+  $("#offerSavings").textContent = quote.discountPercent ? `Você economiza ${money(quote.savings)} nesta oferta.` : "Pagamento único para esta sessão.";
   $("#offerBenefits").replaceChildren(...quote.plan.benefits.map(text => { const item = document.createElement("li"); item.textContent = text; return item; }));
   $("#offerValues").classList.remove("price-pop"); requestAnimationFrame(() => $("#offerValues").classList.add("price-pop"));
 }
@@ -120,7 +121,7 @@ function showPayment(payment) {
 async function checkPayment() {
   try {
     const result = await apiFetch("/api/payment-status");
-    if (result.accessGranted) { clearInterval(polling); $("#quickPixStatus").textContent = "Pagamento confirmado. Abrindo o Atlas…"; $("#quickPixStatus").className = "status success"; sessionStorage.removeItem(storageKey); setTimeout(() => location.replace("/app"), 900); }
+    if (result.accessGranted) { clearInterval(polling); $("#quickPixStatus").textContent = "Pagamento confirmado. Colocando você na fila…"; $("#quickPixStatus").className = "status success"; sessionStorage.removeItem(storageKey); setTimeout(() => location.replace("/play"), 900); }
     else $("#quickPixStatus").textContent = result.status === "pending" ? "Aguardando a confirmação do PIX…" : `Status: ${result.status}`;
   } catch (error) { $("#quickPixStatus").textContent = error.message; $("#quickPixStatus").className = "status error"; }
 }
@@ -133,7 +134,7 @@ $("#quickNext").addEventListener("click", advance);
 $("#quickBack").addEventListener("click", () => { if (state.step > 0) { state.step -= 1; renderStep(); } });
 $("#quickForm").addEventListener("submit", event => { event.preventDefault(); advance(); });
 $("#applyCoupon").addEventListener("click", async () => { const button = $("#applyCoupon"); button.disabled = true; try { state.couponCode = $("#quickCoupon").value.trim().toUpperCase(); await loadQuote(); $("#couponMessage").textContent = quote.coupon ? `Cupom ${quote.coupon.code} aplicado.` : "Preço da oferta atualizado."; $("#couponMessage").className = "step-message"; persist(); } catch (error) { $("#couponMessage").textContent = error.message; $("#couponMessage").className = "step-message error"; } finally { button.disabled = false; } });
-$("#finishPayment").addEventListener("click", async () => { const button = $("#finishPayment"); button.disabled = true; try { const result = await apiFetch("/api/payment-create", { method: "POST", body: JSON.stringify({ planId: state.planId, couponCode: state.couponCode, name: state.fullName, document: state.document }) }); if (result.accessGranted) location.replace("/app"); else showPayment(result.payment); } catch (error) { $("#couponMessage").textContent = error.message; $("#couponMessage").className = "step-message error"; } finally { button.disabled = false; } });
+$("#finishPayment").addEventListener("click", async () => { const button = $("#finishPayment"); button.disabled = true; try { const result = await apiFetch("/api/payment-create", { method: "POST", body: JSON.stringify({ planId: state.planId, couponCode: state.couponCode, name: state.fullName, document: state.document }) }); showPayment(result.payment); } catch (error) { $("#couponMessage").textContent = error.message; $("#couponMessage").className = "step-message error"; } finally { button.disabled = false; } });
 $("#quickCopyPix").addEventListener("click", async () => { await navigator.clipboard.writeText($("#quickPixCode").textContent); $("#quickCopyPix").textContent = "Código copiado ✓"; });
 
 config = await fetch("/api/public-config").then(response => response.json());
@@ -142,7 +143,6 @@ const client = await getAtlasClient();
 const { data: currentSession } = await client.auth.getSession();
 if (currentSession.session) {
   const account = await apiFetch("/api/me");
-  if (account.profile?.access_granted) location.replace("/app");
   state.accountCreated = true; state.email = currentSession.session.user.email; state.name = account.profile?.name?.split(" ")[0] || state.name; state.phone = account.profile?.phone || state.phone; state.fullName = account.profile?.name || state.fullName; state.document = account.profile?.document || state.document; state.step = Math.max(5, Math.min(state.step, 7));
   $("#quickName").value = state.name; $("#quickEmail").value = state.email; $("#quickPhone").value = formatPhone(state.phone); $("#quickFullName").value = state.fullName; $("#quickDocument").value = formatDocument(state.document);
   if (state.step === 7) await loadQuote();

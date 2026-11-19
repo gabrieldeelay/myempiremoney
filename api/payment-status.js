@@ -2,6 +2,7 @@ const { requireUser, sendError } = require("../lib/auth");
 const { one } = require("../lib/db");
 const { activatePayment } = require("../lib/payments");
 const { getVenoCredentials } = require("../lib/settings");
+const { getQueueSnapshot } = require("../lib/cloud-queue");
 
 const REVOKED = new Set(["expired", "canceled", "contested", "chargedback", "refunded"]);
 
@@ -25,7 +26,7 @@ module.exports = async function handler(req, res) {
       await db.execute("UPDATE payments SET status=?,raw=?,updated_at=UTC_TIMESTAMP() WHERE id=?", [status, JSON.stringify(payload), payment.id]);
       if (REVOKED.has(status)) await db.execute("UPDATE users SET access_granted=0,access_status=?,updated_at=UTC_TIMESTAMP() WHERE id=?", [status, user.id]);
     }
-    return res.status(200).json({ status, accessGranted: status === "confirmed", remaining: payload.remaining ?? null });
+    return res.status(200).json({ status, accessGranted: status === "confirmed", queue: status === "confirmed" ? (await getQueueSnapshot(user.id)).myTicket : null, remaining: payload.remaining ?? null });
   } catch (error) {
     return sendError(res, error);
   }

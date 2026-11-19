@@ -249,9 +249,10 @@ assert.doesNotMatch(html, />Tendências</, "a aba de tendências não deve mais 
 assert.doesNotMatch(insights, /trend-row/, "ativos do radar central não devem mais ser exibidos como uma lista clicável");
 assert.match(app, /setupWarningTracker\.dismiss/, "o botão Vou mudar deve silenciar o único aviso da aba");
 assert.match(app, /atlas:screen-state/, "o robô deve receber o estado produzido pela leitura visual");
-assert.match(landing, /Operar no escuro/, "a raiz deve apresentar a nova chamada do Atlas");
-assert.doesNotMatch(landing, /id="oldPrice"|id="currentPrice"/, "a landing não deve revelar preços");
-assert.match(landing, /id="landingDiscount"/, "a landing deve destacar o desconto real");
+assert.match(landing, /Vice City/, "a raiz deve apresentar a chamada de cloud gaming");
+assert.match(landing, /R\$<\/small><strong>19<\/strong><sup>,90/, "a landing deve mostrar o passe de quinze minutos");
+assert.match(landing, /R\$<\/small><strong>49<\/strong><sup>,90/, "a landing deve mostrar o passe de uma hora");
+assert.match(landing, /id="queueList"/, "a landing deve apresentar a fila ao vivo");
 assert.match(landing, /href="\/admin"/, "o rodapé deve oferecer acesso administrativo direto");
 assert.match(access, /id="signupPhone"/, "o cadastro deve solicitar telefone");
 assert.match(access, /id="signupPasswordConfirmation"/, "o cadastro deve solicitar confirmação da senha");

@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const { requireUser, sendError } = require("../lib/auth");
 const { one } = require("../lib/db");
 const { getPublicSettings, getVenoCredentials } = require("../lib/settings");
+const { getCloudPlan } = require("../lib/cloud-plans");
 
 function digits(value) { return String(value || "").replace(/\D/g, ""); }
 
@@ -46,9 +47,9 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
   try {
     const { user, profile, db } = await requireUser(req);
-    if (profile?.access_granted) return res.status(200).json({ accessGranted: true });
     const settings = await getPublicSettings(db);
-    const planId = "monthly";
+    const planId = String(req.body?.planId || "session_15");
+    if (!getCloudPlan(planId)) return res.status(422).json({ error: "Escolha um passe de jogo válido." });
     const quote = await buildQuote(db, settings, planId, req.body?.couponCode);
     if (req.body?.action === "quote") return res.status(200).json({ quote: { ...quote, coupon: quote.coupon ? { code: quote.coupon.code } : null } });
     const credentials = await getVenoCredentials(db);
@@ -64,7 +65,7 @@ module.exports = async function handler(req, res) {
         "Content-Type": "application/json",
         "X-Client-Id": credentials.clientId,
         "X-Client-Secret": credentials.clientSecret,
-        "Idempotency-Key": `atlas-${user.id}-${crypto.randomUUID()}`
+        "Idempotency-Key": `vice-cloud-${user.id}-${crypto.randomUUID()}`
       },
       body: JSON.stringify({ amount, name, document, description: quote.plan.label, webhook_url: `${origin}/api/venopag-webhook` })
     });

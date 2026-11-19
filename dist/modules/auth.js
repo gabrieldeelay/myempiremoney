@@ -35,7 +35,7 @@ $("#signupPhone").addEventListener("input", event => { event.currentTarget.value
 const client = await getAtlasClient();
 const { data: existing } = await client.auth.getSession();
 if (existing.session) {
-  apiFetch("/api/me").then(account => location.replace(account.profile?.role === "admin" ? "/admin" : account.profile?.access_granted ? "/app" : "/checkout")).catch(() => {});
+  apiFetch("/api/me").then(account => location.replace(account.profile?.role === "admin" ? "/admin" : account.profile?.access_granted ? "/play" : "/checkout")).catch(() => {});
 }
 
 $("#loginForm").addEventListener("submit", async event => {
@@ -48,7 +48,7 @@ $("#loginForm").addEventListener("submit", async event => {
     const { error } = await client.auth.signInWithPassword({ email, password: $("#loginPassword").value });
     if (error) throw error;
     const account = await apiFetch("/api/me");
-    location.replace(account.profile?.role === "admin" ? "/admin" : account.profile?.access_granted ? "/app" : "/checkout");
+    location.replace(account.profile?.role === "admin" ? "/admin" : account.profile?.access_granted ? "/play" : "/checkout");
   } catch (error) { status("#loginStatus", error.message.includes("Invalid login") ? "E-mail ou senha incorretos." : error.message, "error"); submit.disabled = false; }
 });
 

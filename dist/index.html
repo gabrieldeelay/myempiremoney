@@ -1,10 +1,62 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Atlas, o seu assistente de operação. Leia o mercado com contexto, notícias e tendências antes de decidir."><meta name="theme-color" content="#030918"><title>Atlas | Seu assistente de operação</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/landing.css?v=3.2.1"><link rel="stylesheet" href="/landing-offer.css?v=3.2.1"></head><body>
-<div class="mouse-light" aria-hidden="true"></div>
-<header class="nav"><div class="shell"><a class="logo" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a><nav class="nav-actions"><a class="nav-link" href="#como-funciona">Como funciona</a><a class="button ghost" href="/acesso">Entrar</a><a class="button primary" href="/acesso?mode=signup">Criar conta</a></nav></div></header>
-<main>
-  <section class="hero shell"><div class="hero-copy"><span class="eyebrow"><i></i><span id="heroEyebrow">SEU ASSISTENTE DE OPERAÇÃO</span></span><h1 id="heroHeadline">Operar no escuro, <span>não dá certo.</span></h1><p id="heroSubheadline">O Atlas lê o contexto, organiza as informações e fica ao seu lado antes de cada decisão. Você continua no controle e não precisa decidir no escuro.</p><div class="hero-ctas"><a class="button primary" href="/cadastro-rapido">Quero minha oferta →</a><a class="button" href="#como-funciona">Ver como funciona</a></div><div class="hero-note">Análise e apoio à decisão. A execução da operação continua sendo sua.</div></div><div class="orb-stage" aria-label="Atlas acompanhando o mercado"><div class="planet"><div class="planet-core">ATLAS</div></div><div class="float-card signal"><b>Sinal com contexto</b><span><strong>COMPRA</strong> · confiança 84%</span></div><div class="float-card news"><b>Notícia relevante</b><span>★★★★★ impacto alto</span></div></div></section>
-  <section class="section shell" id="como-funciona"><div class="section-head"><h2>Seu dedo é rápido. O mercado é mais.</h2><p>O Atlas coloca contexto entre o impulso e o clique: tendência, risco, notícia e leitura técnica em uma tela que não te deixa operar no escuro.</p></div><div class="problem-grid"><article class="card"><span class="num">01 · CONTEXTO</span><h3>Leia antes de reagir.</h3><p>Notícias classificadas por impacto e sinais técnicos atualizados ajudam você a entender o cenário antes da entrada.</p></article><article class="card"><span class="num">02 · COMPANHIA</span><h3>Você não opera sozinho.</h3><p>O robô comenta decisões importantes, confronta entradas ruins e sabe a hora de ficar quieto.</p></article><article class="card"><span class="num">03 · DISCIPLINA</span><h3>Certeza não é chute.</h3><p>O Atlas mostra por que uma compra, venda ou espera faz sentido. A decisão continua sua, agora com argumento.</p></article></div></section>
-  <section class="section shell"><div class="section-head"><h2>Um assistente que observa. Não um robô que aposta por você.</h2><p>Ele organiza sinais reais, chama atenção para risco e conversa com você durante a operação.</p></div><div class="demo"><article class="assistant-card"><div class="assistant-face">●_●</div><h3>“Essa compra até tem argumento. O tamanho da mão é que está contando uma história de terror.”</h3><p>Comentários curtos, contexto técnico e perguntas rápidas. Sem mensagens repetitivas e sem fingir certeza quando o mercado não entregou uma vantagem.</p><div class="assistant-line">O que eu deveria ter feito?<br><strong>Esperar a confirmação da próxima vela. A tendência existe, mas o preço já chegou esticado.</strong></div></article><div class="live-board"><div class="live-row buy"><i>↗</i><span><b>BITCOIN</b><small>EMA9 acima da EMA21 · RSI 61</small></span><strong>COMPRA 82%</strong></div><div class="live-row sell"><i>↘</i><span><b>ETHEREUM</b><small>Momentum vendedor · 5 minutos</small></span><strong>VENDA 76%</strong></div><div class="live-row"><i>★</i><span><b>Decisão de juros</b><small>Notícia macroeconômica</small></span><strong>★★★★★</strong></div><div class="live-row buy"><i>✓</i><span><b>Risco preservado</b><small>Exposição compatível com o saldo</small></span><strong>DISCIPLINA</strong></div></div></div></section>
-  <section class="section shell offer-section" id="oferta"><div class="pricing offer-card"><div class="pricing-content offer-layout"><div class="offer-copy"><span class="eyebrow"><i></i> ACESSO AO ATLAS</span><h2>Entre com mais contexto em cada operação.</h2><p>Tenha o Atlas ao seu lado para organizar sinais, notícias e riscos antes de cada decisão.</p><div class="offer-points"><span>✓ Assistente em tempo real</span><span>✓ Notícias e tendências</span><span>✓ Atualizações incluídas</span></div></div><div class="price-box offer-action"><span class="offer-label">OFERTA ESPECIAL</span><span class="discount-display" id="landingDiscount">OFERTA DISPONÍVEL</span><small>Confira o valor completo antes de pagar.</small><a class="button primary" id="landingOfferLink" href="/cadastro-rapido">Criar conta e continuar <b>→</b></a><em>Compra segura. Você confere tudo antes de confirmar.</em></div></div></div></section>
-</main><footer class="footer"><div class="shell"><img src="/atlas-logo.svg" alt="Atlas"><span>Atlas, o seu assistente de operação.</span><a class="admin-link" href="/admin">Acesso administrativo</a><span>© 2026</span></div></footer>
-<script type="module">fetch('/api/public-config').then(r=>r.json()).then(c=>{if(c.content){heroEyebrow.textContent=c.content.eyebrow;heroSubheadline.textContent=c.content.subheadline;const comma=c.content.headline.indexOf(','),lead=comma>=0?c.content.headline.slice(0,comma+1):c.content.headline.split(/\s+/).slice(0,-2).join(' '),tail=comma>=0?c.content.headline.slice(comma+1).trim():c.content.headline.split(/\s+/).slice(-2).join(' '),accent=document.createElement('span');accent.textContent=tail;heroHeadline.replaceChildren(document.createTextNode(lead+' '),accent)}const plans=Object.values(c.plans||{}).filter(p=>p.active!==false),ranked=plans.map(p=>({id:p.id,discount:Math.max(0,Math.round((1-p.currentPrice/p.oldPrice)*100))})).sort((a,b)=>b.discount-a.discount);if(ranked[0]){landingDiscount.textContent=`ATÉ ${ranked[0].discount}% OFF`;landingOfferLink.href=`/cadastro-rapido?plan=${ranked[0].id}`}}).catch(()=>{});addEventListener('pointermove',e=>{document.documentElement.style.setProperty('--mx',e.clientX+'px');document.documentElement.style.setProperty('--my',e.clientY+'px')},{passive:true});</script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Entre na fila e jogue GTA VI pela nuvem, direto do navegador.">
+  <meta name="theme-color" content="#19071f">
+  <title>Vice Cloud | GTA VI na nuvem</title>
+  <link rel="icon" href="/vice-favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/vice-logo.png" as="image">
+  <link rel="stylesheet" href="/vice-cloud.css?v=1.0.0">
+</head>
+<body>
+  <div class="hero-media" aria-hidden="true">
+    <img src="/vice-hero.jpg" alt="">
+    <video autoplay muted loop playsinline preload="metadata" poster="/vice-hero.jpg">
+      <source src="https://media-rockstargames-com.akamaized.net/VI/downloads/videos/GTAVI_Out_Now/GTAVI_Out_Now.mp4" type="video/mp4">
+    </video>
+  </div>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="Vice Cloud, início"><span>VICE</span><b>CLOUD</b></a>
+    <nav><a href="#como-funciona">Como funciona</a><a href="#passes">Passes</a><a class="login" href="/acesso">Entrar</a><a class="nav-play" href="#passes">Jogar agora</a></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="live-pill"><i></i> SERVIDORES ONLINE</span>
+        <img class="gta-logo" src="/vice-logo.png" alt="Grand Theft Auto VI">
+        <h1>Vice City.<br><em>Direto do navegador.</em></h1>
+        <p>Escolha seu tempo, confirme pelo PIX e entre automaticamente na fila. Quando chegar a sua vez, sua sessão começa.</p>
+        <div class="hero-actions"><a class="cta" href="#passes"><span>🎮</span> Jogar agora</a><a class="secondary" href="#como-funciona">Ver como funciona</a></div>
+        <div class="hero-meta"><span>Sem download</span><span>Pagamento por PIX</span><span>Sessão individual</span></div>
+      </div>
+      <aside class="queue-card" aria-labelledby="queueTitle">
+        <div class="queue-head"><div><span>FILA DO JOGO</span><h2 id="queueTitle">Próximos jogadores</h2></div><div class="queue-live"><i></i> AO VIVO</div></div>
+        <div class="queue-summary"><div><span>Na fila</span><strong id="queueCount">—</strong></div><div><span>Jogando</span><strong id="playingCount">—</strong></div><div><span>Jogo</span><strong>GTA VI</strong></div></div>
+        <div class="queue-list" id="queueList" aria-live="polite"><div class="queue-empty">Buscando a fila ao vivo…</div></div>
+        <a class="queue-action" href="#passes">Escolher meu passe</a><small>A posição do seu passe fica vinculada à sua conta.</small>
+      </aside>
+    </section>
+    <section class="how section" id="como-funciona">
+      <div class="section-title"><span>DO PIX AO CONTROLE</span><h2>Três passos. Nenhuma instalação.</h2></div>
+      <div class="steps">
+        <article><b>01</b><div><h3>Escolha seu passe</h3><p>Jogue por 15 minutos ou aproveite uma sessão completa de 1 hora.</p></div></article>
+        <article><b>02</b><div><h3>Pague com PIX</h3><p>A VenoPag confirma o pagamento e cria seu lugar na fila automaticamente.</p></div></article>
+        <article><b>03</b><div><h3>Aguarde sua vez</h3><p>Acompanhe sua posição em tempo real. A sessão abre quando chegar a sua vez.</p></div></article>
+      </div>
+    </section>
+    <section class="passes section" id="passes">
+      <div class="section-title centered"><span>ESCOLHA SEU TEMPO</span><h2>Quanto tempo você quer em Vice City?</h2><p>Pagamento único. Cada compra gera uma nova sessão na fila.</p></div>
+      <div class="pass-grid">
+        <article class="pass-card"><div class="pass-top"><span>PARTIDA RÁPIDA</span><i>15 MIN</i></div><h3>Teste a cidade.</h3><p>Uma sessão curta para conhecer a experiência e entrar no jogo sem compromisso.</p><div class="price"><small>R$</small><strong>19</strong><sup>,90</sup></div><ul><li>15 minutos de gameplay</li><li>Posição individual na fila</li><li>Acesso direto pelo navegador</li></ul><a href="/cadastro-rapido?plan=session_15">Comprar 15 minutos</a></article>
+        <article class="pass-card featured"><div class="popular">MAIS ESCOLHIDO</div><div class="pass-top"><span>SESSÃO COMPLETA</span><i>1 HORA</i></div><h3>Viva Vice City.</h3><p>Mais tempo para explorar, dirigir e aproveitar sua sessão sem pressa.</p><div class="price"><small>R$</small><strong>49</strong><sup>,90</sup></div><ul><li>60 minutos de gameplay</li><li>Posição individual na fila</li><li>Acesso direto pelo navegador</li></ul><a href="/cadastro-rapido?plan=session_60">Comprar 1 hora</a></article>
+      </div>
+    </section>
+    <section class="experience section"><div class="experience-card"><div><span>UMA NOVA FORMA DE JOGAR</span><h2>Seu console agora é a nuvem.</h2><p>A página acompanha a compra, sua posição e o tempo da sessão em um só lugar. Basta uma conexão estável e um controle compatível.</p></div><div class="specs"><div><b>1080p</b><small>resolução alvo</small></div><div><b>60 FPS</b><small>desempenho alvo</small></div><div><b>5 GHz</b><small>Wi-Fi recomendado</small></div></div></div></section>
+  </main>
+  <footer><a class="wordmark" href="/"><span>VICE</span><b>CLOUD</b></a><p>Plataforma independente de acesso remoto. Grand Theft Auto VI e marcas relacionadas pertencem aos seus respectivos proprietários. Não somos afiliados à Rockstar Games ou à Take-Two Interactive.</p><div><a href="/privacy">Privacidade</a><a href="/support">Suporte</a><a href="/admin">Admin</a></div></footer>
+  <script type="module" src="/modules/vice-cloud.js?v=1.0.0"></script>
+</body>
+</html>

@@ -3,17 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Acesso | Atlas</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Acesso | Vice Cloud</title>
+  <link rel="icon" href="/vice-favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/account.css?v=3.2.0">
   <link rel="stylesheet" href="/funnel.css?v=3.2.0">
+  <link rel="stylesheet" href="/vice-funnel.css?v=1.0.0">
 </head>
 <body>
   <main class="account-page">
     <section class="account-story">
-      <a class="brand" href="/"><img src="/atlas-logo.svg" alt="Atlas"></a>
-      <div class="story-copy"><span>VOCÊ DECIDE. O ATLAS ORGANIZA.</span><h1>Entre com contexto. Não com esperança.</h1><p>Uma pergunta por vez. Sua conta fica pronta em poucos segundos.</p></div>
-      <div class="story-foot">Atlas · Assistente de operação</div>
+      <a class="vice-mini" href="/"><b>VICE</b> CLOUD</a>
+      <div class="story-copy"><span>SUA SESSÃO COMEÇA AQUI</span><h1>Entre na fila. Jogue na nuvem.</h1><p>Crie sua conta para comprar um passe e acompanhar sua posição em tempo real.</p></div>
+      <div class="story-foot">Vice Cloud · Cloud gaming pelo navegador</div>
     </section>
     <section class="account-panel">
       <div class="form-card">
@@ -23,7 +24,7 @@
           <form id="loginForm">
             <div class="field"><label for="loginId" id="loginLabel">E-mail</label><input id="loginId" type="email" autocomplete="email" required></div>
             <div class="field"><label for="loginPassword">Senha</label><input id="loginPassword" type="password" autocomplete="current-password" required></div>
-            <button class="submit" type="submit">Entrar no Atlas</button>
+            <button class="submit" type="submit">Entrar na Vice Cloud</button>
             <div class="form-row"><a href="/recuperar-senha">Esqueci minha senha</a><a href="/">Voltar ao início</a></div>
             <div class="status" id="loginStatus"></div>
           </form>
@@ -32,7 +33,7 @@
           <div class="wizard-progress"><div class="wizard-progress-top"><span id="signupProgressText">Passo 1 de 5</span><span id="signupProgressMessage">Vamos começar</span></div><div class="wizard-track"><div class="wizard-bar" id="signupProgressBar"></div></div></div>
           <form id="signupForm" novalidate>
             <section class="signup-step active" data-signup-step="0"><span class="step-kicker">PRIMEIRO PASSO</span><h2>Como podemos chamar você?</h2><p>Digite somente seu primeiro nome.</p><div class="field"><label for="signupName">Primeiro nome</label><input id="signupName" autocomplete="given-name" maxlength="40" placeholder="Ex.: Carlos" required></div></section>
-            <section class="signup-step" data-signup-step="1"><span class="step-kicker">SEU ACESSO</span><h2>Qual é o seu melhor e-mail?</h2><p>Ele será usado para entrar no Atlas.</p><div class="field"><label for="signupEmail">E-mail</label><input id="signupEmail" type="email" autocomplete="email" placeholder="voce@email.com" required></div></section>
+            <section class="signup-step" data-signup-step="1"><span class="step-kicker">SEU ACESSO</span><h2>Qual é o seu melhor e-mail?</h2><p>Ele será usado para acompanhar sua sessão.</p><div class="field"><label for="signupEmail">E-mail</label><input id="signupEmail" type="email" autocomplete="email" placeholder="voce@email.com" required></div></section>
             <section class="signup-step" data-signup-step="2"><span class="step-kicker">CONTATO</span><h2>Qual é o seu WhatsApp?</h2><p>O número é formatado automaticamente.</p><div class="field"><label for="signupPhone">Telefone</label><input id="signupPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="15" placeholder="(11) 99999-9999" required></div></section>
             <section class="signup-step" data-signup-step="3"><span class="step-kicker">ESTAMOS QUASE LÁ</span><h2>Crie uma senha segura.</h2><p>Use no mínimo 8 caracteres.</p><div class="field"><label for="signupPassword">Senha</label><input id="signupPassword" type="password" minlength="8" autocomplete="new-password" required></div></section>
             <section class="signup-step" data-signup-step="4"><span class="step-kicker">ÚLTIMO PASSO</span><h2>Repita sua senha.</h2><p>Falta só mais um passo para criar sua conta.</p><div class="field"><label for="signupPasswordConfirmation">Confirme a senha</label><input id="signupPasswordConfirmation" type="password" minlength="8" autocomplete="new-password" required></div></section>
