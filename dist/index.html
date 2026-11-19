@@ -10,13 +10,11 @@
   <link rel="preload" href="/vice-logo.png" as="image">
   <link rel="stylesheet" href="/vice-cloud.css?v=1.0.0">
   <link rel="stylesheet" href="/vice-live.css?v=1.0.0">
+  <link rel="stylesheet" href="/vice-lite.css?v=1.0.0">
 </head>
 <body>
   <div class="hero-media" aria-hidden="true">
-    <img src="/vice-hero.jpg" alt="">
-    <video autoplay muted loop playsinline preload="metadata" poster="/vice-hero.jpg">
-      <source src="https://media-rockstargames-com.akamaized.net/VI/downloads/videos/GTAVI_Out_Now/GTAVI_Out_Now.mp4" type="video/mp4">
-    </video>
+    <img src="/vice-hero.jpg" alt="" decoding="async">
   </div>
   <div class="noise" aria-hidden="true"></div>
   <header class="topbar">
@@ -34,9 +32,9 @@
         <div class="hero-meta"><span>Sem download</span><span>Pagamento por PIX</span><span>Sessão individual</span></div>
       </div>
       <aside class="queue-card" aria-labelledby="queueTitle">
-        <div class="queue-head"><div><span>FILA DO JOGO</span><h2 id="queueTitle">Próximos jogadores</h2></div><div class="queue-live"><i></i> AO VIVO</div></div>
-        <div class="queue-summary"><div><span>Na fila</span><strong id="queueCount">—</strong></div><div><span>Jogando</span><strong id="playingCount">—</strong></div><div><span>Jogo</span><strong>GTA VI</strong></div></div>
-        <div class="queue-list" id="queueList" aria-live="polite"><div class="queue-empty">Buscando a fila ao vivo…</div></div>
+        <div class="queue-head"><div><span>SESSÕES NA NUVEM</span><h2 id="queueTitle">Pessoas jogando agora</h2></div><div class="queue-live"><i></i> AO VIVO</div></div>
+        <div class="queue-summary queue-summary-public"><div class="playing-now"><span>Jogando agora</span><strong id="playingCount">45</strong></div><div><span>Jogo</span><strong>GTA VI</strong></div></div>
+        <div class="queue-public-message"><i></i><div><b>45 sessões ativas</b><span>A fila é exibida somente depois que o PIX for confirmado.</span></div></div>
         <a class="queue-action" href="#passes">Escolher meu passe</a><small>A posição do seu passe fica salva neste navegador.</small>
       </aside>
     </section>
@@ -47,21 +45,21 @@
     <section class="how section" id="como-funciona">
       <div class="section-title"><span>DO PIX AO CONTROLE</span><h2>Três passos. Nenhuma instalação.</h2></div>
       <div class="steps">
-        <article><b>01</b><div><h3>Escolha seu passe</h3><p>Jogue por 15 minutos ou aproveite uma sessão completa de 1 hora.</p></div></article>
-        <article><b>02</b><div><h3>Pague com PIX</h3><p>A VenoPag confirma o pagamento e cria seu lugar na fila automaticamente.</p></div></article>
-        <article><b>03</b><div><h3>Aguarde sua vez</h3><p>Acompanhe sua posição em tempo real. A sessão abre quando chegar a sua vez.</p></div></article>
+        <article><b>01</b><div><h3>Escolha sua sessão cloud</h3><p>Selecione 15 minutos ou 1 hora de acesso ao jogo transmitido pela nuvem.</p></div></article>
+        <article><b>02</b><div><h3>Confirme pelo PIX</h3><p>O pagamento é confirmado automaticamente, sem cadastro, senha ou instalação.</p></div></article>
+        <article><b>03</b><div><h3>Receba sua posição</h3><p>A tela muda para sua posição na fila e acompanha o avanço até liberar a sessão cloud.</p></div></article>
       </div>
     </section>
     <section class="passes section" id="passes">
       <div class="section-title centered"><span>ESCOLHA SEU TEMPO</span><h2>Quanto tempo você quer em Vice City?</h2><p>Pagamento único. Cada compra gera uma nova sessão na fila.</p></div>
       <div class="pass-grid">
         <article class="pass-card"><div class="pass-top"><span>PARTIDA RÁPIDA</span><i>15 MIN</i></div><h3>Teste a cidade.</h3><p>Uma sessão curta para conhecer a experiência e entrar no jogo sem compromisso.</p><div class="price"><small>R$</small><strong>19</strong><sup>,90</sup></div><ul><li>15 minutos de gameplay</li><li>Posição individual na fila</li><li>Acesso direto pelo navegador</li></ul><a href="/checkout?plan=session_15">Comprar 15 minutos</a></article>
-        <article class="pass-card featured"><div class="popular">MAIS ESCOLHIDO</div><div class="pass-top"><span>SESSÃO COMPLETA</span><i>1 HORA</i></div><h3>Viva Vice City.</h3><p>Mais tempo para explorar, dirigir e aproveitar sua sessão sem pressa.</p><div class="price"><small>R$</small><strong>49</strong><sup>,90</sup></div><ul><li>60 minutos de gameplay</li><li>Posição individual na fila</li><li>Acesso direto pelo navegador</li></ul><a href="/checkout?plan=session_60">Comprar 1 hora</a></article>
+        <article class="pass-card featured"><div class="popular">FILA PRIORITÁRIA</div><div class="pass-top"><span>SESSÃO COMPLETA</span><i>1 HORA</i></div><h3>Viva Vice City.</h3><p>Mais tempo para explorar e prioridade para avançar mais rápido na fila.</p><div class="price"><small>R$</small><strong>49</strong><sup>,90</sup></div><ul><li>60 minutos de gameplay</li><li>Prioridade e fila mais rápida</li><li>Acesso direto pelo navegador</li></ul><a href="/checkout?plan=session_60">Comprar 1 hora</a></article>
       </div>
     </section>
     <section class="experience section"><div class="experience-card"><div><span>UMA NOVA FORMA DE JOGAR</span><h2>Seu console agora é a nuvem.</h2><p>A página acompanha a compra, sua posição e o tempo da sessão em um só lugar. Basta uma conexão estável e um controle compatível.</p></div><div class="specs"><div><b>1080p</b><small>resolução alvo</small></div><div><b>60 FPS</b><small>desempenho alvo</small></div><div><b>5 GHz</b><small>Wi-Fi recomendado</small></div></div></div></section>
   </main>
   <footer><a class="wordmark" href="/"><span>VICE</span><b>CLOUD</b></a><p>Plataforma independente de acesso remoto. Grand Theft Auto VI e marcas relacionadas pertencem aos seus respectivos proprietários. Não somos afiliados à Rockstar Games ou à Take-Two Interactive.</p><div><a href="/privacy">Privacidade</a><a href="/support">Suporte</a><a href="/admin">Admin</a></div></footer>
-  <script type="module" src="/modules/vice-cloud.js?v=1.0.0"></script>
+  <script type="module" src="/modules/vice-cloud.js?v=1.1.0"></script>
 </body>
 </html>

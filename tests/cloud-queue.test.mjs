@@ -11,6 +11,7 @@ test("os passes usam os valores e tempos definidos para a Vice Cloud", () => {
   assert.equal(CLOUD_PLANS.session_15.durationMinutes, 15);
   assert.equal(CLOUD_PLANS.session_60.currentPrice, 49.90);
   assert.equal(CLOUD_PLANS.session_60.durationMinutes, 60);
+  assert.equal(CLOUD_PLANS.session_60.priority, true);
 });
 
 test("um pagamento confirmado recebe posição persistida entre 550 e 967", async () => {
@@ -29,4 +30,12 @@ test("a confirmação repetida não cria outra posição para o mesmo pagamento"
   await enqueuePaidSession(connection, { id: "payment-1", user_id: "user-1", plan_id: "session_60" });
   assert.match(statement, /INSERT IGNORE/);
   assert.match(statement, /payment_id/);
+});
+
+test("a sessão completa recebe faixa prioritária sem sair do intervalo informado", async () => {
+  let values;
+  const connection = { async execute(_sql, params) { values = params; return [{ affectedRows: 1 }]; } };
+  await enqueuePaidSession(connection, { id: "payment-2", user_id: "user-2", plan_id: "session_60" });
+  assert.equal(values[3], 60);
+  assert.ok(values[4] >= 550 && values[4] <= 720, `posição prioritária ${values[4]} fora do intervalo`);
 });

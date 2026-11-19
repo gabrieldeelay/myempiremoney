@@ -254,7 +254,8 @@ assert.match(app, /atlas:screen-state/, "o robô deve receber o estado produzido
 assert.match(landing, /Vice City/, "a raiz deve apresentar a chamada de cloud gaming");
 assert.match(landing, /R\$<\/small><strong>19<\/strong><sup>,90/, "a landing deve mostrar o passe de quinze minutos");
 assert.match(landing, /R\$<\/small><strong>49<\/strong><sup>,90/, "a landing deve mostrar o passe de uma hora");
-assert.match(landing, /id="queueList"/, "a landing deve apresentar a fila ao vivo");
+assert.match(landing, /id="playingCount">45</, "a landing deve mostrar quantas pessoas estão jogando");
+assert.doesNotMatch(landing, /id="queueList"|id="queueCount"/, "a landing não deve revelar a fila antes do pagamento");
 assert.match(landing, /href="\/admin"/, "o rodapé deve oferecer acesso administrativo direto");
 assert.match(access, /id="signupPhone"/, "o cadastro deve solicitar telefone");
 assert.match(access, /id="signupPasswordConfirmation"/, "o cadastro deve solicitar confirmação da senha");
@@ -278,6 +279,11 @@ assert.match(checkoutModule, /saveCheckoutSession/, "o checkout deve salvar sile
 assert.match(paymentCreateApi, /createGuestCheckoutUser/, "a API deve criar um acesso temporário sem pedir cadastro ao comprador");
 assert.match(checkoutPage, /SEM CADASTRO/, "o checkout deve deixar claro que não exige conta");
 assert.match(landing, /player\.kick\.com\/jogargta/, "a landing deve incorporar a live solicitada da Kick");
+assert.doesNotMatch(landing, /id="queueCount"|>967</, "a landing não deve revelar o tamanho da fila antes do pagamento");
+assert.match(landing, /id="playingCount">45</, "a landing deve mostrar quarenta e cinco pessoas jogando");
+assert.match(landing, /FILA PRIORITÁRIA/, "a sessão completa deve destacar a prioridade na fila");
+assert.doesNotMatch(landing + checkoutPage, /VenoPag/i, "a marca do processador não deve aparecer para o comprador");
+assert.doesNotMatch(landing, /<video/, "a página inicial não deve baixar vídeo de fundo pesado");
 assert.match(adminPage, /data-admin-tab="payments"/, "o painel deve ter uma aba de pagamentos");
 assert.match(adminPage, /class="speech-variable-help"/, "o editor de falas deve explicar as variáveis sem poluir o formulário");
 assert.match(adminPage, /\{asset\}<\/code><b>Ativo atual/, "a variável do ativo deve possuir uma explicação clara");
