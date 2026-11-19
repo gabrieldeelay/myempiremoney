@@ -1,11 +1,7 @@
-import { apiFetch, getAtlasClient } from "/modules/atlas-client.js";
+import { apiFetch, saveCheckoutSession } from "/modules/atlas-client.js";
 
 const $ = selector => document.querySelector(selector);
 const money = value => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-const client = await getAtlasClient();
-const { data: sessionData } = await client.auth.getSession();
-if (!sessionData.session) location.replace("/acesso?returnTo=/checkout");
-
 let polling;
 let config;
 let planId = new URLSearchParams(location.search).get("plan") || "session_15";
@@ -26,12 +22,8 @@ async function loadQuote() {
 }
 
 try {
-  const [account, publicConfig] = await Promise.all([apiFetch("/api/me"), fetch("/api/public-config").then(response => response.json())]);
-  if (account.profile?.role === "admin") location.replace("/admin");
-  config = publicConfig; renderPlans();
-  $("#name").value = account.profile?.name || ""; $("#document").value = account.profile?.document || "";
+  config = await fetch("/api/public-config").then(response => response.json()); renderPlans();
   await loadQuote();
-  if (account.payment?.status === "pending") checkStatus();
 } catch (error) { $("#paymentStatus").textContent = error.message; $("#paymentStatus").className = "status error"; }
 
 function showPayment(payment) {
@@ -51,8 +43,11 @@ async function checkStatus() {
 $("#applyCoupon").addEventListener("click", async () => { const button = $("#applyCoupon"); button.disabled = true; try { couponCode = $("#coupon").value.trim().toUpperCase(); await loadQuote(); $("#couponStatus").textContent = quote.coupon ? `Cupom ${quote.coupon.code} aplicado.` : "Oferta atualizada."; $("#couponStatus").className = "step-message"; } catch (error) { $("#couponStatus").textContent = error.message; $("#couponStatus").className = "step-message error"; } finally { button.disabled = false; } });
 $("#paymentForm").addEventListener("submit", async event => {
   event.preventDefault(); const submit = event.currentTarget.querySelector("button[type=submit]"); submit.disabled = true;
-  try { const result = await apiFetch("/api/payment-create", { method: "POST", body: JSON.stringify({ planId, couponCode, name: $("#name").value, document: $("#document").value }) }); showPayment(result.payment); }
+  try {
+    const result = await apiFetch("/api/payment-create", { method: "POST", body: JSON.stringify({ planId, couponCode, name: $("#name").value, document: $("#document").value }) });
+    if (result.session?.token) saveCheckoutSession({ access_token: result.session.token, expires_at: result.session.expiresAt, user: result.session.user });
+    showPayment(result.payment);
+  }
   catch (error) { $("#paymentStatus").textContent = error.message; $("#paymentStatus").className = "status error"; } finally { submit.disabled = false; }
 });
 $("#copyPix").addEventListener("click", async () => { await navigator.clipboard.writeText($("#pixCode").textContent); $("#copyPix").textContent = "Código copiado ✓"; });
-$("#signOut").addEventListener("click", async () => { await client.auth.signOut(); location.replace("/"); });

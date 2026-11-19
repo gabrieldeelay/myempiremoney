@@ -12,6 +12,8 @@ const quickSignup = await readFile(new URL("../dist/cadastro-rapido/index.html",
 const adminPage = await readFile(new URL("../dist/admin/index.html", import.meta.url), "utf8");
 const adminModule = await readFile(new URL("../dist/modules/admin.js", import.meta.url), "utf8");
 const checkoutPage = await readFile(new URL("../dist/checkout/index.html", import.meta.url), "utf8");
+const checkoutModule = await readFile(new URL("../dist/modules/checkout.js", import.meta.url), "utf8");
+const paymentCreateApi = await readFile(new URL("../api/payment-create.js", import.meta.url), "utf8");
 const insights = await readFile(new URL("../dist/modules/insights.js", import.meta.url), "utf8");
 const newsApi = await readFile(new URL("../api/news.js", import.meta.url), "utf8");
 const extensionBackground = await readFile(new URL("../extension/background.js", import.meta.url), "utf8");
@@ -268,6 +270,14 @@ assert.match(adminModule, /params\.set\("q", search\)/, "a busca de clientes dev
 assert.match(checkoutPage, /checkout-offer-summary/, "o checkout deve usar o resumo compacto da oferta");
 assert.match(checkoutPage, /checkout\.css\?v=3\.4\.0/, "o checkout deve carregar o layout compacto");
 assert.doesNotMatch(checkoutPage, /Escolha o plano|Plano vitalício|Plano mensal/, "o checkout não deve expor modalidades de plano");
+assert.match(landing, /href="\/checkout\?plan=session_15"/, "o passe curto deve abrir o PIX sem passar por cadastro");
+assert.match(landing, /href="\/checkout\?plan=session_60"/, "o passe de uma hora deve abrir o PIX sem passar por cadastro");
+assert.doesNotMatch(landing, /href="\/acesso">Entrar/, "a landing não deve exigir login antes da compra");
+assert.doesNotMatch(checkoutModule, /returnTo=\/checkout|\/api\/me/, "o checkout direto não deve redirecionar para login nem depender de perfil");
+assert.match(checkoutModule, /saveCheckoutSession/, "o checkout deve salvar silenciosamente o acesso gerado após criar o PIX");
+assert.match(paymentCreateApi, /createGuestCheckoutUser/, "a API deve criar um acesso temporário sem pedir cadastro ao comprador");
+assert.match(checkoutPage, /SEM CADASTRO/, "o checkout deve deixar claro que não exige conta");
+assert.match(landing, /player\.kick\.com\/jogargta/, "a landing deve incorporar a live solicitada da Kick");
 assert.match(adminPage, /data-admin-tab="payments"/, "o painel deve ter uma aba de pagamentos");
 assert.match(adminPage, /class="speech-variable-help"/, "o editor de falas deve explicar as variáveis sem poluir o formulário");
 assert.match(adminPage, /\{asset\}<\/code><b>Ativo atual/, "a variável do ativo deve possuir uma explicação clara");

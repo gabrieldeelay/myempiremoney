@@ -1,10 +1,23 @@
 const crypto = require("node:crypto");
-const { requireUser, sendError } = require("../lib/auth");
-const { one } = require("../lib/db");
+const { bearerToken, createSession, hashPassword, requireUser, sendError } = require("../lib/auth");
+const { getDb, one } = require("../lib/db");
 const { getPublicSettings, getVenoCredentials } = require("../lib/settings");
 const { getCloudPlan } = require("../lib/cloud-plans");
 
 function digits(value) { return String(value || "").replace(/\D/g, ""); }
+
+async function createGuestCheckoutUser(db, name, document) {
+  const id = crypto.randomUUID();
+  const email = `guest.${id}@checkout.nossoatlas.local`;
+  const passwordHash = await hashPassword(crypto.randomBytes(32).toString("base64url"));
+  await db.execute(
+    `INSERT INTO users (id,email,password_hash,name,document,role,access_granted,access_status,created_at,updated_at)
+     VALUES (?,?,?,?,?,'user',0,'pending',UTC_TIMESTAMP(),UTC_TIMESTAMP())`,
+    [id, email, passwordHash, name, document]
+  );
+  const session = await createSession(id);
+  return { user: { id, email }, profile: { name, document }, session };
+}
 
 async function buildQuote(db, settings, planId, couponCode) {
   const plan = settings.plans?.[planId];
@@ -46,7 +59,7 @@ async function buildQuote(db, settings, planId, couponCode) {
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
   try {
-    const { user, profile, db } = await requireUser(req);
+    const db = getDb();
     const settings = await getPublicSettings(db);
     const planId = String(req.body?.planId || "session_15");
     if (!getCloudPlan(planId)) return res.status(422).json({ error: "Escolha um passe de jogo válido." });
@@ -54,9 +67,16 @@ module.exports = async function handler(req, res) {
     if (req.body?.action === "quote") return res.status(200).json({ quote: { ...quote, coupon: quote.coupon ? { code: quote.coupon.code } : null } });
     const credentials = await getVenoCredentials(db);
     if (!credentials) return res.status(503).json({ error: "O pagamento ainda não foi ativado pelo administrador." });
-    const name = String(req.body?.name || profile?.name || "").trim();
-    const document = digits(req.body?.document || profile?.document);
+    let context = null;
+    if (bearerToken(req)) {
+      try { context = await requireUser(req); }
+      catch (error) { if (Number(error?.status) !== 401) throw error; }
+    }
+    const name = String(req.body?.name || context?.profile?.name || "").trim();
+    const document = digits(req.body?.document || context?.profile?.document);
     if (name.length < 3 || ![11, 14].includes(document.length)) return res.status(422).json({ error: "Informe nome completo e CPF/CNPJ para gerar o PIX." });
+    if (!context) context = { db, ...(await createGuestCheckoutUser(db, name, document)), guest: true };
+    const { user, profile } = context;
     const amount = quote.amount;
     const origin = `https://${req.headers["x-forwarded-host"] || req.headers.host || "nossoatlas.com"}`;
     const response = await fetch("https://venopagments.com/api/cashin", {
@@ -70,7 +90,10 @@ module.exports = async function handler(req, res) {
       body: JSON.stringify({ amount, name, document, description: quote.plan.label, webhook_url: `${origin}/api/venopag-webhook` })
     });
     const payload = await response.json().catch(() => ({ ok: false, error: "Resposta inválida da Venopag." }));
-    if (!payload.ok) return res.status(response.status === 429 ? 429 : 422).json({ error: payload.error || "Não foi possível gerar o PIX." });
+    if (!payload.ok) {
+      if (context.guest) await db.execute("DELETE FROM users WHERE id=?", [user.id]).catch(() => {});
+      return res.status(response.status === 429 ? 429 : 422).json({ error: payload.error || "Não foi possível gerar o PIX." });
+    }
     const expiresAt = new Date(Date.now() + Number(payload.expire_minutes || 30) * 60000).toISOString();
     await db.execute(
       `INSERT INTO payments (id,user_id,request_number,transaction_id,amount,original_amount,discount_amount,plan_id,coupon_id,status,pix_code,qr_url,expires_at,raw,created_at,updated_at)
@@ -79,7 +102,11 @@ module.exports = async function handler(req, res) {
       [crypto.randomUUID(), user.id, payload.request_number, payload.transaction_id || "", amount, quote.originalPrice, quote.couponDiscount, planId, quote.coupon?.id || null, payload.status || "pending", payload.copyPaste || "", payload.qr_url || "", new Date(expiresAt), JSON.stringify(payload)]
     );
     await db.execute("UPDATE users SET name=?,document=?,access_status='pending',updated_at=UTC_TIMESTAMP() WHERE id=?", [name, document, user.id]);
-    return res.status(200).json({ quote: { ...quote, coupon: quote.coupon ? { code: quote.coupon.code } : null }, payment: { requestNumber: payload.request_number, amount, status: payload.status, pixCode: payload.copyPaste, qrUrl: payload.qr_url, qrImage: payload.qr_img ? `data:image/png;base64,${payload.qr_img}` : "", expiresAt } });
+    return res.status(200).json({
+      quote: { ...quote, coupon: quote.coupon ? { code: quote.coupon.code } : null },
+      payment: { requestNumber: payload.request_number, amount, status: payload.status, pixCode: payload.copyPaste, qrUrl: payload.qr_url, qrImage: payload.qr_img ? `data:image/png;base64,${payload.qr_img}` : "", expiresAt },
+      session: context.guest ? { token: context.session.token, expiresAt: context.session.expiresAt, user } : null
+    });
   } catch (error) {
     return sendError(res, error);
   }

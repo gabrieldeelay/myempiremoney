@@ -10,6 +10,10 @@ function saveSession(session) {
   else localStorage.removeItem(STORAGE_KEY);
 }
 
+export function saveCheckoutSession(session) {
+  saveSession(session);
+}
+
 async function authRequest(action, body = {}) {
   const session = loadSession();
   const response = await fetch("/api/auth", {

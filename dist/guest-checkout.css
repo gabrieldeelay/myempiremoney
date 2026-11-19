@@ -1,0 +1,1 @@
+.checkout-v2 .checkout-title{grid-template-columns:1fr;align-items:start}.checkout-v2 .checkout-title p{max-width:620px;margin-top:5px;line-height:1.55}.checkout-v2 .checkout-title h1{max-width:760px}.checkout-v2 .checkout-main{min-width:0}@media(max-width:620px){.checkout-v2 .checkout-title h1{font-size:30px}.checkout-v2 .payment-fields{gap:2px}}
