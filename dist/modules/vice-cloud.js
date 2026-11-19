@@ -10,7 +10,7 @@ async function refreshSessions() {
     const queue = await apiFetch("/api/cloud-queue");
     const count = Number(queue.displayPlayingCount || queue.playingCount || 30);
     if (playingCount) playingCount.textContent = String(count);
-    if (activeSessionsCopy) activeSessionsCopy.textContent = `${count} sessões ativas · estimativa visual`;
+    if (activeSessionsCopy) activeSessionsCopy.textContent = `${count} sessões ativas`;
   } catch {
     if (activeSessionsCopy) activeSessionsCopy.textContent = "Servidores ativos";
   }
